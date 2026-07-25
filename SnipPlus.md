@@ -1,0 +1,3 @@
+# SnipPlus
+
+Initial repository placeholder.
