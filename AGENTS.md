@@ -2,75 +2,91 @@
 
 ## Repository status
 
-SnipPlus has frozen product-requirement, behavioral-specification and abstract-architecture baselines. The repository does not yet contain application source code, build configuration, tests or runtime evidence.
+SnipPlus has Frozen PRD、Specification and Architecture baselines, Accepted ADR-0002 through ADR-0007, Accepted Implementation Contracts, an Accepted Project Structure and an Approved Implementation Readiness Review.
 
-Current lifecycle state:
+The repository does not yet contain application source code、build configuration、tests or runtime evidence.
 
-- PRD v1.0: `Freeze Approved`.
-- Specification v1.0: `Freeze Approved`.
-- Architecture baseline: `Freeze Approved`.
-- ADR-0002 UI Framework Selection: `Draft`, not accepted.
-- Remaining core technology decisions: Candidate.
-- Interface contracts, project structure and implementation readiness: incomplete.
+Current state：
 
-Do not describe proposed behavior as an implemented capability. Do not start source-code, build, restore, test, publish, deploy or runtime work unless an explicit later task authorizes it.
+- Implementation preparation：Complete.
+- First vertical slice：Approved; not started.
+- Additional pre-coding paperwork：Not required.
+- Source-code creation：Allowed only when the current user task explicitly requests implementation.
+- Restore/build/test/runtime：Allowed only when explicitly included in that implementation/verification task.
+
+Do not describe planned or accepted behavior as implemented or verified until code and evidence exist.
 
 ## Source of truth
 
-Use the following order when documents disagree:
+Use the source that owns the disputed concern：
 
-1. `docs/Research/` — externally observed facts and source-backed research.
-2. `docs/Analysis/` — structured analysis of research, without product decisions.
-3. `docs/Decision/` — explicit adoption decisions with evidence, risks and open questions.
-4. Frozen `PRD/` baseline — product intent, users, goals and scope.
-5. Frozen `Specs/` baseline — observable behavior and acceptance criteria.
-6. Frozen `Architecture/` baseline — system boundaries, ownership and dependencies.
-7. Accepted `Architecture/adr/` decisions — durable technical choices.
-8. `docs/REPOSITORY-CURRENT-STATE-AND-IMPLEMENTATION-READINESS-AUDIT.md` — current cross-repository status and shortest remaining path.
-9. Other `docs/` files — navigation, working agreements, standards and design references.
+1. Frozen `PRD/` — product intent、goals and scope.
+2. Frozen `Specs/` — observable behavior and acceptance criteria.
+3. Frozen `Architecture/ARCH-*` — Layer、Module、Component and Interaction ownership.
+4. Accepted `Architecture/adr/` — durable technology decisions.
+5. `Architecture/IMPLEMENTATION-CONTRACTS.md` — cross-project semantic、lifecycle and failure contracts.
+6. `Architecture/PROJECT-STRUCTURE.md` — toolchain、project mapping and build/test baseline.
+7. `docs/IMPLEMENTATION-READINESS-REVIEW.md` — approved first-slice scope and non-goals.
+8. `docs/Research/` — external facts and historical evidence; Research does not override Accepted decisions.
+9. `docs/Analysis/` and `docs/Decision/` — analysis/adoption history.
+10. Other `docs/` — guides、navigation、standards and evidence records.
 
-Draft ADRs are proposals, not effective decisions. Freeze decisions establish a baseline but do not authorize implementation.
+When sources at the same ownership level conflict, stop and report rather than silently choosing.
 
-Research facts must include source and verification method. Analysis must refer back to Research and must not silently become a product requirement or design decision. Decision records must separate decision value, reason, evidence, risk and open question. Label unconfirmed content `UNKNOWN`, `TBD`, `Candidate`, `Proposal` or `Assumption`.
+## First vertical slice boundary
 
-## Documentation rules
+Implementation tasks may create only the approved solution/projects and functionality required for：
 
-- Start at `README.md`, `docs/index.md` or the repository readiness audit.
-- Keep product requirements separate from implementation details.
-- Update PRD or Specs before changing Architecture for a product-behavior change.
-- Add or update an ADR for a durable technical decision with meaningful trade-offs.
-- Use `docs/standards/markdown-naming.md`.
-- Keep Markdown links relative.
-- Preserve Traditional Chinese text and UTF-8 encoding.
-- Every non-final document must state its status.
-- Update the relevant index, ROADMAP, TODO and CHANGELOG when repository state changes.
+- Explicit in-app capture command.
+- Single-monitor region selection.
+- Windows.Graphics.Capture one-shot acquisition and crop.
+- Canonical BGRA8 premultiplied SoftwareBitmap result.
+- Composition／Win2D result display.
+- DataPackage Clipboard delivery.
+- Cancellation、typed failure、bounded retry and cleanup.
+- Required Unit、Contract、Rendering and authorized Platform tests.
 
-## Anti-proliferation rule
+Do not add global hotkeys、multi-monitor stitching、window-capture product mode、annotation tools、file-output UI、HDR preservation、DXGI/GDI fallback、telemetry、cloud、OCR、plugins、updates or release publication unless a later task explicitly changes scope.
 
-Do not create another prerequisite, readiness reassessment, authorization request, artifact-creation control or closure-review document merely because the previous document concluded `Not ready`.
+## Implementation workflow
 
-A new governance document is justified only when at least one of these exists:
+1. Read Implementation Readiness、Contracts and Project Structure.
+2. Create the approved skeleton.
+3. Restore/build the empty baseline before feature work when authorized.
+4. Implement Core contracts/state/failure tests before Windows side effects.
+5. Keep platform types out of Core.
+6. Run only the checks authorized by the current task.
+7. Record actual findings; do not rewrite failed evidence as success.
+8. Stop on a scope、dependency、privacy or architecture conflict.
 
-- new external evidence;
-- a new human or authority decision;
-- an accepted upstream change;
-- runtime or implementation evidence;
-- a materially different decision boundary.
+## Documentation anti-proliferation
 
-The Clipboard D1 documentary chain ending at `RESEARCH-TECH-CLIPBOARD-052` is closed. Do not extend it automatically.
+Do not create prerequisite、readiness reassessment、authorization request、artifact-control or closure-review documents simply because implementation is incomplete or a test fails.
 
-Prefer consolidated outputs:
+A new planning/decision document requires：
 
-- one ADR per major decision;
-- one contract package for closely related interfaces;
-- one project-structure definition;
-- one implementation-readiness review.
+- changed product scope;
+- a verified compatibility/runtime conflict;
+- changed Architecture ownership;
+- a materially new release/platform boundary;
+- a superseding durable decision.
 
-## Change boundaries
+The Clipboard D1 chain ending at RESEARCH-TECH-CLIPBOARD-052 is closed.
 
-- Prefer small, focused changes, but allow one coordinated consistency update when several navigation/status files must change together.
-- Do not edit unrelated product semantics while fixing indexes or status drift.
-- Do not run build, restore, test, publish, deploy or application runtime commands during documentation work.
-- Static checks may inspect Markdown links, headings, file names and Git diff.
-- Runtime behavior remains unverified until implementation exists and a later task explicitly requests verification.
-- Never treat Draft ADR, Candidate technology or documentary closure as implementation permission.
+## Safety and evidence
+
+- Never capture automatically; explicit user action is required.
+- Use synthetic/public fixtures for tests.
+- Do not commit real desktop screenshots or Clipboard payloads.
+- Redact account names、paths、window titles and machine identifiers from evidence.
+- Build/test artifacts belong under ignored artifact roots.
+- Clipboard and Output remain independent.
+- COMP-001 remains the sole Workflow State Authority.
+
+## Change discipline
+
+- Prefer focused changes.
+- Update tests with behavior changes.
+- Update CHANGELOG and actual evidence/status after implementation.
+- Modify Frozen sources or Accepted ADRs only through the corresponding change/supersession process.
+- Do not modify documentation merely to create the appearance of progress.
