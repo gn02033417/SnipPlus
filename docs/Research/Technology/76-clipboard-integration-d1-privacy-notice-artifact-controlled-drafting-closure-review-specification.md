@@ -196,28 +196,28 @@ Every current evaluation is `Not evaluated`.
 | CLIP-D1-CLOSUREVAL-011 | No access holder is present | Not evaluated | Stop and remove |
 | CLIP-D1-CLOSUREVAL-012 | No recipient, Channel, or Platform is present | Not evaluated | Stop and reject |
 | CLIP-D1-CLOSUREVAL-013 | All fifteen exclusions remain excluded | Not evaluated | Stop and reject |
-| CLIP-D1-CLOSUREVAL-014 | Fixed role count remains five | Not evaluated | Stop and reject |
-| CLIP-D1-CLOSUREVAL-015 | Review completion does not imply drafting authorization | Not evaluated | Stop and preserve separation |
+| CLIP-D1-CLOSUREVAL-014 | Review completion must not imply Privacy Notice drafting or Artifact Creation | Not evaluated | Stop and preserve separation |
+| CLIP-D1-CLOSUREVAL-015 | Review completion must not imply Artifact Approval, Request Submission, Collection Authorization, or Execution Permission | Not evaluated | Stop and preserve separation |
 
 ## 11. Stop Conditions
 
 | Stop ID | Stop condition | Current trigger state | Required response |
 | --- | --- | --- | --- |
-| CLIP-D1-CLOSURESTOP-001 | The review is treated as a drafting instruction | Not evaluated | Stop |
-| CLIP-D1-CLOSURESTOP-002 | A parent Control ID is missing or duplicated | Not evaluated | Stop and reject |
-| CLIP-D1-CLOSURESTOP-003 | A parent Placeholder ID is missing or duplicated | Not evaluated | Stop and reject |
-| CLIP-D1-CLOSURESTOP-004 | A parent Gate ID is missing or duplicated | Not evaluated | Stop and reject |
-| CLIP-D1-CLOSURESTOP-005 | Parent drafting readiness is not Not ready | Not evaluated | Stop and preserve state |
-| CLIP-D1-CLOSURESTOP-006 | A placeholder contains an actual value | Not evaluated | Stop and reject |
-| CLIP-D1-CLOSURESTOP-007 | Drafting Authority is identified | Not evaluated | Stop and reject |
-| CLIP-D1-CLOSURESTOP-008 | Approval Authority is identified | Not evaluated | Stop and reject |
-| CLIP-D1-CLOSURESTOP-009 | Actual Notice wording, purpose, or retention value is added | Not evaluated | Stop and remove |
-| CLIP-D1-CLOSURESTOP-010 | A recipient, Channel, or Platform is identified | Not evaluated | Stop and reject |
-| CLIP-D1-CLOSURESTOP-011 | Excluded personal or machine data is present | Not evaluated | Stop and reject |
-| CLIP-D1-CLOSURESTOP-012 | Clipboard, Screenshot, or Desktop content is present | Not evaluated | Stop immediately |
-| CLIP-D1-CLOSURESTOP-013 | Observation or Evidence is requested | Not evaluated | Stop and do not persist |
-| CLIP-D1-CLOSURESTOP-014 | Review result is treated as drafting readiness or authorization | Not evaluated | Stop and preserve separation |
-| CLIP-D1-CLOSURESTOP-015 | Collection-start or Execution Permission is absent | Not evaluated | Stop; never collect or execute |
+| CLIP-D1-CLOSURESTOP-001 | The review is treated as an actual Privacy Notice drafting instruction | Not evaluated | Stop |
+| CLIP-D1-CLOSURESTOP-002 | Review result is treated as drafting readiness or drafting authorization | Not evaluated | Stop and preserve separation |
+| CLIP-D1-CLOSURESTOP-003 | Actual Privacy Notice wording is added | Not evaluated | Stop and remove |
+| CLIP-D1-CLOSURESTOP-004 | An actual purpose or lifecycle value is added | Not evaluated | Stop and remove |
+| CLIP-D1-CLOSURESTOP-005 | A placeholder is replaced with an actual value | Not evaluated | Stop and reject |
+| CLIP-D1-CLOSURESTOP-006 | A person, recipient, or contact value is added | Not evaluated | Stop and reject |
+| CLIP-D1-CLOSURESTOP-007 | A Channel or Platform is selected | Not evaluated | Stop and reject |
+| CLIP-D1-CLOSURESTOP-008 | Excluded data is added | Not evaluated | Stop and reject |
+| CLIP-D1-CLOSURESTOP-009 | Clipboard, Screenshot, or Desktop content is added | Not evaluated | Stop immediately |
+| CLIP-D1-CLOSURESTOP-010 | Operational Observation or Persistent Evidence is added | Not evaluated | Stop and do not persist |
+| CLIP-D1-CLOSURESTOP-011 | A drafter, reviewer, or approver is assigned | Not evaluated | Stop and reject |
+| CLIP-D1-CLOSURESTOP-012 | Privacy Notice Artifact Creation is inferred | Not evaluated | Stop and preserve separation |
+| CLIP-D1-CLOSURESTOP-013 | Request Submission is inferred | Not evaluated | Stop and preserve separation |
+| CLIP-D1-CLOSURESTOP-014 | Collection Authorization is inferred | Not evaluated | Stop and preserve separation |
+| CLIP-D1-CLOSURESTOP-015 | Collection-start Permission or Execution Permission is absent | Not evaluated | Stop; never collect or execute |
 
 ## 12. Prohibited Transitions
 
