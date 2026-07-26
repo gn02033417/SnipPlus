@@ -1,54 +1,47 @@
 # Architecture Decision Records
 
-ADR 用來記錄影響多個模組、難以回復，或需要長期保存取捨理由的架構與技術選擇。
+ADR 記錄影響多個模組、難以回復，或需要長期保存取捨理由的架構與技術選擇。
 
-## ADR 清單
+## Accepted ADRs
 
-| ADR | Topic | Status | Effective decision |
-| --- | --- | --- | --- |
-| [ADR-0001 Documentation-first baseline](ADR-0001-documentation-first.md) | Repository documentation-first governance | Accepted | Documentation-first governance |
-| [ADR-0002 UI Framework Selection](ADR-0002-ui-framework-selection.md) | Desktop UI Framework | Accepted | WinUI 3 |
-| [ADR-0003 Rendering Technology](ADR-0003-rendering-technology.md) | Rendering architecture and primary rendering technologies | Accepted | WinUI XAML／Composition + Win2D behind a rendering adapter |
+| ADR | Topic | Effective decision |
+| --- | --- | --- |
+| [ADR-0001 Documentation-first baseline](ADR-0001-documentation-first.md) | Repository governance | Documentation-first governance |
+| [ADR-0002 UI Framework Selection](ADR-0002-ui-framework-selection.md) | Desktop UI Framework | WinUI 3 |
+| [ADR-0003 Rendering Technology](ADR-0003-rendering-technology.md) | Rendering | WinUI XAML／Composition + Win2D adapter |
+| [ADR-0004 Capture Backend](ADR-0004-capture-backend.md) | Platform capture | Windows.Graphics.Capture |
+| [ADR-0005 Image Representation](ADR-0005-image-representation.md) | Canonical image result | BGRA8 premultiplied SoftwareBitmap |
+| [ADR-0006 Clipboard Integration](ADR-0006-clipboard-integration.md) | Windows Clipboard | WinRT DataPackage + privacy options + Flush |
+| [ADR-0007 Testing Strategy](ADR-0007-testing-strategy.md) | Test framework/platform | MSTest.Sdk + Microsoft.Testing.Platform |
 
-只有 `Accepted` ADR 可以作為下游 contracts、Project Structure、implementation planning 與 verification 的有效技術來源。Accepted 不代表 runtime 已驗證，也不自動授權 Coding。
+All P0 ADRs required by the approved first vertical slice are Accepted.
 
-## Decision backlog
+Accepted does not mean runtime verified. Actual restore、build、test and Windows behavior must be demonstrated by implementation evidence.
 
-後續重大技術主題依 [Technology Decision Roadmap](../TECHNOLOGY-DECISION-ROADMAP.md) 管理。
+## Implementation Sources
 
-目前核心順序：
+- [Technology Decision Roadmap](../TECHNOLOGY-DECISION-ROADMAP.md)
+- [Implementation Contracts](../IMPLEMENTATION-CONTRACTS.md)
+- [Project Structure and Toolchain Baseline](../PROJECT-STRUCTURE.md)
+- [Implementation Readiness Review](../../docs/IMPLEMENTATION-READINESS-REVIEW.md)
 
-1. ~~UI Framework~~ — Accepted through ADR-0002。
-2. ~~Rendering Technology~~ — Accepted through ADR-0003。
-3. Capture Backend。
-4. Image Representation。
-5. Clipboard Integration。
-6. Testing Strategy。
+## Current Boundary
 
-每個主題直接收斂為一份主要 ADR。既有 Research 作為 evidence，不先建立新的 prerequisite、authorization-request 或 closure-review 文件。
+- No additional pre-coding ADR is required for the first vertical slice.
+- Deferred P1/P2 decisions must not be pulled into the slice without scope change.
+- A verified incompatibility may trigger a targeted corrective or superseding ADR.
+- A failed implementation must not restart prerequisite／authorization／closure document chains.
 
-## 建立規則
+## ADR Rules
 
-每份 ADR 至少包含：
+Each ADR must contain：
 
-- Status
-- Context
-- Decision Drivers
-- Options Considered
-- Decision
-- Trade-offs
-- Consequences
-- Traceability
-- Review Record
-- Change and Supersession
+- Status and document control.
+- Context and decision drivers.
+- Options considered.
+- One primary decision.
+- Trade-offs and consequences.
+- Traceability and review record.
+- Change/supersession conditions.
 
-規則：
-
-- 一份 ADR 只處理一個重大決策。
-- ADR 必須引用 Architecture requirement、finding 或 Decision Roadmap item。
-- Draft ADR 必須完成 Review，並由明確 authority 接受後才能成為 `Accepted`。
-- Accepted ADR 的核心 decision 不直接覆寫；需要改變時建立新 ADR 並標示 Supersedes。
-- ADR 不得反向修改 Frozen PRD、Frozen Specs 或 Frozen Architecture ownership。
-- Runtime gap 必須保留為 verification requirement，不得寫成已驗證成功。
-- Implementation detail、暫時除錯筆記與一般 TODO 不使用 ADR。
-- 編號只遞增，不重用。
+Only `Accepted` ADRs are effective. Core accepted decisions are not overwritten; changes use a new ADR and `Supersedes` relationship.
