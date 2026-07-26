@@ -138,11 +138,11 @@ Scopes are not expanded or reclassified by this draft.
 
 | ID | Functional Role | May receive future collection request | May provide governance input | May provide attestation | May make final decision | Actual holder |
 | --- | --- | --- | --- | --- | --- | --- |
-| CLIP-D1-ROLE-001 | Governance input provider | Future only | Future only | Future only | No | Not identified |
-| CLIP-D1-ROLE-002 | Operational boundary reviewer | Future only | Future only | Future only | No | Not identified |
-| CLIP-D1-ROLE-003 | Privacy and data-minimization reviewer | Future only | Future only | Future only | No | Not identified |
-| CLIP-D1-ROLE-004 | Collection process reviewer | Future only | Future only | Future only | No | Not identified |
-| CLIP-D1-ROLE-005 | Decision authority class | Future only | Future only | Future only | Future governance decision | Not identified |
+| CLIP-D1-ROLE-001 | Request Preparer | Future only | Future only | Future only | No | Not identified |
+| CLIP-D1-ROLE-002 | Technical Scope Reviewer | Future only | Future only | Future only | No | Not identified |
+| CLIP-D1-ROLE-003 | Decision Authority | Future only | Future only | Future only | Future independent Human Decision workflow | Not identified |
+| CLIP-D1-ROLE-004 | Execution Operator | Future only | Future only | Future only | No | Not identified |
+| CLIP-D1-ROLE-005 | Observation and Evidence Custodian | Future only | Future only | Future only | No | Not identified |
 
 Providing input is not a Role Appointment, Request Approval, or Execution Permission.
 
@@ -150,16 +150,16 @@ Providing input is not a Role Appointment, Request Approval, or Execution Permis
 
 | ID | Portfolio Item | Functional Role | Input-provider boundary | Collector boundary | Reviewer boundary | Approval boundary | Current holder |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| CLIP-D1-GOVRESP-001 | Collection Request Draft | CLIP-D1-ROLE-001 | Future input only | Separate future role | Separate future role | None | Not identified |
-| CLIP-D1-GOVRESP-002 | Collection Request Draft | CLIP-D1-ROLE-002 | Future input only | Separate future role | Separate future role | None | Not identified |
-| CLIP-D1-GOVRESP-003 | Collection Request Draft | CLIP-D1-ROLE-003 | Future input only | Separate future role | Separate future role | None | Not identified |
-| CLIP-D1-GOVRESP-004 | Collection Request Draft | CLIP-D1-ROLE-004 | Future input only | Separate future role | Separate future role | None | Not identified |
-| CLIP-D1-GOVRESP-005 | Collection Request Draft | CLIP-D1-ROLE-005 | Future input only | Separate future role | Separate future role | None | Not identified |
-| CLIP-D1-GOVRESP-006 | Future Worksheet | CLIP-D1-ROLE-001 | Future input only | Separate future role | Separate future role | None | Not identified |
-| CLIP-D1-GOVRESP-007 | Future Worksheet | CLIP-D1-ROLE-002 | Future input only | Separate future role | Separate future role | None | Not identified |
-| CLIP-D1-GOVRESP-008 | Future Worksheet | CLIP-D1-ROLE-003 | Future input only | Separate future role | Separate future role | None | Not identified |
-| CLIP-D1-GOVRESP-009 | Future Worksheet | CLIP-D1-ROLE-004 | Future input only | Separate future role | Separate future role | None | Not identified |
-| CLIP-D1-GOVRESP-010 | Future Worksheet | CLIP-D1-ROLE-005 | Future input only | Separate future role | Separate future role | None | Not identified |
+| CLIP-D1-GOVRESP-001 | CLIP-D1-REQPORT-001 | CLIP-D1-ROLE-001 | Future input only | Separate future role | Separate future role | None | Not identified |
+| CLIP-D1-GOVRESP-002 | CLIP-D1-REQPORT-001 | CLIP-D1-ROLE-002 | Future input only | Separate future role | Separate future role | None | Not identified |
+| CLIP-D1-GOVRESP-003 | CLIP-D1-REQPORT-001 | CLIP-D1-ROLE-003 | Future input only | Separate future role | Separate future role | None | Not identified |
+| CLIP-D1-GOVRESP-004 | CLIP-D1-REQPORT-001 | CLIP-D1-ROLE-004 | Future input only | Separate future role | Separate future role | None | Not identified |
+| CLIP-D1-GOVRESP-005 | CLIP-D1-REQPORT-001 | CLIP-D1-ROLE-005 | Future input only | Separate future role | Separate future role | None | Not identified |
+| CLIP-D1-GOVRESP-006 | CLIP-D1-REQPORT-002 | CLIP-D1-ROLE-001 | Future input only | Separate future role | Separate future role | None | Not identified |
+| CLIP-D1-GOVRESP-007 | CLIP-D1-REQPORT-002 | CLIP-D1-ROLE-002 | Future input only | Separate future role | Separate future role | None | Not identified |
+| CLIP-D1-GOVRESP-008 | CLIP-D1-REQPORT-002 | CLIP-D1-ROLE-003 | Future input only | Separate future role | Separate future role | None | Not identified |
+| CLIP-D1-GOVRESP-009 | CLIP-D1-REQPORT-002 | CLIP-D1-ROLE-004 | Future input only | Separate future role | Separate future role | None | Not identified |
+| CLIP-D1-GOVRESP-010 | CLIP-D1-REQPORT-002 | CLIP-D1-ROLE-005 | Future input only | Separate future role | Separate future role | None | Not identified |
 
 Provider, Collector, Reviewer, and Decision Authority responsibilities remain separate. The document author does not automatically become Collector, and this document does not decide whether one person may hold multiple future roles.
 
@@ -333,24 +333,24 @@ The following 18 transitions are preserved one-to-one from RESEARCH-TECH-CLIPBOA
 
 | ID | Prohibited transition | Required boundary | Transition performed |
 | --- | --- | --- | --- |
-| CLIP-D1-GOVTRANS-001 | Prohibited transition 001 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-002 | Prohibited transition 002 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-003 | Prohibited transition 003 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-004 | Prohibited transition 004 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-005 | Prohibited transition 005 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-006 | Prohibited transition 006 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-007 | Prohibited transition 007 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-008 | Prohibited transition 008 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-009 | Prohibited transition 009 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-010 | Prohibited transition 010 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-011 | Prohibited transition 011 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-012 | Prohibited transition 012 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-013 | Prohibited transition 013 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-014 | Prohibited transition 014 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-015 | Prohibited transition 015 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-016 | Prohibited transition 016 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-017 | Prohibited transition 017 | Requires separately recorded future authorization | No |
-| CLIP-D1-GOVTRANS-018 | Prohibited transition 018 | Requires separately recorded future authorization | No |
+| CLIP-D1-GOVTRANS-001 | Request-readiness Specification → Collection Request Draft | Remains prohibited until a separate future draft transition is authorized | No |
+| CLIP-D1-GOVTRANS-002 | Collection Request Draft → Request ID assigned | Remains prohibited until a separate future identifier assignment is authorized | No |
+| CLIP-D1-GOVTRANS-003 | Request Draft → Request submitted | Remains prohibited until a separate future submission is authorized | No |
+| CLIP-D1-GOVTRANS-004 | Request submitted → Collection authorized | Remains prohibited until a separate future authorization is recorded | No |
+| CLIP-D1-GOVTRANS-005 | Collection authorized → Collection-start Permission | Remains prohibited until a separate future permission is recorded | No |
+| CLIP-D1-GOVTRANS-006 | Blank Worksheet → Worksheet distributed | Remains prohibited until a separate future distribution is authorized | No |
+| CLIP-D1-GOVTRANS-007 | Worksheet distributed → Human Input provided | Remains prohibited until a separate future collection is authorized | No |
+| CLIP-D1-GOVTRANS-008 | Governance identity input → Role Holder identified | Remains prohibited until a separate future role process is authorized | No |
+| CLIP-D1-GOVTRANS-009 | Role Holder identified → Role accepted | Remains prohibited until a separate future role acceptance is authorized | No |
+| CLIP-D1-GOVTRANS-010 | Eligibility input → Decision Authority approved | Remains prohibited until a separate future decision is authorized | No |
+| CLIP-D1-GOVTRANS-011 | Conflict disclosure → Conflict resolved | Remains prohibited until a separate future conflict process is authorized | No |
+| CLIP-D1-GOVTRANS-012 | Channel assessment → Channel selected | Remains prohibited until a separate future channel decision is authorized | No |
+| CLIP-D1-GOVTRANS-013 | Channel selected → Platform authorized | Remains prohibited until a separate future platform authorization is recorded | No |
+| CLIP-D1-GOVTRANS-014 | Platform identified → Network authorized | Remains prohibited until a separate future network authorization is recorded | No |
+| CLIP-D1-GOVTRANS-015 | Attestation → Request Approval | Remains prohibited; attestation is not request approval | No |
+| CLIP-D1-GOVTRANS-016 | Human Input → Execution Permission | Remains prohibited; input is not execution permission | No |
+| CLIP-D1-GOVTRANS-017 | Human Input → Operational Observation／Evidence | Remains prohibited; input is not operational evidence | No |
+| CLIP-D1-GOVTRANS-018 | Governance Input → Candidate Selection／Clipboard ADR | Remains prohibited; governance input is not candidate or ADR selection | No |
 
 ## 17. Gap Register
 
