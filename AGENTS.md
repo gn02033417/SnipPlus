@@ -1,16 +1,19 @@
-
 # SnipPlus Repository Rules
 
 ## Repository status
 
-SnipPlus is currently in the documentation-foundation phase. The repository
-does not contain application source code, build configuration, tests, or an
-approved product specification. Do not describe proposed behavior as an
-implemented capability.
+SnipPlus has frozen product-requirement, behavioral-specification and abstract-architecture baselines. The repository does not yet contain application source code, build configuration, tests or runtime evidence.
 
-The current task is documentation-only. Do not add screenshot functionality,
-application code, build scripts, dependencies, or runtime configuration unless
-a later task explicitly authorizes implementation.
+Current lifecycle state:
+
+- PRD v1.0: `Freeze Approved`.
+- Specification v1.0: `Freeze Approved`.
+- Architecture baseline: `Freeze Approved`.
+- ADR-0002 UI Framework Selection: `Draft`, not accepted.
+- Remaining core technology decisions: Candidate.
+- Interface contracts, project structure and implementation readiness: incomplete.
+
+Do not describe proposed behavior as an implemented capability. Do not start source-code, build, restore, test, publish, deploy or runtime work unless an explicit later task authorizes it.
 
 ## Source of truth
 
@@ -18,38 +21,56 @@ Use the following order when documents disagree:
 
 1. `docs/Research/` — externally observed facts and source-backed research.
 2. `docs/Analysis/` — structured analysis of research, without product decisions.
-3. `docs/Decision/` — explicit adoption decisions with evidence, risks, and open questions.
-4. `PRD/` — product intent, users, goals, and scope.
-5. `Specs/` — observable behavior and acceptance criteria.
-6. `Architecture/` — system boundaries, responsibilities, and technical decisions.
-7. `Architecture/adr/` — decisions that explain why a durable choice was made.
-8. `docs/` — navigation, working agreements, standards, and design references.
+3. `docs/Decision/` — explicit adoption decisions with evidence, risks and open questions.
+4. Frozen `PRD/` baseline — product intent, users, goals and scope.
+5. Frozen `Specs/` baseline — observable behavior and acceptance criteria.
+6. Frozen `Architecture/` baseline — system boundaries, ownership and dependencies.
+7. Accepted `Architecture/adr/` decisions — durable technical choices.
+8. `docs/REPOSITORY-CURRENT-STATE-AND-IMPLEMENTATION-READINESS-AUDIT.md` — current cross-repository status and shortest remaining path.
+9. Other `docs/` files — navigation, working agreements, standards and design references.
 
-Research facts must include their source and verification method. Analysis must
-refer back to Research and must not silently become a product requirement or
-design decision. Decision records must separate the decision value, reason,
-evidence, risk, and open question. If a fact, requirement, or design is not
-confirmed in these documents, label it `UNKNOWN`, `TBD`, `Proposal`, or
-`Assumption`; do not silently fill the gap.
+Draft ADRs are proposals, not effective decisions. Freeze decisions establish a baseline but do not authorize implementation.
+
+Research facts must include source and verification method. Analysis must refer back to Research and must not silently become a product requirement or design decision. Decision records must separate decision value, reason, evidence, risk and open question. Label unconfirmed content `UNKNOWN`, `TBD`, `Candidate`, `Proposal` or `Assumption`.
 
 ## Documentation rules
 
-- Start at `README.md` or `docs/index.md`.
+- Start at `README.md`, `docs/index.md` or the repository readiness audit.
 - Keep product requirements separate from implementation details.
-- Update the relevant PRD or Spec before changing Architecture for a product
-  behavior change.
-- Add an ADR for a durable decision with meaningful trade-offs.
-- Use the naming rules in `docs/standards/markdown-naming.md`.
-- Keep Markdown links relative so the repository remains portable.
+- Update PRD or Specs before changing Architecture for a product-behavior change.
+- Add or update an ADR for a durable technical decision with meaningful trade-offs.
+- Use `docs/standards/markdown-naming.md`.
+- Keep Markdown links relative.
 - Preserve Traditional Chinese text and UTF-8 encoding.
-- Every new document must state its status when the content is not final.
+- Every non-final document must state its status.
+- Update the relevant index, ROADMAP, TODO and CHANGELOG when repository state changes.
+
+## Anti-proliferation rule
+
+Do not create another prerequisite, readiness reassessment, authorization request, artifact-creation control or closure-review document merely because the previous document concluded `Not ready`.
+
+A new governance document is justified only when at least one of these exists:
+
+- new external evidence;
+- a new human or authority decision;
+- an accepted upstream change;
+- runtime or implementation evidence;
+- a materially different decision boundary.
+
+The Clipboard D1 documentary chain ending at `RESEARCH-TECH-CLIPBOARD-052` is closed. Do not extend it automatically.
+
+Prefer consolidated outputs:
+
+- one ADR per major decision;
+- one contract package for closely related interfaces;
+- one project-structure definition;
+- one implementation-readiness review.
 
 ## Change boundaries
 
-- Prefer small, focused document changes.
-- Do not edit unrelated files.
-- Do not run build, restore, test, publish, deploy, or application runtime
-  commands as part of documentation work.
-- Static checks may inspect Markdown links, headings, file names, and Git diff.
-- Runtime behavior is unverified until an implementation exists and a later
-  task explicitly requests verification.
+- Prefer small, focused changes, but allow one coordinated consistency update when several navigation/status files must change together.
+- Do not edit unrelated product semantics while fixing indexes or status drift.
+- Do not run build, restore, test, publish, deploy or application runtime commands during documentation work.
+- Static checks may inspect Markdown links, headings, file names and Git diff.
+- Runtime behavior remains unverified until implementation exists and a later task explicitly requests verification.
+- Never treat Draft ADR, Candidate technology or documentary closure as implementation permission.
