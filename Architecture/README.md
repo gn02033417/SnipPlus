@@ -1,38 +1,74 @@
 # Architecture
 
-狀態：`Draft`
+狀態：`Accepted baseline / Draft maturity`
 
-本區描述 SnipPlus 的系統邊界、責任分層、資料流與長期技術決策。因為目前沒有應用程式碼、技術棧或部署環境，本架構是「可演進的基線」，不是已完成的實作圖。
+本區描述 SnipPlus 的抽象系統邊界、責任分層、ownership、dependency 與長期技術決策。Architecture baseline 已 Freeze Approved；實作 mapping、interfaces、project structure 與 runtime evidence 尚未完成。
 
-## 文件清單
+## Architecture v1.0 baseline
 
-- [ARCH-0001 Architecture Principles](ARCH-0001-architecture-principles.md) — Architecture 治理原則，Stability `Draft`。
-- [ARCH-0002 Layer Model](ARCH-0002-layer-model.md) — 抽象 Layer、依賴方向與 Layer responsibility，Stability `Draft`。
-- [ARCH-0003 Module Catalog](ARCH-0003-module-catalog.md) — 抽象 Module、Feature-to-Module mapping 與依賴邊界，Stability `Draft`。
-- [ARCH-0004 Component Boundaries](ARCH-0004-component-boundaries.md) — 抽象 Component Boundary、Module/Feature mapping 與 Shared State access boundary，Stability `Draft`。
-- [ARCH-0005 Component Interactions](ARCH-0005-component-interactions.md) — 抽象 Component 互動方向、狀態轉移請求、Failure propagation 與禁止互動，Stability `Draft`。
-- [Architecture Baseline Review](ARCH-BASELINE-REVIEW.md) — Architecture v1.0 完整性、一致性、追溯性、Readiness 與 Freeze Decision，Review Status `Draft`。
-- [System overview](system-overview.md) — 現況、邊界、責任與約束。
-- [Mermaid architecture diagram](architecture-diagram.md) — 目前基線與待定邊界的視覺化。
-- [ADR index](adr/README.md) — Architecture Decision Records。
+- [ARCH-0001 Architecture Principles](ARCH-0001-architecture-principles.md)
+- [ARCH-0002 Layer Model](ARCH-0002-layer-model.md)
+- [ARCH-0003 Module Catalog](ARCH-0003-module-catalog.md)
+- [ARCH-0004 Component Boundaries](ARCH-0004-component-boundaries.md)
+- [ARCH-0005 Component Interactions](ARCH-0005-component-interactions.md)
+- [Architecture Baseline Review](ARCH-BASELINE-REVIEW.md)
+
+Freeze Decision：`Freeze Approved`。
+Readiness：`Ready for ADR and Technology Selection`。
+
+Architecture Stability 仍為 `Draft`，表示成熟度尚未宣告 Stable；不否定 v1.0 baseline 的 Freeze Decision。
+
+## Decision and navigation documents
+
+- [System overview](system-overview.md)
+- [Mermaid architecture diagram](architecture-diagram.md)
+- [ADR Baseline](ADR-BASELINE.md)
+- [Technology Decision Roadmap](TECHNOLOGY-DECISION-ROADMAP.md)
+- [ADR index](adr/README.md)
+- [Repository readiness audit](../docs/REPOSITORY-CURRENT-STATE-AND-IMPLEMENTATION-READINESS-AUDIT.md)
 
 ## 建議閱讀順序
 
-1. 先讀 [PRD-0001](../PRD/PRD-0001-product-foundation.md) 了解產品狀態。
-2. 再讀 [system overview](system-overview.md) 了解架構責任。
-3. 需要理解決策原因時，查看 [ADR](adr/README.md)。
+1. [PRD Freeze Review](../PRD/PRD-FREEZE-REVIEW.md)
+2. [Specification Baseline Review](../Specs/SPEC-BASELINE-REVIEW.md)
+3. [Architecture Baseline Review](ARCH-BASELINE-REVIEW.md)
+4. [Technology Decision Roadmap](TECHNOLOGY-DECISION-ROADMAP.md)
+5. [ADR index](adr/README.md)
+
+## Fixed architecture boundaries
+
+- Product Workflow → Feature Coordination → Domain Capability → Platform Integration。
+- COMP-001 是唯一 Shared State Authority。
+- Annotation 維持 Optional。
+- Clipboard 與 Output 維持平行 downstream。
+- Platform-specific behavior 必須隔離在 Platform Integration boundary。
+- Implementation 不得直接改寫 Feature、Module、Component 或 Interaction ownership。
+
+## Remaining engineering gaps
+
+| Area | Current state | Required next stage |
+| --- | --- | --- |
+| UI framework | ADR-0002 Draft | ADR Review and acceptance |
+| Rendering, Capture, Clipboard, Image Representation | Candidate | Separate core ADRs |
+| Testing Strategy | Candidate | Testing Strategy ADR |
+| Shared Result contract | TBD | Contract package |
+| Failure and retry semantics | TBD | Contract review |
+| Clipboard／Output completion semantics | TBD | ADR or contract review |
+| Component interaction sync／async | TBD | ADR |
+| Component-to-project mapping | TBD | Project Structure |
+| Runtime verification | Not performed | Verification stage |
 
 ## Current architecture status
 
-Architecture 目前已建立治理原則、抽象 Layer Model、Module Catalog 與 Component Boundary Catalog；Technology、Project 與 Implementation 仍未建立。
+| Layer | Current state |
+| --- | --- |
+| Product intent | Frozen PRD baseline |
+| User-visible behavior | Frozen Specification baseline |
+| Abstract architecture | Freeze Approved |
+| Technology selection | In progress; not accepted |
+| Interface and data contracts | Incomplete |
+| Project / assembly mapping | Incomplete |
+| Application implementation | Not started |
+| Build / test / runtime verification | Not established |
 
-| Layer | Current state | Owner document |
-| --- | --- | --- |
-| Product intent | Draft | `PRD/` |
-| User-visible behavior | Baseline only | `Specs/` |
-| Presentation / UI | Wireframe proposal only | `docs/design/` |
-| Application / domain / infrastructure | Not implemented | TBD |
-| Persistence / external integrations | Not selected | TBD |
-| Build / release / operations | Not established | `docs/guides/` + TBD |
-
-任何新增實作都必須先說明它位於哪一層、依賴方向為何，以及如何由 Spec 驗收。
+任何新增實作都必須先說明它位於哪一層、對應哪個 Module／Component、依賴方向為何，以及如何由 Frozen Spec 驗收。
