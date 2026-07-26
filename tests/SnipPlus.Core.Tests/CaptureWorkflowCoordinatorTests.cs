@@ -84,6 +84,73 @@ public sealed class CaptureWorkflowCoordinatorTests
 
     [TestMethod]
     [TestCategory("Unit")]
+    [TestCategory("Cancellation")]
+    public async Task CaptureOperationCanceledExceptionReturnsCancelledAndCleansUp()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var coordinator = new CaptureWorkflowCoordinator(new WorkflowStateAuthority());
+
+        var result = await coordinator.RunAsync(
+            CreateIntent(),
+            new ThrowingCaptureService(cancellation.Token),
+            null,
+            cancellation.Token);
+
+        Assert.AreEqual(WorkflowOutcomeKind.Cancelled, result.Outcome);
+        Assert.AreEqual(WorkflowState.Idle, result.FinalState);
+        Assert.IsTrue(result.CleanupCompleted);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Cancellation")]
+    public async Task ResultReadyCancellationDisposesImageAndSkipsClipboard()
+    {
+        var image = new TestImageResult();
+        var clipboard = new FakeClipboardService(_ => throw new AssertFailedException("Clipboard must not be called."));
+        var coordinator = new CaptureWorkflowCoordinator(new WorkflowStateAuthority());
+
+        var result = await coordinator.RunAsync(
+            CreateIntent(),
+            new FakeCaptureService(_ => Success(image)),
+            clipboard,
+            CancellationToken.None,
+            (_, _) => ThrowCancellationAsync());
+
+        Assert.AreEqual(WorkflowOutcomeKind.Cancelled, result.Outcome);
+        Assert.AreEqual(WorkflowState.Idle, result.FinalState);
+        Assert.IsTrue(result.CleanupCompleted);
+        Assert.IsTrue(image.IsDisposed);
+        Assert.IsFalse(clipboard.WasCalled);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Cancellation")]
+    public async Task ClipboardCancellationDisposesImageAndReturnsIdle()
+    {
+        var image = new TestImageResult();
+        var coordinator = new CaptureWorkflowCoordinator(new WorkflowStateAuthority());
+        var clipboard = new FakeClipboardService(request => new ClipboardDeliveryResult.Cancelled(
+            request.DeliveryId,
+            request.SessionId,
+            request.ResultId,
+            "CancellationToken"));
+
+        var result = await coordinator.RunAsync(
+            CreateIntent(),
+            new FakeCaptureService(_ => Success(image)),
+            clipboard,
+            CancellationToken.None);
+
+        Assert.AreEqual(WorkflowOutcomeKind.Cancelled, result.Outcome);
+        Assert.AreEqual(WorkflowState.Idle, result.FinalState);
+        Assert.IsTrue(result.CleanupCompleted);
+        Assert.IsTrue(image.IsDisposed);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
     public async Task TerminalCaptureFailureReturnsTypedFailureAndCleanup()
     {
         var failure = Failure.Create(
@@ -134,6 +201,18 @@ public sealed class CaptureWorkflowCoordinatorTests
         image,
         Array.Empty<string>());
 
+    private static async ValueTask ThrowCancellationAsync()
+    {
+        await Task.Yield();
+        throw new OperationCanceledException();
+    }
+
+    private sealed class ThrowingCaptureService(CancellationToken cancellationToken) : ICaptureService
+    {
+        public ValueTask<CaptureOutcome> CaptureAsync(CaptureIntent intent, CancellationToken ignored)
+            => ValueTask.FromException<CaptureOutcome>(new OperationCanceledException(cancellationToken));
+    }
+
     private sealed class FakeCaptureService(Func<CaptureIntent, CaptureOutcome> handler) : ICaptureService
     {
         public ValueTask<CaptureOutcome> CaptureAsync(CaptureIntent intent, CancellationToken cancellationToken)
@@ -142,7 +221,12 @@ public sealed class CaptureWorkflowCoordinatorTests
 
     private sealed class FakeClipboardService(Func<ClipboardDeliveryRequest, ClipboardDeliveryResult> handler) : IClipboardDeliveryService
     {
+        public bool WasCalled { get; private set; }
+
         public ValueTask<ClipboardDeliveryResult> DeliverAsync(ClipboardDeliveryRequest request, CancellationToken cancellationToken)
-            => ValueTask.FromResult(handler(request));
+        {
+            WasCalled = true;
+            return ValueTask.FromResult(handler(request));
+        }
     }
 }

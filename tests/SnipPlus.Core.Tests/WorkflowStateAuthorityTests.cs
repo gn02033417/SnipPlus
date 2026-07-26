@@ -49,4 +49,20 @@ public sealed class WorkflowStateAuthorityTests
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(WorkflowState.Cancelled, authority.CurrentState);
     }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public void ResultReadyCancellationCanReachCancelledBoundary()
+    {
+        var authority = new WorkflowStateAuthority();
+        authority.RequestTransition(new(WorkflowState.Idle, WorkflowState.Starting, "test"));
+        authority.RequestTransition(new(WorkflowState.Starting, WorkflowState.Selecting, "test"));
+        authority.RequestTransition(new(WorkflowState.Selecting, WorkflowState.Capturing, "test"));
+        authority.RequestTransition(new(WorkflowState.Capturing, WorkflowState.ResultReady, "test"));
+
+        var result = authority.RequestTransition(new(WorkflowState.ResultReady, WorkflowState.Cancelled, "cancel"));
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(WorkflowState.Cancelled, authority.CurrentState);
+    }
 }
