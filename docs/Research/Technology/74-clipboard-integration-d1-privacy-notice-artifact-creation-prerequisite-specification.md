@@ -155,7 +155,24 @@ The following are documentary references only. No actual input is supplied.
 | CLIP-D1-ROLEEX-014 | Operational Observation | Not created | Blocks creation if present |
 | CLIP-D1-ROLEEX-015 | Persistent Evidence | Not created | Blocks creation if present |
 
-## 7. Validation Rules
+## 7. Separation Rules
+
+| Separation ID | Separation rule | Current state | Automatic transition |
+| --- | --- | --- | --- |
+| CLIP-D1-PRIVCREATESEP-001 | Creation Prerequisite Specification ≠ Privacy Notice Artifact | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-002 | Creation Readiness ≠ Artifact Creation | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-003 | Artifact Creation ≠ Artifact Approval | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-004 | Artifact Approval ≠ Notice Delivery | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-005 | Notice Delivery ≠ Notice Acknowledgement | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-006 | Notice Acknowledgement ≠ Human Input Collection | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-007 | Notice Acknowledgement ≠ Role Acceptance | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-008 | Privacy Notice Artifact ≠ Submission Instruction | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-009 | Privacy Notice Artifact ≠ Request Submission | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-010 | Privacy Notice Artifact ≠ Collection Authorization | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-011 | Human Governance Input ≠ Collection-start Permission | Documentarily satisfied | Prohibited |
+| CLIP-D1-PRIVCREATESEP-012 | Human Governance Input ≠ Execution Permission | Documentarily satisfied | Prohibited |
+
+## 8. Validation Rules
 
 | Validation ID | Validation rule | Current evaluation | Failure response |
 | --- | --- | --- | --- |
@@ -175,7 +192,7 @@ The following are documentary references only. No actual input is supplied.
 | CLIP-D1-PRIVCREATEVAL-014 | Creation readiness must not imply Request Submission or Collection Authorization | Not evaluated | Stop and preserve separation |
 | CLIP-D1-PRIVCREATEVAL-015 | Creation readiness must not imply Collection-start Permission or Execution Permission | Not evaluated | Stop and preserve separation |
 
-## 8. Stop Conditions
+## 9. Stop Conditions
 
 | Stop ID | Stop condition | Current trigger state | Required response |
 | --- | --- | --- | --- |
@@ -195,7 +212,7 @@ The following are documentary references only. No actual input is supplied.
 | CLIP-D1-PRIVCREATESTOP-014 | Artifact creation is treated as Collection Authorization | Not evaluated | Stop and preserve separation |
 | CLIP-D1-PRIVCREATESTOP-015 | Collection-start Permission or Execution Permission is absent | Not evaluated | Stop; never collect or execute |
 
-## 9. Prohibited Transitions
+## 10. Prohibited Transitions
 
 The following fifteen transitions are explicitly prohibited. Every rule is preserved, no transition has been performed, and no result is granted by this specification.
 
@@ -217,7 +234,7 @@ The following fifteen transitions are explicitly prohibited. Every rule is prese
 | CLIP-D1-PRIVCREATETRANS-014 | Human Input → Collection-start Permission | Yes | No | No |
 | CLIP-D1-PRIVCREATETRANS-015 | Human Input → Execution Permission | Yes | No | No |
 
-## 10. Unresolved-value Ledger
+## 11. Unresolved-value Ledger
 
 The following values are future values and remain unresolved. Their absence keeps the creation gate closed.
 
@@ -241,7 +258,7 @@ The following values are future values and remain unresolved. Their absence keep
 
 No actual purpose, retention period, access holder, recipient, contact, person, account, machine identifier, credential, token, private key, Clipboard content, Screenshot content, Desktop content, observation, or evidence is recorded here.
 
-## 11. Submission, Authorization, and Execution Separation
+## 12. Submission, Authorization, and Execution Separation
 
 | Stage | Current state | Required prior artifact | Automatic transition prohibited | Effect |
 | --- | --- | --- | --- | --- |
@@ -259,7 +276,7 @@ No actual purpose, retention period, access holder, recipient, contact, person, 
 | Collection-start Permission | No | Future explicit start permission | Yes | No collection begins |
 | Execution Permission | Not provided | Future explicit permission | Yes | No execution begins |
 
-## 12. Completeness Matrix
+## 13. Completeness Matrix
 
 The matrix measures documentary completeness only. Every result value is restricted to `Yes`, `Partially`, or `No`.
 
@@ -271,6 +288,7 @@ The matrix measures documentary completeness only. Every result value is restric
 | Fixed roles | 5 role classes | All five retained; holders unresolved | Yes |
 | Input references | 12 documentary references | All 12 present without actual values | Yes |
 | Explicit exclusions | 15 categories | All 15 retained | Yes |
+| Separation rules | 12 separation rules | 12 rows present | Yes |
 | Validation rules | 15 rules | All 15 defined; not evaluated | Yes |
 | Stop conditions | 15 conditions | All 15 defined; no operation performed | Yes |
 | Prohibited transitions | 15 transitions | All 15 preserved; none performed | Yes |
@@ -279,7 +297,7 @@ The matrix measures documentary completeness only. Every result value is restric
 | Safety state | Artifact, approval, delivery, input, authorization, and permission absent | All safe states retained | Yes |
 | Overall creation prerequisite specification | Complete documentary specification | Complete as Draft; creation gate closed | Yes |
 
-## 13. Mermaid Traceability
+## 14. Mermaid Traceability
 
 ```mermaid
 flowchart LR
@@ -305,7 +323,7 @@ flowchart LR
 
 The solid chain represents documentary traceability. The ten dashed paths represent future stages requiring separate human governance input and explicit authorization. No dashed stage is performed or authorized by this document.
 
-## 14. Required Safety State
+## 15. Required Safety State
 
 | Safety item | Required current state |
 | --- | --- |
@@ -331,7 +349,7 @@ The solid chain represents documentary traceability. The ten dashed paths repres
 | Operational Observation | Not created |
 | Persistent Evidence | Not created |
 
-## 15. Completion Boundary and Handoff
+## 16. Completion Boundary and Handoff
 
 This specification is complete as a Draft when:
 
@@ -366,7 +384,7 @@ The only permitted next-document handoffs are:
 
 No handoff may create, write, simulate, approve, send, or deliver a Privacy Notice, identify a recipient, select a channel or platform, create a Submission Instruction, submit a Request, collect Human Input, authorize collection, grant start permission, distribute a Worksheet, perform D1 Inspection, or preserve Observation or Evidence.
 
-## 16. Prohibited Actions
+## 17. Prohibited Actions
 
 This specification must not be used to:
 
@@ -383,7 +401,7 @@ This specification must not be used to:
 - Begin coding, Build, Test, or Run activities.
 - Modify any existing document.
 
-## 17. Mechanical Final Status
+## 18. Mechanical Final Status
 
 `D1 Privacy Notice Artifact creation prerequisite specification complete`
 
@@ -394,6 +412,7 @@ This specification must not be used to:
 - Fixed roles: 5
 - Input references: 12
 - Explicit exclusions: 15
+- Separation rules: 12
 - Prohibited transitions: 15
 - Rule preserved: Yes, 15/15
 - Transition performed: No, 15/15
