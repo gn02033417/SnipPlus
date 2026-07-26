@@ -1,36 +1,18 @@
 # SnipPlus
 
-SnipPlus is a documentation-first Windows desktop product repository. Product、behavioral-specification and abstract-architecture baselines are established; UI Framework and Rendering Technology decisions are accepted; implementation has not started.
+SnipPlus is a Windows desktop capture product repository. Product、Specification、Architecture、technology decisions、implementation contracts and Project Structure are complete for the first vertical slice. Application implementation has not started.
 
 ## Start here
 
-- [Repository current-state and implementation-readiness audit](docs/REPOSITORY-CURRENT-STATE-AND-IMPLEMENTATION-READINESS-AUDIT.md)
-- [Documentation index](docs/index.md)
-- [Project lifecycle](docs/PROJECT-LIFECYCLE.md)
+- [Implementation Readiness Review](docs/IMPLEMENTATION-READINESS-REVIEW.md) — `Approved for first vertical slice implementation`
+- [Implementation Contracts](Architecture/IMPLEMENTATION-CONTRACTS.md)
+- [Project Structure and Toolchain Baseline](Architecture/PROJECT-STRUCTURE.md)
+- [ADR index](Architecture/adr/README.md)
 - [Frozen PRD baseline](PRD/PRD-FREEZE-REVIEW.md)
 - [Frozen Specification baseline](Specs/SPEC-BASELINE-REVIEW.md)
 - [Frozen Architecture baseline](Architecture/ARCH-BASELINE-REVIEW.md)
-- [Accepted UI Framework ADR](Architecture/adr/ADR-0002-ui-framework-selection.md)
-- [Accepted Rendering Technology ADR](Architecture/adr/ADR-0003-rendering-technology.md)
-- [Technology decision roadmap](Architecture/TECHNOLOGY-DECISION-ROADMAP.md)
 - [Development Guide](docs/guides/development-guide.md)
-- [Contributing](CONTRIBUTING.md)
-
-## Repository map
-
-```text
-SnipPlus/
-├─ Architecture/       Architecture baseline, ADR governance and accepted/candidate decisions
-├─ PRD/                Frozen product-requirement baseline
-├─ Specs/              Frozen observable-behavior baseline
-├─ docs/               Research, analysis, decisions, audits, guides and design references
-├─ AGENTS.md           Repository work rules
-├─ CONTRIBUTING.md     Collaboration and change workflow
-├─ ROADMAP.md          Current phase and exit criteria
-├─ CHANGELOG.md        Meaningful repository changes
-├─ TODO.md             Active decision and engineering backlog
-└─ README.md           Repository entry point
-```
+- [Documentation index](docs/index.md)
 
 ## Current status
 
@@ -40,30 +22,35 @@ SnipPlus/
 | Behavioral specifications | Specification v1.0 `Freeze Approved` |
 | Architecture | Abstract baseline `Freeze Approved` |
 | UI framework | ADR-0002 `Accepted`; WinUI 3 |
-| Rendering Technology | ADR-0003 `Accepted`; WinUI XAML／Composition + Win2D; runtime not verified |
-| Capture Backend | Candidate; next primary decision |
-| Clipboard、Image Representation、Testing | Candidate / not accepted |
-| Interface contracts | Not completed |
-| Language／Runtime／SDK versions | Not selected |
-| Project structure | Not completed |
+| Rendering | ADR-0003 `Accepted`; WinUI XAML／Composition + Win2D |
+| Capture | ADR-0004 `Accepted`; Windows.Graphics.Capture |
+| Image representation | ADR-0005 `Accepted`; BGRA8 premultiplied SoftwareBitmap |
+| Clipboard | ADR-0006 `Accepted`; WinRT DataPackage |
+| Testing | ADR-0007 `Accepted`; MSTest.Sdk + MTP |
+| Contracts | `Accepted` |
+| Toolchain / Project Structure | `Accepted` |
+| Implementation readiness | **Approved for first vertical slice** |
 | Application code | Not started |
-| Runtime verification | Not started |
-| Build、test、CI and release | Not established |
+| Build/runtime evidence | Not performed; required implementation output |
 
-## Current working direction
+## Accepted first-slice baseline
 
-The repository no longer needs additional prerequisite or closure-review chains.
+- C# 14 / .NET SDK 10.0.302.
+- Windows 11 24H2 x64.
+- Windows App SDK 2.3.1.
+- Win2D 1.4.0.
+- MSTest.Sdk 4.1.0 and Microsoft.Testing.Platform.
+- Packaged framework-dependent WinUI 3 development model.
+- Contracts、Core、Windows and App source projects plus three test projects.
 
-The next useful work is:
+## Next action
 
-1. Produce and review the Capture Backend ADR using `docs/Research/Technology/20–28` as evidence.
-2. Decide Image Representation、Clipboard Integration and Testing Strategy.
-3. Define consolidated Shared Result、rendering、capture、clipboard、output and failure contracts.
-4. Fix Language／Runtime／SDK versions and Solution／Project Structure.
-5. Perform one Implementation Readiness Review.
+**Issue an explicit first vertical slice implementation task.**
 
-`docs/Research/Technology/10–18` remains historical Rendering research and verification planning. ADR-0003 now owns the effective Rendering decision. `docs/Research/Technology/29–80` remains historical Clipboard research and governance evidence; the 039–052 documentary chain is closed.
+No additional pre-coding paperwork is required. The implementation task should create the approved solution/projects, restore/build the empty baseline, implement the bounded capture-to-Clipboard path, add tests and record actual evidence.
 
-## Working principle
+The approved scope excludes global hotkeys、multi-monitor stitching、window-capture product mode、annotation tools、file-output UI、HDR preservation、telemetry、cloud、OCR、plugins and release publication.
 
-Use Frozen PRD、Specification、Architecture and Accepted ADR baselines as upstream sources. Keep `Draft`、`Candidate`、`UNKNOWN` and `TBD` visible. ADR acceptance does not authorize coding; source-code creation requires an explicit implementation task after Implementation Readiness approval.
+## Documentation boundary
+
+Research files remain historical evidence. Do not create more prerequisite、authorization-request or closure-review chains. Documentation changes during implementation require a concrete scope change、official compatibility issue or verified build/runtime finding.
