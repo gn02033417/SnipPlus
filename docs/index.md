@@ -10,9 +10,10 @@
 4. [PRD Freeze Review](../PRD/PRD-FREEZE-REVIEW.md)
 5. [Specification Baseline Review](../Specs/SPEC-BASELINE-REVIEW.md)
 6. [Architecture Baseline Review](../Architecture/ARCH-BASELINE-REVIEW.md)
-7. [Technology Decision Roadmap](../Architecture/TECHNOLOGY-DECISION-ROADMAP.md)
-8. [Development Guide](guides/development-guide.md)
-9. [Contributing](../CONTRIBUTING.md)
+7. [ADR-0002 UI Framework Selection](../Architecture/adr/ADR-0002-ui-framework-selection.md)
+8. [Technology Decision Roadmap](../Architecture/TECHNOLOGY-DECISION-ROADMAP.md)
+9. [Development Guide](guides/development-guide.md)
+10. [Contributing](../CONTRIBUTING.md)
 
 ## Current lifecycle state
 
@@ -21,7 +22,8 @@
 | PRD v1.0 | Freeze Approved |
 | Specification v1.0 | Freeze Approved |
 | Architecture baseline | Freeze Approved |
-| UI Framework decision | ADR-0002 Draft; not accepted |
+| UI Framework decision | ADR-0002 Accepted; WinUI 3 |
+| Rendering Technology | Candidate; next primary decision |
 | Other core technology decisions | Candidate |
 | Contracts and project structure | Incomplete |
 | Implementation and verification | Not started |
@@ -88,7 +90,7 @@ Technology Research 是 evidence 與治理歷史，不是 Accepted technical dec
 - [ADR baseline](../Architecture/ADR-BASELINE.md)
 - [ADR index](../Architecture/adr/README.md)
 - [ADR-0001 Documentation-first](../Architecture/adr/ADR-0001-documentation-first.md)
-- [ADR-0002 UI Framework Selection](../Architecture/adr/ADR-0002-ui-framework-selection.md) — Draft, proposed WinUI 3, not accepted.
+- [ADR-0002 UI Framework Selection](../Architecture/adr/ADR-0002-ui-framework-selection.md) — Accepted; WinUI 3。
 
 ### Guides, standards and design
 
