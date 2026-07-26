@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Graphics.Canvas;
+using Microsoft.UI.Windowing;
 using Microsoft.Windows.ApplicationModel.DynamicDependency;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SnipPlus.Contracts;
@@ -10,12 +11,16 @@ namespace SnipPlus.Windows.Tests;
 [TestClass]
 public sealed class WindowsGraphicsCapturePlatformTests
 {
+    private const uint WindowsAppSdkMajorMinor = 0x0002_0003;
     private static bool _windowsAppRuntimeInitialized;
+    private static int _windowsAppRuntimeHResult;
 
     [AssemblyInitialize]
     public static void InitializeWindowsAppRuntime(TestContext context)
     {
-        _windowsAppRuntimeInitialized = Bootstrap.TryInitialize(0, out _);
+        _windowsAppRuntimeInitialized = Bootstrap.TryInitialize(
+            WindowsAppSdkMajorMinor,
+            out _windowsAppRuntimeHResult);
     }
 
     [AssemblyCleanup]
@@ -47,24 +52,21 @@ public sealed class WindowsGraphicsCapturePlatformTests
         if (!_windowsAppRuntimeInitialized)
         {
             Assert.Inconclusive(
-                "The un-packaged test runner could not resolve a Windows App Runtime package graph; run this verification from the packaged app runtime.");
+                $"The test runner could not resolve the Windows App Runtime 2.3 package graph (HRESULT 0x{_windowsAppRuntimeHResult:X8}).");
         }
 
         Assert.IsTrue(
             WindowsGraphicsCaptureAdapter.IsSupported,
             "Windows.Graphics.Capture is unavailable on this Windows baseline.");
 
-        global::Windows.Graphics.DisplayId displayId = default;
-        global::Windows.Graphics.Capture.GraphicsCaptureItem? captureItem = null;
-        for (ulong value = 1; value <= 16 && captureItem is null; value++)
-        {
-            displayId = new global::Windows.Graphics.DisplayId { Value = value };
-            captureItem = global::Windows.Graphics.Capture.GraphicsCaptureItem.TryCreateFromDisplayId(displayId);
-        }
+        var primaryPoint = new global::Windows.Graphics.PointInt32 { X = 1, Y = 1 };
+        var displayArea = DisplayArea.GetFromPoint(primaryPoint, DisplayAreaFallback.Primary);
+        var displayId = new global::Windows.Graphics.DisplayId { Value = displayArea.DisplayId.Value };
+        var captureItem = global::Windows.Graphics.Capture.GraphicsCaptureItem.TryCreateFromDisplayId(displayId);
 
         if (captureItem is null)
         {
-            Assert.Inconclusive("The test runner could not resolve a logical display id.");
+            Assert.Inconclusive($"The Windows platform could not create a GraphicsCaptureItem for display id {displayId.Value.ToString(CultureInfo.InvariantCulture)}.");
         }
 
         using var device = CanvasDevice.GetSharedDevice();
