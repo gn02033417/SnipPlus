@@ -37,11 +37,19 @@ Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必
 
 狀態：`Complete`
 
-- ADR-0002 已於 2026-07-26 Review 並 Accepted。
-- SnipPlus Desktop UI Framework：WinUI 3。
-- 本決策不包含 Language／Runtime、Windows App SDK version、Rendering、Capture、Clipboard、Packaging、Testing 或 Project Structure。
+- ADR-0002 Accepted。
+- Desktop UI Framework：WinUI 3。
 
-## Current phase — Core technology decisions
+### Rendering technology decision
+
+狀態：`Complete`
+
+- ADR-0003 Accepted。
+- Retained host visuals：WinUI XAML／Microsoft.UI.Composition。
+- Immediate 2D、bitmap、effect and offscreen raster path：Win2D behind a rendering adapter。
+- Runtime verification remains pending and is not implied by ADR acceptance。
+
+## Current phase — Remaining core technology decisions
 
 狀態：`In progress`
 
@@ -49,17 +57,16 @@ Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必
 
 目前順序：
 
-1. **Rendering Technology ADR** — 下一個主要任務。
-2. Capture Backend ADR。
+1. **Capture Backend ADR** — 下一個主要任務。
+2. Image Representation ADR。
 3. Clipboard Integration ADR。
-4. Image Representation ADR。
-5. Testing Strategy ADR。
+4. Testing Strategy ADR。
 
 既有 Research 使用方式：
 
-- Rendering：`docs/Research/Technology/10–18`
 - Capture Backend：`docs/Research/Technology/20–28`
 - Clipboard Integration：`docs/Research/Technology/29–80`
+- Rendering：`docs/Research/Technology/10–18` 已由 ADR-0003 收斂；未執行項目只作 future verification plan
 
 上述 Research 保留為 evidence 和歷史記錄；不得因 `Not ready` 自動新增下一層 authorization-request 或 closure-review 文件。
 
@@ -67,7 +74,7 @@ Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必
 
 - 核心 P0 ADR 已 Accepted 或明確 Deferred。
 - 技術選擇不改寫 Frozen PRD、Specs 或 Architecture ownership。
-- Rendering、Capture、Clipboard、Image Representation 和 Testing 的 dependency 可追溯。
+- Capture、Clipboard、Image Representation 和 Testing dependency 可追溯。
 - 關鍵 UNKNOWN／TBD 已轉成 contract、verification item 或明確 deferred decision。
 
 ## Next phase — Contracts and Project Structure
@@ -79,11 +86,13 @@ Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必
 必要成果：
 
 - Shared Result／Image Result contract。
+- Rendering contract：render intent、coordinate spaces、alpha／color、resource recovery、display／raster equivalence。
 - Capture Backend boundary contract。
 - Clipboard Handoff contract。
 - Output Delivery contract。
 - Error、failure、retry、preservation 與 cleanup contract。
 - Component interaction sync／async boundary。
+- C#／.NET／Windows App SDK／Win2D version baseline。
 - Component-to-project／assembly mapping。
 - Solution／Project Structure。
 - setup、format、lint、test、build 與 CI plan。
@@ -92,7 +101,7 @@ Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必
 
 - Contracts 能回溯至 Frozen Specs、Architecture 與 Accepted ADR。
 - Project Structure 不改變既有 Module／Component ownership。
-- Language、Runtime、SDK 和 dependency versions 具有正式決策來源。
+- Language、Runtime、SDK 和 dependency versions 具有正式來源。
 - 最小 vertical slice 可由明確 Project 和 contract 實現。
 
 ## Following phase — Implementation readiness
@@ -117,9 +126,10 @@ Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必
 
 建議邊界：
 
-- 單一 Windows desktop host。
+- 單一 WinUI 3 Windows desktop host。
 - 單一最小 capture path。
-- 明確 Capture Result contract。
+- 明確 Shared Result／Image Result contract。
+- 以 ADR-0003 rendering adapter 顯示一個合成或 capture result。
 - 單一 downstream delivery path。
 - 基本取消、失敗和 cleanup。
 - 自動化測試與可重現 runtime evidence。
@@ -127,9 +137,9 @@ Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必
 出口條件：
 
 - 核心流程符合 Frozen Specs acceptance criteria。
-- 取消、失敗與 cleanup 有測試。
-- Platform-specific behavior 有 evidence。
-- Implementation 未新增產品需求或改寫 Architecture。
+- 取消、失敗、resource recovery 與 cleanup 有測試。
+- Platform-specific behavior 和 rendering output 有 evidence。
+- 未在 Implementation 內新增產品需求或改寫 Architecture。
 
 ## Later phase — Product hardening and release
 
@@ -147,11 +157,11 @@ Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必
 
 `docs/Research/Technology/29–80` 保留為歷史研究與治理證據。Clipboard D1 的 039→052 documentary chain 已停止。
 
-除非出現新的外部證據、實際 Authority 決策、Accepted change 或 runtime evidence，不再建立同類型 prerequisite、readiness reassessment、authorization request 或 closure-review 文件。
+除非出現新的 external evidence、實際 Authority 決策、Accepted change 或 runtime evidence，不再建立同類型 prerequisite、readiness reassessment、authorization request 或 closure-review 文件。
 
 ## Deferred product capabilities
 
-以下能力只有在 Frozen PRD／Specs 的 change control 通過後才進入正式排程：
+以下能力只有在 Frozen PRD／Specs change control 通過後才進入正式排程：
 
 - OCR
 - 雲端同步
