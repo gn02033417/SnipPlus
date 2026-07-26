@@ -2,10 +2,35 @@
     x:Class="SnipPlus.App.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Grid Padding="32">
-        <StackPanel Spacing="12">
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel x:Name="CommandBar" Padding="24" Spacing="10">
             <TextBlock FontSize="28" Text="SnipPlus" />
-            <TextBlock Text="First vertical slice baseline" />
+            <TextBlock Text="First vertical slice" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <Button x:Name="StartCaptureButton" Click="StartCaptureButton_Click" Content="Start Capture" />
+                <TextBlock x:Name="StatusText" VerticalAlignment="Center" Text="Ready" />
+            </StackPanel>
         </StackPanel>
+
+        <Grid Grid.Row="1" Padding="24">
+            <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1">
+                <Image x:Name="ResultImage" Stretch="Uniform" />
+            </Border>
+        </Grid>
+
+        <Grid x:Name="SelectionSurface" Grid.RowSpan="2" Background="#99000000" IsTabStop="True" KeyDown="SelectionSurface_KeyDown" Visibility="Collapsed">
+            <Canvas x:Name="SelectionCanvas" Background="Transparent" PointerPressed="SelectionCanvas_PointerPressed" PointerMoved="SelectionCanvas_PointerMoved" PointerReleased="SelectionCanvas_PointerReleased">
+                <Rectangle x:Name="SelectionRectangle" Fill="#33518DFF" Stroke="#FFBBD7FF" StrokeThickness="2" Visibility="Collapsed" />
+            </Canvas>
+            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="24" Spacing="8">
+                <TextBlock Foreground="White" Text="Drag to select a region" />
+                <Button Click="CancelSelectionButton_Click" Content="Cancel" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

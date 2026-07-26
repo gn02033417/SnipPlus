@@ -27,6 +27,7 @@
 - 新增 canonical BGRA8 premultiplied `SoftwareBitmap` image pipeline、PNG encoding、crop 與 Win2D rendering adapter。
 - 新增以 `Windows.Graphics.Capture` 為後端的 monitor capture adapter，含 bounded frame wait、content-size validation、cleanup 與 platform category test。
 - 新增 WinRT `DataPackage` PNG Clipboard delivery，預設關閉 history／roaming、成功後 `Flush()`，並加入 bounded cancellable contention retry。
+- 新增 packaged WinUI 3 application shell、明確 `Start Capture` command、單螢幕 selection surface、DIP／physical-pixel context 建立與結果 presentation。
 
 ### Changed
 
@@ -47,6 +48,7 @@
 - Capture adapter compile verification：`WindowsGraphicsCaptureAdapter` 已通過 Release x64 build；實際 platform capture 仍由 Interactive category 個別驗證。
 - Windows capture platform test 已建立為 `Platform`／`Capture`／`Interactive` category，未混入非互動測試。
 - Clipboard retry policy tests 已加入一般非互動測試集合；完整非互動測試目前 24 passed、0 failed、0 skipped。
+- Application shell 已通過 packaged WinUI 3 Release x64 build；尚未以真實 desktop／Clipboard 內容建立 evidence artifact。
 
 ### Not released
 
