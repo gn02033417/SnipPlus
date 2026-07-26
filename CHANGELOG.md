@@ -25,6 +25,7 @@
 - 新增 `SnipPlus.Core` 的 `COMP-001` workflow state authority、DIP-to-physical coordinate mapping 與 capture/Clipboard outcome coordination。
 - 新增 Core／Contracts tests，覆蓋 legal／illegal transition、cancellation、failure classification、coordinate bounds／rounding、canonical image metadata 與 Clipboard defaults。
 - 新增 canonical BGRA8 premultiplied `SoftwareBitmap` image pipeline、PNG encoding、crop 與 Win2D rendering adapter。
+- 新增以 `Windows.Graphics.Capture` 為後端的 monitor capture adapter，含 bounded frame wait、content-size validation、cleanup 與 platform category test。
 
 ### Changed
 
@@ -43,6 +44,7 @@
 - Core／Contracts contract slice：同一非互動指令成功，16 passed、0 failed、0 skipped。
 - Rendering／image slice：6 passed、0 failed、0 skipped；包含 deterministic pixel conversion、crop boundary、PNG encoding、lease cleanup、Win2D rendering 與 cancellation。
 - Capture adapter compile verification：`WindowsGraphicsCaptureAdapter` 已通過 Release x64 build；實際 platform capture 仍由 Interactive category 個別驗證。
+- Windows capture platform test 已建立為 `Platform`／`Capture`／`Interactive` category，未混入非互動測試。
 
 ### Not released
 
