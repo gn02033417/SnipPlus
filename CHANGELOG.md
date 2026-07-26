@@ -21,6 +21,9 @@
 - 新增 `Architecture/PROJECT-STRUCTURE.md`，固定 C# 14、.NET 10.0.302、Windows App SDK 2.3.1、Win2D 1.4.0、MSTest.Sdk 4.1.0、x64 與 project mapping。
 - 新增 `docs/IMPLEMENTATION-READINESS-REVIEW.md`，結論為 `Approved for first vertical slice implementation`。
 - 建立第一階段 solution／project skeleton：`SnipPlus.sln`、4 個 source projects、3 個 test projects、中央套件管理與 committed lock files。
+- 新增 `SnipPlus.Contracts` 的 workflow、capture、coordinate、image、failure、Clipboard 與 Output semantic contracts。
+- 新增 `SnipPlus.Core` 的 `COMP-001` workflow state authority、DIP-to-physical coordinate mapping 與 capture/Clipboard outcome coordination。
+- 新增 Core／Contracts tests，覆蓋 legal／illegal transition、cancellation、failure classification、coordinate bounds／rounding、canonical image metadata 與 Clipboard defaults。
 
 ### Changed
 
@@ -36,6 +39,7 @@
 - `dotnet restore SnipPlus.sln --locked-mode`：成功。
 - `dotnet build SnipPlus.sln -c Release -p:Platform=x64 --no-restore`：成功，0 warnings、0 errors。
 - `dotnet test SnipPlus.sln -c Release -p:Platform=x64 --no-build -- --filter "TestCategory!=Interactive&TestCategory!=Manual"`：3 個 baseline test assemblies 成功，3 passed、0 failed、0 skipped。
+- Core／Contracts contract slice：同一非互動指令成功，16 passed、0 failed、0 skipped。
 
 ### Not released
 
