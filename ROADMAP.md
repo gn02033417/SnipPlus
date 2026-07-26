@@ -1,47 +1,108 @@
 # ROADMAP
 
-狀態：`Draft`
+狀態：`Accepted`
 
-Roadmap 使用階段與出口條件，不先承諾日期。日期要等產品範圍、技術棧與人力確認後再加入。
+Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必要 ADR、工程契約與人力確認後再加入。
 
-## Current phase — Documentation foundation
+## Completed baselines
+
+### Product baseline
+
+狀態：`Complete`
+
+- PRD v1.0 Freeze Approved。
+- 產品願景、UX 原則、核心流程、FR、NFR 與追溯基線已建立。
+
+### Behavioral specification baseline
+
+狀態：`Complete`
+
+- Specification v1.0 Freeze Approved。
+- 五個核心 Feature、shared state、workflow boundary 與 acceptance criteria 已建立。
+
+### Abstract architecture baseline
+
+狀態：`Complete`
+
+- Architecture baseline Freeze Approved。
+- Layer、Module、Component、Interaction、ownership 與 dependency boundary 已建立。
+
+### Repository governance foundation
+
+狀態：`Complete`
+
+- 文件入口、生命週期、命名規則、ADR governance、Development Guide、Coding Standard、Wireframe、協作與追蹤文件已建立。
+
+## Current phase — Technology decisions and implementation preparation
 
 狀態：`In progress`
 
-已建立：文件入口、命名規則、PRD/Specs/Architecture 分層、ADR、Development Guide、Coding Standard、Wireframe、協作與追蹤文件。
+目標：將 Candidate 技術主題收斂為 Accepted ADR，建立必要工程契約、Project Structure 與 Verification Strategy。
 
-出口條件：主要文件能互相連結，未知內容可辨識，且沒有把尚未實作的功能描述成已完成。
+目前重點：
 
-## Phase 1 — Product discovery
+1. Review 並接受、否決或退回 ADR-0002 UI Framework Selection。
+2. 完成 Rendering Technology、Capture Backend、Clipboard Integration、Image Representation 與 Testing Strategy 的核心決策。
+3. 建立 Shared Result、Capture、Clipboard、Output 與 Failure contracts。
+4. 建立 Component-to-project mapping 與 Solution／Project Structure。
+5. 建立單一 Implementation Readiness Review。
 
-目標：確認目標使用者、核心問題、主要情境、平台與成功指標。
+出口條件：
 
-出口條件：`PRD-0001` 從 `Draft` 轉為 `Accepted`，並核准 non-goals 與資料隱私原則。
+- 核心 P0 ADR 已 Accepted 或明確 Deferred。
+- 技術選擇不改寫 Frozen PRD、Specs 或 Architecture ownership。
+- 必要 Interface／Data contracts 已可供實作與測試引用。
+- Solution／Project Structure、setup、build、test 與 CI plan 可重現。
+- 第一個 vertical slice 的 scope、non-goals、acceptance criteria 與 verification plan 明確。
+- Implementation Readiness Review 明確授權或拒絕開始 coding。
 
-## Phase 2 — Behavioral specification
+## Next phase — First vertical slice
 
-目標：把核准的核心流程拆成可驗收的 `SPEC-NNNN` 文件，包含正常、取消、失敗與恢復行為。
+狀態：`Not started`
 
-出口條件：核心流程有完整 acceptance criteria，UI Wireframe 與 Specs 對齊。
+目標：依 Accepted baselines 與 ADR 實作最小、可驗證的端到端流程。
 
-## Phase 3 — Technical foundation
+建議邊界：
 
-目標：選定平台、技術棧、模組邊界、儲存與發布策略，並為真正的長期取捨建立 ADR。
+- 單一 Windows desktop host。
+- 單一最小 capture path。
+- 明確的 Capture Result contract。
+- 單一 downstream delivery path。
+- 基本取消、失敗與 cleanup。
+- 自動化測試與可重現 runtime evidence。
 
-出口條件：Architecture 能對應到實際 solution 結構，setup、build、test、lint 與 release 方式可重現。
+出口條件：
 
-## Phase 4 — First usable implementation
+- 核心流程符合 Frozen Specs acceptance criteria。
+- 取消、失敗與 cleanup 有測試。
+- Platform-specific behavior 有 evidence。
+- 未在 Implementation 內新增產品需求或改寫 Architecture。
 
-目標：依 Accepted Specs 實作最小可用流程，建立測試與可定位的錯誤處理。
+## Later phase — Product hardening and release
 
-出口條件：核心流程可驗收、取消與失敗路徑有測試、隱私與資料生命週期符合決策。
+狀態：`Not started`
 
-## Phase 5 — Hardening and release
+目標：處理相容性、效能、可觀測性、packaging、update、rollback 與支援範圍。
 
-目標：處理相容性、效能、可觀測性、文件、版本與 rollback。
+出口條件：
 
-出口條件：有發布檢查表、已知限制、CHANGELOG、支援範圍與回復策略。
+- 發布檢查表、版本策略、CHANGELOG 與 rollback policy 完整。
+- 已知限制、支援範圍與 verification result 可追溯。
+- Release artifact 不繞過 Verification。
 
-## Not scheduled
+## Stopped documentation pattern
 
-截圖模式、編輯、OCR、雲端同步、分享、外部整合與其他候選能力都尚未排程；要先通過產品 discovery 與 scope decision。
+`docs/Research/Technology/29–80` 保留為歷史研究與治理證據。Clipboard D1 的 039→052 documentary chain 已停止。
+
+除非出現新的外部證據、實際 Authority 決策、Accepted change 或 runtime evidence，不再建立同類型 prerequisite、readiness reassessment、authorization request 或 closure-review 文件。
+
+## Deferred product capabilities
+
+以下能力只有在 Frozen PRD／Specs 的 change control 通過後才進入正式排程：
+
+- OCR
+- 雲端同步
+- 分享與外部整合
+- Plugin architecture
+- 複雜 annotation toolset
+- 跨平台支援
