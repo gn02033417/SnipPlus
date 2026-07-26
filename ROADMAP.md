@@ -33,42 +33,95 @@ Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必
 
 - 文件入口、生命週期、命名規則、ADR governance、Development Guide、Coding Standard、Wireframe、協作與追蹤文件已建立。
 
-## Current phase — Technology decisions and implementation preparation
+### UI framework decision
+
+狀態：`Complete`
+
+- ADR-0002 已於 2026-07-26 Review 並 Accepted。
+- SnipPlus Desktop UI Framework：WinUI 3。
+- 本決策不包含 Language／Runtime、Windows App SDK version、Rendering、Capture、Clipboard、Packaging、Testing 或 Project Structure。
+
+## Current phase — Core technology decisions
 
 狀態：`In progress`
 
-目標：將 Candidate 技術主題收斂為 Accepted ADR，建立必要工程契約、Project Structure 與 Verification Strategy。
+目標：將剩餘 P0 技術主題收斂為 Accepted ADR，不再建立額外 prerequisite／closure 文件鏈。
 
-目前重點：
+目前順序：
 
-1. Review 並接受、否決或退回 ADR-0002 UI Framework Selection。
-2. 完成 Rendering Technology、Capture Backend、Clipboard Integration、Image Representation 與 Testing Strategy 的核心決策。
-3. 建立 Shared Result、Capture、Clipboard、Output 與 Failure contracts。
-4. 建立 Component-to-project mapping 與 Solution／Project Structure。
-5. 建立單一 Implementation Readiness Review。
+1. **Rendering Technology ADR** — 下一個主要任務。
+2. Capture Backend ADR。
+3. Clipboard Integration ADR。
+4. Image Representation ADR。
+5. Testing Strategy ADR。
 
-出口條件：
+既有 Research 使用方式：
+
+- Rendering：`docs/Research/Technology/10–18`
+- Capture Backend：`docs/Research/Technology/20–28`
+- Clipboard Integration：`docs/Research/Technology/29–80`
+
+上述 Research 保留為 evidence 和歷史記錄；不得因 `Not ready` 自動新增下一層 authorization-request 或 closure-review 文件。
+
+本階段出口條件：
 
 - 核心 P0 ADR 已 Accepted 或明確 Deferred。
 - 技術選擇不改寫 Frozen PRD、Specs 或 Architecture ownership。
-- 必要 Interface／Data contracts 已可供實作與測試引用。
-- Solution／Project Structure、setup、build、test 與 CI plan 可重現。
-- 第一個 vertical slice 的 scope、non-goals、acceptance criteria 與 verification plan 明確。
-- Implementation Readiness Review 明確授權或拒絕開始 coding。
+- Rendering、Capture、Clipboard、Image Representation 和 Testing 的 dependency 可追溯。
+- 關鍵 UNKNOWN／TBD 已轉成 contract、verification item 或明確 deferred decision。
 
-## Next phase — First vertical slice
+## Next phase — Contracts and Project Structure
 
 狀態：`Not started`
 
-目標：依 Accepted baselines 與 ADR 實作最小、可驗證的端到端流程。
+目標：建立實作和測試真正需要的工程邊界。
+
+必要成果：
+
+- Shared Result／Image Result contract。
+- Capture Backend boundary contract。
+- Clipboard Handoff contract。
+- Output Delivery contract。
+- Error、failure、retry、preservation 與 cleanup contract。
+- Component interaction sync／async boundary。
+- Component-to-project／assembly mapping。
+- Solution／Project Structure。
+- setup、format、lint、test、build 與 CI plan。
+
+本階段出口條件：
+
+- Contracts 能回溯至 Frozen Specs、Architecture 與 Accepted ADR。
+- Project Structure 不改變既有 Module／Component ownership。
+- Language、Runtime、SDK 和 dependency versions 具有正式決策來源。
+- 最小 vertical slice 可由明確 Project 和 contract 實現。
+
+## Following phase — Implementation readiness
+
+狀態：`Not started`
+
+建立一份 repository-wide Implementation Readiness Review，確認：
+
+- Accepted source baselines。
+- Accepted／Deferred P0 ADR。
+- Contracts 和 ownership。
+- Project Structure。
+- setup、build、test 和 CI plan。
+- 第一個 vertical slice 的 scope、non-goals 與 acceptance criteria。
+- Verification evidence、cleanup 和 rollback expectations。
+
+只有 Review 明確允許，且使用者另行下達 implementation task，才可以建立 application source code。
+
+## First vertical slice
+
+狀態：`Not started`
 
 建議邊界：
 
 - 單一 Windows desktop host。
 - 單一最小 capture path。
-- 明確的 Capture Result contract。
+- 明確 Capture Result contract。
 - 單一 downstream delivery path。
-- 基本取消、失敗與 cleanup。
+- 基本取消、失敗和 cleanup。
 - 自動化測試與可重現 runtime evidence。
 
 出口條件：
@@ -76,7 +129,7 @@ Roadmap 使用階段與出口條件，不先承諾日期。具體時程要等必
 - 核心流程符合 Frozen Specs acceptance criteria。
 - 取消、失敗與 cleanup 有測試。
 - Platform-specific behavior 有 evidence。
-- 未在 Implementation 內新增產品需求或改寫 Architecture。
+- Implementation 未新增產品需求或改寫 Architecture。
 
 ## Later phase — Product hardening and release
 
