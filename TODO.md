@@ -6,31 +6,34 @@
 
 ## P0 — 核心技術決策
 
-- [x] Review 並接受 `Architecture/adr/ADR-0002-ui-framework-selection.md`；WinUI 3 已成為有效 UI Framework decision。
-- [ ] 建立並審查 Rendering Technology ADR。**目前下一個主要任務。**
-- [ ] 建立並審查 Capture Backend ADR。
-- [ ] 建立並審查 Clipboard Integration ADR。
+- [x] UI Framework ADR Accepted：`ADR-0002`，WinUI 3。
+- [x] Rendering Technology ADR Accepted：`ADR-0003`，WinUI XAML／Composition + Win2D rendering adapter。
+- [ ] 建立並審查 Capture Backend ADR。**目前下一個主要任務。**
 - [ ] 建立並審查 Image Representation ADR。
+- [ ] 建立並審查 Clipboard Integration ADR。
 - [ ] 建立並審查 Testing Strategy ADR。
 
 每份 ADR 只處理一個重大決策，直接使用既有 Research／Architecture evidence，不先建立新的 authorization-request 或 closure-review 鏈。
 
-### Rendering ADR 必須回答
+### Capture Backend ADR 必須回答
 
-- UI host 為 WinUI 3 時，主要 rendering boundary 位於何處。
-- Capture Result、Annotation、preview／overlay 與 final image 是否使用同一 representation。
-- Win2D、SkiaSharp、Windows Composition／Direct2D 或其他候選的 responsibility boundary。
-- DPI、HDR、alpha、color space、pixel format 與 lifetime 哪些由 Rendering decision 擁有，哪些留給 Image Representation contract。
-- 是否需要 runtime spike；若需要，只建立一個明確授權的 execution task 和一份 result artifact。
+- 第一個 vertical slice 使用哪個 Windows capture backend。
+- Platform capture API 與 Capture orchestration／workflow ownership 如何分離。
+- Capture result 如何進入 Shared Result／Image Representation boundary。
+- Window、display、region 或其他 capture modes 哪些屬於初始 scope，哪些 Deferred。
+- Cancellation、permission、unsupported target、device-loss 與 failure 如何回報。
+- 是否需要受控 runtime verification；若需要，只建立一個明確 execution task 與一份 result artifact。
 
 ## P0 — 工程契約與 Project Structure
 
 - [ ] 定義 Shared Result／Image Result contract 與 ownership。
+- [ ] 定義 Rendering contract，包括 render intent、coordinate spaces、alpha／color、resource recovery 與 final raster boundary。
 - [ ] 定義 Capture Backend boundary contract。
 - [ ] 定義 Clipboard Handoff contract，包括 success、failure、retry、preservation 與 cleanup。
 - [ ] 定義 Output Delivery contract。
 - [ ] 定義 recoverable／terminal failure 與 retry contract。
 - [ ] 決定 component interaction 的 sync／async boundary。
+- [ ] 決定 C#／.NET／Windows App SDK／Win2D version baseline。
 - [ ] 建立 Component-to-project／assembly mapping。
 - [ ] 建立 Solution／Project Structure。
 - [ ] 更新 Development Guide，加入可重現的 setup、format、lint、test 與 build plan。
@@ -49,7 +52,7 @@
 - [x] 建立 Repository Current State and Implementation Readiness Audit。
 - [x] 將 README 與 AGENTS 對齊 Frozen PRD／Specs／Architecture 現況。
 - [x] 將 ROADMAP 移至 Technology Decisions 階段。
-- [x] 維護 `docs/index.md`、`PRD/README.md`、`Specs/README.md`、`Architecture/README.md` 與 ADR index，使其反映正式 baseline。
+- [x] 維護主要 README、index 與 ADR index。
 - [x] 維護 `docs/Research/Technology/README.md`，按研究線分組列出 01–80。
 - [x] 確認目前新增文件都有索引入口與正確相對連結。
 - [ ] 將狀態漂移與 Markdown link 檢查納入未來 CI。
@@ -71,6 +74,7 @@
 - [x] ADR governance baseline。
 - [x] Technology Decision Roadmap。
 - [x] UI Framework ADR Accepted：WinUI 3。
+- [x] Rendering Technology ADR Accepted：WinUI Composition + Win2D。
 - [x] UI Framework、Rendering、Capture Backend 與 Clipboard research chains。
 - [x] Clipboard D1 039→052 documentary closure chain completed and stopped。
 
