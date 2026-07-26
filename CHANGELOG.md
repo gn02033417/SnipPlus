@@ -24,6 +24,7 @@
 - 新增 `SnipPlus.Contracts` 的 workflow、capture、coordinate、image、failure、Clipboard 與 Output semantic contracts。
 - 新增 `SnipPlus.Core` 的 `COMP-001` workflow state authority、DIP-to-physical coordinate mapping 與 capture/Clipboard outcome coordination。
 - 新增 Core／Contracts tests，覆蓋 legal／illegal transition、cancellation、failure classification、coordinate bounds／rounding、canonical image metadata 與 Clipboard defaults。
+- 新增 canonical BGRA8 premultiplied `SoftwareBitmap` image pipeline、PNG encoding、crop 與 Win2D rendering adapter。
 
 ### Changed
 
@@ -40,8 +41,10 @@
 - `dotnet build SnipPlus.sln -c Release -p:Platform=x64 --no-restore`：成功，0 warnings、0 errors。
 - `dotnet test SnipPlus.sln -c Release -p:Platform=x64 --no-build -- --filter "TestCategory!=Interactive&TestCategory!=Manual"`：3 個 baseline test assemblies 成功，3 passed、0 failed、0 skipped。
 - Core／Contracts contract slice：同一非互動指令成功，16 passed、0 failed、0 skipped。
+- Rendering／image slice：6 passed、0 failed、0 skipped；包含 deterministic pixel conversion、crop boundary、PNG encoding、lease cleanup、Win2D rendering 與 cancellation。
+- Capture adapter compile verification：`WindowsGraphicsCaptureAdapter` 已通過 Release x64 build；實際 platform capture 仍由 Interactive category 個別驗證。
 
 ### Not released
 
-- 尚無 application source code、solution、build configuration、runtime verification、automated test result、package artifact、deploy 或 release artifact。
+- 尚無完整 application shell、Clipboard publication runtime verification、package artifact、deploy 或 release artifact。
 - Implementation Readiness approval 只表示文件足以開始 bounded first vertical slice，不表示技術已在 Repository 中實際 restore、build 或 run 成功。
