@@ -270,7 +270,6 @@ The following values remain unresolved future values. Their absence keeps the dr
 | Retention rule | Not completed | Future lifecycle control | Before drafting | Blocks drafting |
 | Correction process | Not completed | Future privacy control | Before drafting | Blocks drafting |
 | Withdrawal process | Not completed | Future privacy control | Before drafting | Blocks drafting |
-| Drafting authority | Not identified | Future governance process | Before drafting | Blocks drafting |
 | Privacy Notice Draft | Not created | Future controlled drafting process | Before artifact creation | Blocks artifact creation |
 | Privacy Notice Artifact | Not created | Future artifact process | Before approval | Blocks approval |
 | Privacy Notice Approval | Not provided | Future approval process | Before delivery | Blocks delivery |
@@ -317,7 +316,7 @@ The matrix measures documentary completeness only. Every result value is restric
 | Validation rules | 15 rules | All 15 defined; not evaluated | Yes |
 | Stop conditions | 15 conditions | All 15 defined; no operation performed | Yes |
 | Prohibited transitions | 16 transitions | All 16 preserved; none performed | Yes |
-| Unresolved-value ledger | 15 future values | All listed without actual values | Yes |
+| Unresolved-value ledger | 16 future values | All listed without actual values | Yes |
 | Submission and authorization separation | All later stages | All separated | Yes |
 | Safety state | Draft, artifact, approval, delivery, input, authorization, and permission absent | All safe states retained | Yes |
 | Overall drafting-control specification | Complete documentary specification | Complete as Draft; gate closed | Yes |
