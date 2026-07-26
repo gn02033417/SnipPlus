@@ -2,23 +2,74 @@
 
 狀態：`Accepted`
 
-This directory contains Technology Feasibility Research and Runtime Evidence Plans. It does not contain final technical decisions, prototype results or source code.
+This directory contains Technology Feasibility Research, evidence plans, readiness records and governance history. It does not contain Accepted technical decisions, production prototypes or source code.
 
-## Documents
+## Research lines
 
-- [UI Framework Feasibility for SnipPlus](01-ui-framework-feasibility.md) — `RESEARCH-TECH-UI-001`, `Draft`, official evidence comparison.
-- [UI Framework Runtime Spike Plan](02-ui-framework-runtime-spike-plan.md) — `RESEARCH-TECH-UI-002`, `Draft`, execution plan only; `Execution Status: Not started`.
-- [UI Framework Runtime Spike Execution Readiness](03-ui-framework-runtime-spike-execution-readiness.md) — `RESEARCH-TECH-UI-003`, `Draft`, readiness record only; `Execution Status: Not started`, `Overall Readiness Decision: Not ready`.
-- [UI Framework Runtime Environment Baseline](04-ui-framework-runtime-environment-baseline.md) — `RESEARCH-TECH-UI-004`, `Draft`, read-only Windows, hardware, SDK, Runtime and evidence-tool baseline; `Runtime Verification: Not performed`.
-- [UI Framework Runtime Prerequisite Closure Plan](05-ui-framework-runtime-prerequisite-closure-plan.md) — `RESEARCH-TECH-UI-005`, `Draft`, Closure Action and phase classification plan only; `Execution Status: Not started`, `Runtime Verification: Not performed`.
-- [UI Framework Phase 1 Prerequisite Closure Record](06-ui-framework-phase1-prerequisite-closure-record.md) — `RESEARCH-TECH-UI-006`, `Draft`, read-only evidence record only; `Execution Status: Partially completed`, `Runtime Verification: Not performed`, no Runtime Spike authorization.
-- [UI Framework Phase 1 Readiness Reassessment](07-ui-framework-phase1-readiness-reassessment.md) — `RESEARCH-TECH-UI-007`, `Draft`, reassessment of 10 Phase 1 gates; `Readiness: Not ready`, `Runtime Verification: Not performed`, `Runtime Spike Execution Authorized: No`.
-- [UI Framework Phase 1 Execution Enablement Specification](08-ui-framework-phase1-execution-enablement-specification.md) — `RESEARCH-TECH-UI-008`, `Draft`, one-to-one enablement specification for `BA-001` to `BA-008`; `Final Enablement Status: Conditionally ready to request Phase 1 execution authorization`, `Current authorization: Not granted`, `Execution permitted: No`.
-- [UI Framework Phase 1 Enablement Execution Authorization Request](09-ui-framework-phase1-enablement-execution-authorization-request.md) — `RESEARCH-TECH-UI-009`, `Draft`, eight individually bounded authorization requests; `Authorization Decision: Pending`, `Enablement Execution Authorized: No`, `Execution permitted: No`.
+### UI Framework — 01 through 09
+
+| Range | Coverage | Current boundary |
+| --- | --- | --- |
+| 01 | Framework feasibility | WinUI 3、WPF、Avalonia、Windows Forms evidence comparison |
+| 02–05 | Runtime spike planning and prerequisite closure | Plans only; no authorized runtime spike |
+| 06–09 | Evidence, readiness, enablement and authorization request | Authorization not granted; execution not permitted |
+
+Primary decision destination: [ADR-0002 UI Framework Selection](../../../Architecture/adr/ADR-0002-ui-framework-selection.md), currently `Draft` and not accepted.
+
+### Rendering Technology — 10 through 18
+
+| Range | Coverage | Current boundary |
+| --- | --- | --- |
+| 10 | Rendering feasibility | Research evidence only |
+| 11–14 | Runtime spike and prerequisite planning | No implementation authorization |
+| 15–18 | Evidence baseline, reassessment and inspection request | No runtime verification or Accepted ADR |
+
+Primary decision destination: future Rendering Technology ADR.
+
+### Capture Backend — 20 through 28
+
+| Range | Coverage | Current boundary |
+| --- | --- | --- |
+| 20 | Capture backend feasibility | Research evidence only |
+| 21–24 | Runtime spike and prerequisite planning | No implementation authorization |
+| 25–28 | Evidence baseline, reassessment and inspection request | No runtime verification or Accepted ADR |
+
+Primary decision destination: future Capture Backend ADR.
+
+### Clipboard Integration — 29 through 80
+
+| Range | Coverage | Current boundary |
+| --- | --- | --- |
+| 29–35 | Feasibility, runtime planning, prerequisite evidence and reassessment | No clipboard implementation or inspection |
+| 36–47 | Authorization-readiness, inspection planning and evidence consolidation | Documentary evidence only |
+| 48–55 | D1–D6 packages and evidence-specific readiness | No operational authorization |
+| 56–62 | D1 inspection requests, submission readiness and authority/channel governance | Requests not submitted; authority not identified |
+| 63–70 | Human-governance worksheet and input-collection request chain | Human input not collected |
+| 71–80 | Role/privacy/drafting authorization and artifact-creation controls | Documentary closure reached; artifact creation and execution not authorized |
+
+The final chain `039 → 040 → … → 052` ends in document 80. It preserves:
+
+- Artifact Creation Permission: `No`
+- Drafting Authorization Artifact: `Not created`
+- Drafting Start Permission: `No`
+- Collection Authorization: `Not provided`
+- Execution Permission: `Not provided`
+
+This chain is closed. Do not create document 81 or another same-pattern prerequisite／readiness／authorization／closure document unless new evidence, an explicit human decision, an accepted upstream change or runtime evidence materially changes the state.
+
+Primary decision destination: future Clipboard Integration ADR and consolidated Clipboard contract.
+
+## Indexing rule
+
+The numbered files are retained as historical evidence. They are grouped by research line here instead of repeating every long title. File numbering gaps are intentional and must not be reused.
+
+Use repository search or the directory listing for an exact numbered file. Each file remains the authoritative source for its own Document ID, status and boundary.
 
 ## Boundary
 
-- Runtime Spike execution requires a separate explicit task.
+- Research does not become an Accepted technical decision by accumulation.
+- Runtime execution requires an explicit task and an approved verification boundary.
 - Runtime results must be stored separately from plans.
-- Framework acceptance remains governed by `Architecture/adr/ADR-0002-ui-framework-selection.md`.
+- Accepted choices belong in `Architecture/adr/`.
+- Closely related engineering questions should be consolidated into ADR or contract packages rather than extended through repeated closure-review layers.
 - This directory must not become a project, prototype or source-code directory.
