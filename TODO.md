@@ -6,19 +6,21 @@ The pre-coding documentation backlog is complete. This file now tracks implement
 
 ## P0 — First vertical slice
 
-- [ ] Create `SnipPlus.sln`、`global.json`、`Directory.Build.props`、`Directory.Packages.props` and `.editorconfig`.
-- [ ] Create the four approved source projects and three test projects.
-- [ ] Restore with locked dependencies and build the empty Release x64 baseline.
-- [ ] Implement Implementation Contracts and Core workflow/state/failure behavior.
-- [ ] Implement WinUI 3 app shell and explicit capture command.
-- [ ] Implement single-monitor region selection and coordinate conversion.
-- [ ] Implement Windows.Graphics.Capture one-shot acquisition and crop.
-- [ ] Implement BGRA8 premultiplied SoftwareBitmap result ownership.
-- [ ] Implement Composition／Win2D display adapter.
-- [ ] Implement DataPackage Clipboard publication、privacy options、Flush and bounded retry.
-- [ ] Add Unit、Contract and deterministic Rendering tests.
-- [ ] Run explicitly authorized interactive Capture/Clipboard verification.
-- [ ] Record restore、build、test、runtime and cleanup evidence.
+- [x] Create `SnipPlus.sln`、`global.json`、`Directory.Build.props`、`Directory.Packages.props` and `.editorconfig`.
+- [x] Create the four approved source projects and three test projects.
+- [x] Restore with locked dependencies and build the empty Release x64 baseline.
+- [x] Implement Implementation Contracts and Core workflow/state/failure behavior.
+- [x] Implement WinUI 3 app shell and explicit capture command.
+- [x] Implement single-monitor region selection and coordinate conversion.
+- [x] Implement Windows.Graphics.Capture one-shot acquisition and crop.
+- [x] Implement BGRA8 premultiplied SoftwareBitmap result ownership.
+- [x] Implement Composition／Win2D display adapter.
+- [x] Implement DataPackage Clipboard publication、privacy options、Flush and bounded retry.
+- [x] Add Unit、Contract and deterministic Rendering tests.
+- [x] Run explicitly authorized interactive Capture/Clipboard verification.
+- [x] Record restore、build、test、runtime and cleanup evidence.
+
+第一個 Vertical Slice 已驗證完成。已知限制是未封裝 MSTest runner 的 Windows in-memory frame test 會因缺少 Windows App Runtime package graph 標記 `Inconclusive`；packaged runtime capture 已成功。
 
 ## P0 — Stop/report conditions
 

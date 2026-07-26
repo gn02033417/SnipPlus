@@ -15,7 +15,7 @@
 
 ## Current phase — First vertical slice implementation
 
-狀態：`Ready; not started`
+狀態：`Verified`
 
 Required scope：
 
@@ -29,6 +29,15 @@ Required scope：
 8. Publish through the DataPackage Clipboard adapter.
 9. Run non-interactive tests and explicitly authorized Windows platform verification.
 10. Record build、test、runtime and cleanup evidence.
+
+Verified results：
+
+- `SnipPlus.sln`、4 個 source projects 與 3 個 test projects 已建立。
+- Locked restore、Release x64 build 與 packaged WinUI 3 publish 已完成。
+- 非互動測試 24 passed；Rendering filter 6 passed。
+- Packaged runtime 已以 public synthetic fixture 完成 region selection、Windows.Graphics.Capture、crop、render、PNG 與 Clipboard publication。
+- Windows platform filter 可單獨執行；support check passed。未封裝 MSTest runner 的 in-memory frame test 因缺少 Windows App Runtime package graph 會標記 `Inconclusive`，不影響 packaged runtime verification。
+- 未改變 Frozen behavior、Architecture ownership 或明確 non-goal。
 
 Exit criteria：
 
@@ -53,6 +62,8 @@ Exit criteria：
 ## Next phase — Product hardening
 
 狀態：`Not started`
+
+進入條件已滿足；下一個 bounded slice 應先處理既有 runtime evidence 缺口，再決定是否加入產品能力。
 
 Begins only after the first slice is verified. It may address：
 
