@@ -65,7 +65,7 @@ Exit criteria：
 
 進入條件已滿足。目前已完成第一個 hardening slice：cancellation transition／cleanup tests 與 packaged `Start Capture → Cancel` runtime verification。
 
-剩餘優先缺口是讓 Windows in-memory frame platform test 能在具備 Windows App Runtime package graph 的 packaged test context 執行；在此之前維持現有 `Inconclusive` 分類，不把它誤報為 passed。
+Windows in-memory frame platform test 現已透過 Windows App SDK 2.3 bootstrap 建立 package graph，並以實際 primary display id 執行成功。下一個 bounded slice 尚未選定；不得因目前測試全綠而擴張至明確 non-goal。
 
 Begins only after the first slice is verified. It may address：
 
