@@ -111,7 +111,8 @@ The drafting gate remains closed. Defining a gate condition does not satisfy the
 | CLIP-D1-DRAFTGATE-012 | Collection Authorization remains absent | Not provided | Blocks collection | Not ready |
 | CLIP-D1-DRAFTGATE-013 | Collection-start Permission remains No | No | Blocks collection | Not ready |
 | CLIP-D1-DRAFTGATE-014 | Execution Permission remains absent | Not provided | Blocks execution | Not ready |
-| CLIP-D1-DRAFTGATE-015 | Actual drafting remains prohibited | Not created | Blocks drafting | Not ready |
+| CLIP-D1-DRAFTGATE-015 | Drafting Authority is identified by a future governance process | Not identified | Blocks drafting | Not ready |
+| CLIP-D1-DRAFTGATE-016 | Privacy Notice Artifact remains not created | Not created | Blocks artifact-dependent stages | Not ready |
 
 Current gate conclusion:
 
@@ -252,7 +253,7 @@ The following sixteen transitions are prohibited. Every rule is preserved, no tr
 | CLIP-D1-DRAFTTRANS-012 | Notice Acknowledged → Role Accepted | Yes | No | No |
 | CLIP-D1-DRAFTTRANS-013 | Privacy Notice Artifact → Submission Instruction | Yes | No | No |
 | CLIP-D1-DRAFTTRANS-014 | Privacy Notice Artifact → Request Submitted | Yes | No | No |
-| CLIP-D1-DRAFTTRANS-015 | Human Input → Collection-start Permission | Yes | No | No |
+| CLIP-D1-DRAFTTRANS-015 | Privacy Notice Artifact → Collection Authorized | Yes | No | No |
 | CLIP-D1-DRAFTTRANS-016 | Human Input → Execution Permission | Yes | No | No |
 
 ## 13. Unresolved-value Ledger
@@ -262,6 +263,8 @@ The following values remain unresolved future values. Their absence keeps the dr
 | Unresolved value | Current state | Required source | Required stage | Impact |
 | --- | --- | --- | --- | --- |
 | Approved purpose | Not provided | Future approved purpose process | Before drafting | Blocks drafting |
+| Drafting Authority | Not identified | Future governance process | Before drafting | Blocks drafting |
+| Approval Authority | Not identified | Future governance process | Before approval | Blocks approval |
 | Input classification | Not completed | Future input contract | Before drafting | Blocks drafting |
 | Access boundary | Not completed | Future privacy control | Before drafting | Blocks drafting |
 | Retention rule | Not completed | Future lifecycle control | Before drafting | Blocks drafting |
@@ -306,7 +309,7 @@ The matrix measures documentary completeness only. Every result value is restric
 | Traceability | Nine linked document IDs | 039 → 040 → 041 → 042 → 043 → 044 → 045 → 046 → 047 | Yes |
 | Content drafting controls | 13 controls | All 13 present; all Not ready | Yes |
 | Placeholder controls | Six specification-level placeholders | All six controlled; actual values prohibited | Yes |
-| Content drafting gate | Gate conditions and closed conclusion | All conditions defined; gate remains closed | Yes |
+| Content drafting gate | 16 gate conditions and closed conclusion | All 16 conditions defined; gate remains closed | Yes |
 | Fixed roles | 5 role classes | All five retained; holders unresolved | Yes |
 | Input references | 12 documentary references | All 12 present without actual values | Yes |
 | Explicit exclusions | 15 categories | All 15 retained | Yes |
@@ -332,15 +335,15 @@ flowchart LR
     R045 --> R046["RESEARCH-TECH-CLIPBOARD-046"]
     R046 --> R047["RESEARCH-TECH-CLIPBOARD-047 Content Drafting Controls"]
 
-    R047 -.-> F1["Future Privacy Notice Draft"]
-    R047 -.-> F2["Future Privacy Notice Artifact"]
-    R047 -.-> F3["Future Privacy Notice Approval"]
-    R047 -.-> F4["Future Notice Recipient Identification"]
-    R047 -.-> F5["Future Delivery Channel Selection"]
-    R047 -.-> F6["Future Platform Assessment"]
-    R047 -.-> F7["Future Privacy Notice Delivery"]
-    R047 -.-> F8["Future Notice Acknowledgement"]
-    R047 -.-> F9["Future Human Input Collection"]
+    R047 -.-> F1["Future Approved Purpose"]
+    R047 -.-> F2["Future Input Classification"]
+    R047 -.-> F3["Future Privacy Access Boundary"]
+    R047 -.-> F4["Future Privacy Lifecycle Rules"]
+    R047 -.-> F5["Future Privacy Notice Drafting"]
+    R047 -.-> F6["Future Privacy Notice Artifact"]
+    R047 -.-> F7["Future Privacy Notice Approval"]
+    R047 -.-> F8["Future Privacy Notice Delivery"]
+    R047 -.-> F9["Future Notice Acknowledgement"]
     R047 -.-> F10["Future Collection Authorization"]
     R047 -.-> F11["Future Execution Permission"]
 ```
@@ -351,6 +354,9 @@ The solid chain represents documentary traceability. The eleven dashed paths rep
 
 | Safety item | Required current state |
 | --- | --- |
+| Content Drafting Gate | Not ready to draft actual Privacy Notice Artifact |
+| Drafting Authority | Not identified |
+| Approval Authority | Not identified |
 | Privacy Notice Draft | Not created |
 | Privacy Notice Artifact | Not created |
 | Privacy Notice Approval | Not provided |
@@ -434,6 +440,9 @@ This specification must not be used to:
 - Content drafting controls: 13
 - Drafting readiness: Not ready, 13/13
 - Placeholder controls: 6
+- Content Drafting Gate rows: 16
+- Drafting Authority: Not identified
+- Approval Authority: Not identified
 - Fixed roles: 5
 - Input references: 12
 - Explicit exclusions: 15
