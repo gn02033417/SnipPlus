@@ -6,10 +6,11 @@ ADR 用來記錄影響多個模組、難以回復，或需要長期保存取捨�
 
 | ADR | Topic | Status | Effective decision |
 | --- | --- | --- | --- |
-| [ADR-0001 Documentation-first baseline](ADR-0001-documentation-first.md) | Repository documentation-first governance | Accepted | Yes |
+| [ADR-0001 Documentation-first baseline](ADR-0001-documentation-first.md) | Repository documentation-first governance | Accepted | Documentation-first governance |
 | [ADR-0002 UI Framework Selection](ADR-0002-ui-framework-selection.md) | Desktop UI Framework | Accepted | WinUI 3 |
+| [ADR-0003 Rendering Technology](ADR-0003-rendering-technology.md) | Rendering architecture and primary rendering technologies | Accepted | WinUI XAML／Composition + Win2D behind a rendering adapter |
 
-只有 `Accepted` ADR 可以作為下游 Contract、Project Structure、Implementation planning 與 Verification 的有效技術來源。
+只有 `Accepted` ADR 可以作為下游 contracts、Project Structure、implementation planning 與 verification 的有效技術來源。Accepted 不代表 runtime 已驗證，也不自動授權 Coding。
 
 ## Decision backlog
 
@@ -18,13 +19,13 @@ ADR 用來記錄影響多個模組、難以回復，或需要長期保存取捨�
 目前核心順序：
 
 1. ~~UI Framework~~ — Accepted through ADR-0002。
-2. Rendering Technology。
+2. ~~Rendering Technology~~ — Accepted through ADR-0003。
 3. Capture Backend。
-4. Clipboard Integration。
-5. Image Representation。
+4. Image Representation。
+5. Clipboard Integration。
 6. Testing Strategy。
 
-每個主題應直接收斂為一份主要 ADR。既有 Research 作為 evidence，不先建立新的 prerequisite、authorization-request 或 closure-review 文件。
+每個主題直接收斂為一份主要 ADR。既有 Research 作為 evidence，不先建立新的 prerequisite、authorization-request 或 closure-review 文件。
 
 ## 建立規則
 
@@ -48,5 +49,6 @@ ADR 用來記錄影響多個模組、難以回復，或需要長期保存取捨�
 - Draft ADR 必須完成 Review，並由明確 authority 接受後才能成為 `Accepted`。
 - Accepted ADR 的核心 decision 不直接覆寫；需要改變時建立新 ADR 並標示 Supersedes。
 - ADR 不得反向修改 Frozen PRD、Frozen Specs 或 Frozen Architecture ownership。
+- Runtime gap 必須保留為 verification requirement，不得寫成已驗證成功。
 - Implementation detail、暫時除錯筆記與一般 TODO 不使用 ADR。
 - 編號只遞增，不重用。
