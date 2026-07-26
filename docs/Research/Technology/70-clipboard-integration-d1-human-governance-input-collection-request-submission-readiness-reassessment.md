@@ -342,24 +342,24 @@ Draft Creation is not a Submission Instruction.
 
 | Transition ID | Complete transition meaning | Rule preserved | Transition performed | Result |
 | --- | --- | --- | --- | --- |
-| CLIP-D1-GOVTRANS-001 | Request-readiness Specification → Collection Request Draft | Separate future draft transition required | No | No |
-| CLIP-D1-GOVTRANS-002 | Collection Request Draft → Request ID assigned | Separate future identifier assignment required | No | No |
-| CLIP-D1-GOVTRANS-003 | Request Draft → Request submitted | Separate future submission required | No | No |
-| CLIP-D1-GOVTRANS-004 | Request submitted → Collection authorized | Separate future authorization required | No | No |
-| CLIP-D1-GOVTRANS-005 | Collection authorized → Collection-start Permission | Separate future permission required | No | No |
-| CLIP-D1-GOVTRANS-006 | Blank Worksheet → Worksheet distributed | Separate future distribution authorization required | No | No |
-| CLIP-D1-GOVTRANS-007 | Worksheet distributed → Human Input provided | Separate future collection authorization required | No | No |
-| CLIP-D1-GOVTRANS-008 | Governance identity input → Role Holder identified | Separate future role process required | No | No |
-| CLIP-D1-GOVTRANS-009 | Role Holder identified → Role accepted | Separate future role acceptance required | No | No |
-| CLIP-D1-GOVTRANS-010 | Eligibility input → Decision Authority approved | Separate future decision required | No | No |
-| CLIP-D1-GOVTRANS-011 | Conflict disclosure → Conflict resolved | Separate future conflict process required | No | No |
-| CLIP-D1-GOVTRANS-012 | Channel assessment → Channel selected | Separate future channel decision required | No | No |
-| CLIP-D1-GOVTRANS-013 | Channel selected → Platform authorized | Separate future platform authorization required | No | No |
-| CLIP-D1-GOVTRANS-014 | Platform identified → Network authorized | Separate future network authorization required | No | No |
-| CLIP-D1-GOVTRANS-015 | Attestation → Request Approval | Attestation is not Request Approval | No | No |
-| CLIP-D1-GOVTRANS-016 | Human Input → Execution Permission | Human Input is not Execution Permission | No | No |
-| CLIP-D1-GOVTRANS-017 | Human Input → Operational Observation／Evidence | Human Input is not Operational Evidence | No | No |
-| CLIP-D1-GOVTRANS-018 | Governance Input → Candidate Selection／Clipboard ADR | Governance Input is not candidate or ADR selection | No | No |
+| CLIP-D1-GOVTRANS-001 | Request-readiness Specification → Collection Request Draft | Separate future draft transition required | Yes | No |
+| CLIP-D1-GOVTRANS-002 | Collection Request Draft → Request ID assigned | Separate future identifier assignment required | Yes | No |
+| CLIP-D1-GOVTRANS-003 | Request Draft → Request submitted | Separate future submission required | Yes | No |
+| CLIP-D1-GOVTRANS-004 | Request submitted → Collection authorized | Separate future authorization required | Yes | No |
+| CLIP-D1-GOVTRANS-005 | Collection authorized → Collection-start Permission | Separate future permission required | Yes | No |
+| CLIP-D1-GOVTRANS-006 | Blank Worksheet → Worksheet distributed | Separate future distribution authorization required | Yes | No |
+| CLIP-D1-GOVTRANS-007 | Worksheet distributed → Human Input provided | Separate future collection authorization required | Yes | No |
+| CLIP-D1-GOVTRANS-008 | Governance identity input → Role Holder identified | Separate future role process required | Yes | No |
+| CLIP-D1-GOVTRANS-009 | Role Holder identified → Role accepted | Separate future role acceptance required | Yes | No |
+| CLIP-D1-GOVTRANS-010 | Eligibility input → Decision Authority approved | Separate future decision required | Yes | No |
+| CLIP-D1-GOVTRANS-011 | Conflict disclosure → Conflict resolved | Separate future conflict process required | Yes | No |
+| CLIP-D1-GOVTRANS-012 | Channel assessment → Channel selected | Separate future channel decision required | Yes | No |
+| CLIP-D1-GOVTRANS-013 | Channel selected → Platform authorized | Separate future platform authorization required | Yes | No |
+| CLIP-D1-GOVTRANS-014 | Platform identified → Network authorized | Separate future network authorization required | Yes | No |
+| CLIP-D1-GOVTRANS-015 | Attestation → Request Approval | Attestation is not Request Approval | Yes | No |
+| CLIP-D1-GOVTRANS-016 | Human Input → Execution Permission | Human Input is not Execution Permission | Yes | No |
+| CLIP-D1-GOVTRANS-017 | Human Input → Operational Observation／Evidence | Human Input is not Operational Evidence | Yes | No |
+| CLIP-D1-GOVTRANS-018 | Governance Input → Candidate Selection／Clipboard ADR | Governance Input is not candidate or ADR selection | Yes | No |
 
 ## 11. Twenty Submission-prerequisite Rows
 
