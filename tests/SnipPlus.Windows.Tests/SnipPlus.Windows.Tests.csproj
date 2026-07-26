@@ -4,6 +4,10 @@
     <AssemblyName>SnipPlus.Windows.Tests</AssemblyName>
     <IsTestProject>true</IsTestProject>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <NoWarn>$(NoWarn);PRI257;PRI263</NoWarn>
+    <EnableDefaultPriFile>false</EnableDefaultPriFile>
+    <WindowsAppSDKGeneratePriFile>false</WindowsAppSDKGeneratePriFile>
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);PRI257;PRI263</MSBuildWarningsAsMessages>
   </PropertyGroup>
 
   <ItemGroup>

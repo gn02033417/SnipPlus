@@ -32,7 +32,19 @@ public sealed class WindowsGraphicsCaptureAdapter : ICaptureService
             return null;
         }
 
-        var accessStatus = await GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Programmatic);
+        AppCapabilityAccessStatus accessStatus;
+        try
+        {
+            accessStatus = await GraphicsCaptureAccess
+                .RequestAccessAsync(GraphicsCaptureAccessKind.Programmatic)
+                .AsTask(cancellationToken)
+                .WaitAsync(TimeSpan.FromSeconds(3), cancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
         if (accessStatus != AppCapabilityAccessStatus.Allowed)
         {

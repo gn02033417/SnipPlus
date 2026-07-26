@@ -168,12 +168,9 @@ public partial class MainWindow : Window, IDisposable
         var intent = ((CoordinateMappingResult.Success)mapping).Intent;
         SetStatus("Capturing…");
         var windowHandle = WindowNative.GetWindowHandle(this);
-        SetWindowDisplayAffinity(windowHandle, WindowDisplayAffinityExcludeFromCapture);
-        _appWindow?.Hide();
 
         try
         {
-            await Task.Delay(100, cancellationToken);
             using var device = CanvasDevice.GetSharedDevice();
             var captureDisplayId = new global::Windows.Graphics.DisplayId
             {
@@ -188,6 +185,10 @@ public partial class MainWindow : Window, IDisposable
                 SetStatus("Capture permission or support is unavailable.");
                 return;
             }
+
+            SetWindowDisplayAffinity(windowHandle, WindowDisplayAffinityExcludeFromCapture);
+            _appWindow?.Hide();
+            await Task.Delay(100, cancellationToken);
 
             var coordinator = new CaptureWorkflowCoordinator(_stateAuthority);
             var result = await coordinator.RunAsync(

@@ -8,13 +8,14 @@
   <Properties>
     <DisplayName>SnipPlus</DisplayName>
     <PublisherDisplayName>SnipPlus</PublisherDisplayName>
-    <Logo>Assets\StoreLogo.svg</Logo>
+    <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.26100.0" MaxVersionTested="10.0.26100.0" />
   </Dependencies>
   <Capabilities>
     <rescap:Capability Name="graphicsCaptureProgrammatic" />
+    <rescap:Capability Name="runFullTrust" />
   </Capabilities>
   <Resources>
     <Resource Language="x-generate" />
@@ -25,8 +26,9 @@
         AppListEntry="none"
         DisplayName="SnipPlus"
         Description="SnipPlus"
-        Square150x150Logo="Assets\Square150x150Logo.svg"
-        Square44x44Logo="Assets\Square44x44Logo.svg" />
+        BackgroundColor="#2563EB"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
     </Application>
   </Applications>
 </Package>
