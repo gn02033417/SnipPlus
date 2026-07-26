@@ -1,6 +1,6 @@
 # SnipPlus
 
-SnipPlus is a documentation-first Windows desktop product repository. Product, behavioral-specification and abstract-architecture baselines are established; implementation has not started.
+SnipPlus is a documentation-first Windows desktop product repository. Product, behavioral-specification and abstract-architecture baselines are established; the UI framework decision is accepted; implementation has not started.
 
 ## Start here
 
@@ -10,6 +10,7 @@ SnipPlus is a documentation-first Windows desktop product repository. Product, b
 - [Frozen PRD baseline](PRD/PRD-FREEZE-REVIEW.md)
 - [Frozen Specification baseline](Specs/SPEC-BASELINE-REVIEW.md)
 - [Frozen Architecture baseline](Architecture/ARCH-BASELINE-REVIEW.md)
+- [Accepted UI Framework ADR](Architecture/adr/ADR-0002-ui-framework-selection.md)
 - [Technology decision roadmap](Architecture/TECHNOLOGY-DECISION-ROADMAP.md)
 - [Development Guide](docs/guides/development-guide.md)
 - [Contributing](CONTRIBUTING.md)
@@ -18,7 +19,7 @@ SnipPlus is a documentation-first Windows desktop product repository. Product, b
 
 ```text
 SnipPlus/
-├─ Architecture/       Architecture baseline, ADR governance and decisions
+├─ Architecture/       Architecture baseline, ADR governance and accepted/candidate decisions
 ├─ PRD/                Frozen product-requirement baseline
 ├─ Specs/              Frozen observable-behavior baseline
 ├─ docs/               Research, analysis, decisions, audits, guides and design references
@@ -37,8 +38,9 @@ SnipPlus/
 | Product requirements | PRD v1.0 `Freeze Approved` |
 | Behavioral specifications | Specification v1.0 `Freeze Approved` |
 | Architecture | Abstract baseline `Freeze Approved` |
-| UI framework | ADR-0002 Draft; WinUI 3 proposed, not accepted |
-| Other core technology decisions | Candidate / not accepted |
+| UI framework | ADR-0002 `Accepted`; WinUI 3 |
+| Rendering Technology | Candidate; next primary decision |
+| Capture Backend、Clipboard、Image Representation、Testing | Candidate / not accepted |
 | Interface contracts | Not completed |
 | Project structure | Not completed |
 | Application code | Not started |
@@ -47,10 +49,17 @@ SnipPlus/
 
 ## Current working direction
 
-The repository no longer needs additional prerequisite or closure-review chains. The next useful work is to accept or reject core ADRs, define consolidated contracts and project structure, then perform one implementation-readiness review.
+The repository no longer needs additional prerequisite or closure-review chains.
+
+The next useful work is:
+
+1. Produce and review the Rendering Technology ADR using `docs/Research/Technology/10–18` as evidence.
+2. Continue with Capture Backend、Clipboard Integration、Image Representation and Testing Strategy decisions.
+3. Define consolidated contracts and Project Structure.
+4. Perform one Implementation Readiness Review.
 
 `docs/Research/Technology/29–80` remains historical research and governance evidence. The 039–052 documentary chain is closed and must not be extended automatically without new evidence or an explicit human decision.
 
 ## Working principle
 
-Use the frozen PRD, Specification and Architecture baselines as upstream sources. Keep `Draft`, `Candidate`, `UNKNOWN` and `TBD` visible. Documentation completeness does not authorize implementation; coding requires an explicit implementation task.
+Use the frozen PRD、Specification、Architecture and Accepted ADR baselines as upstream sources. Keep `Draft`、`Candidate`、`UNKNOWN` and `TBD` visible. ADR acceptance does not authorize coding; source-code creation requires an explicit implementation task after Implementation Readiness approval.
