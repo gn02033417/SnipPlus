@@ -15,7 +15,8 @@ public sealed class CaptureWorkflowCoordinator
         CaptureIntent intent,
         ICaptureService captureService,
         IClipboardDeliveryService? clipboardService,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<IImageResult, CancellationToken, ValueTask>? onResultReady = null)
     {
         if (!TryTransition(WorkflowState.Idle, WorkflowState.Starting, intent.RequestId, out var transitionFailure)
             || !TryTransition(WorkflowState.Starting, WorkflowState.Selecting, intent.RequestId, out transitionFailure)
@@ -61,7 +62,12 @@ public sealed class CaptureWorkflowCoordinator
             case CaptureOutcome.Failed failed:
                 return FailAndCleanup(failed.Failure, failed.CleanupCompleted);
             case CaptureOutcome.Succeeded succeeded:
-                return await HandleSuccessAsync(intent, succeeded.ImageResult, clipboardService, cancellationToken);
+                return await HandleSuccessAsync(
+                    intent,
+                    succeeded.ImageResult,
+                    clipboardService,
+                    onResultReady,
+                    cancellationToken);
             default:
                 return FailAndCleanup(Failure.Create(
                     FailureCode.UnexpectedFailure,
@@ -77,6 +83,7 @@ public sealed class CaptureWorkflowCoordinator
         CaptureIntent intent,
         IImageResult imageResult,
         IClipboardDeliveryService? clipboardService,
+        Func<IImageResult, CancellationToken, ValueTask>? onResultReady,
         CancellationToken cancellationToken)
     {
         if (!TryTransition(WorkflowState.Capturing, WorkflowState.ResultReady, intent.RequestId, out var transitionFailure))
@@ -88,6 +95,31 @@ public sealed class CaptureWorkflowCoordinator
         if (clipboardService is null)
         {
             return CompleteAndCleanup(imageResult, intent.RequestId);
+        }
+
+        if (onResultReady is not null)
+        {
+            try
+            {
+                await onResultReady(imageResult, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                imageResult.Dispose();
+                return Cancelled(intent.RequestId, true);
+            }
+            catch (Exception exception)
+            {
+                imageResult.Dispose();
+                return FailAndCleanup(Failure.Create(
+                    FailureCode.RenderingFailed,
+                    FailureCategory.Resource,
+                    FailureRecoverability.RetryNewIntent,
+                    "CaptureWorkflowCoordinator.ResultReady",
+                    intent.RequestId,
+                    exception.GetType().Name,
+                    nativeCode: exception.HResult), true);
+            }
         }
 
         if (!TryTransition(WorkflowState.ResultReady, WorkflowState.Delivering, intent.RequestId, out transitionFailure))
