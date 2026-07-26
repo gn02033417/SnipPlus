@@ -36,6 +36,8 @@ Report before expanding scope if：
 
 ## P1 — After first-slice verification
 
+- [x] Harden cancellation transition／cleanup paths and verify packaged `Start Capture → Cancel` runtime behavior.
+- [ ] Run the Windows in-memory frame platform test from a packaged test context with a resolvable Windows App Runtime package graph.
 - [ ] Decide whether to add file Output UI.
 - [ ] Define production logging/configuration needs from actual failures.
 - [ ] Decide final packaging、signing and distribution.

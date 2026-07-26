@@ -39,6 +39,7 @@
 - `global.json` 加入 .NET 10 的 `Microsoft.Testing.Platform` test runner opt-in，讓 `dotnet test` 使用 MTP 而非已不支援的 VSTest target。
 - 為 packaged `win-x64` restore graph 加入共用 `RuntimeIdentifiers`，並以 locked restore 驗證 framework-dependent MSIX publish；未更換核准的 SDK 或 package 版本。
 - Package manifest 改用 AppX 接受的 PNG logo assets，補上 `BackgroundColor` 與 `runFullTrust`，以符合 packaged WinUI 3 build validation。
+- 修正 `ResultReady → Cancelled` 狀態 transition，並補上 capture service、ResultReady presentation callback 與 Clipboard cancellation cleanup tests。
 
 ### Verified
 
@@ -50,6 +51,9 @@
 - Capture adapter compile verification：`WindowsGraphicsCaptureAdapter` 已通過 Release x64 build；實際 platform capture 仍由 Interactive category 個別驗證。
 - Windows capture platform test 已建立為 `Platform`／`Capture`／`Interactive` category，未混入非互動測試。
 - Clipboard retry policy tests 已加入一般非互動測試集合；完整非互動測試目前 24 passed、0 failed、0 skipped。
+- Cancellation hardening tests 已驗證 capture `OperationCanceledException`、ResultReady callback cancellation、Clipboard cancellation 與 `ResultReady → Cancelled` legal transition。
+- Packaged runtime cancellation verification 已完成；`Start Capture → Cancel` 回到主畫面並回報 `Capture cancelled.`。
+- 完整非互動測試更新為 28 passed、0 failed、0 skipped。
 - Windows platform test 已可用 `Platform`／`Capture`／`Interactive` filter 單獨執行；support check passed，未封裝 MSTest runner 的 in-memory frame check 會在無 Windows App Runtime package graph 時標記 inconclusive，不偽造成 passed。
 - Packaged runtime verification 已使用 public synthetic blank Paint fixture 完成 selection、monitor frame、crop、render、PNG encode、Clipboard publication 與成功狀態回報；未保存 desktop screenshot、Clipboard payload 或任何私人資料。
 - Application shell 已通過 packaged WinUI 3 Release x64 build；publish 僅有 `mspdbcmf.exe` 缺少造成的 symbol generation warning，未影響 package build 或 runtime verification。

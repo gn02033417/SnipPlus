@@ -61,9 +61,11 @@ Exit criteria：
 
 ## Next phase — Product hardening
 
-狀態：`Not started`
+狀態：`In progress`
 
-進入條件已滿足；下一個 bounded slice 應先處理既有 runtime evidence 缺口，再決定是否加入產品能力。
+進入條件已滿足。目前已完成第一個 hardening slice：cancellation transition／cleanup tests 與 packaged `Start Capture → Cancel` runtime verification。
+
+剩餘優先缺口是讓 Windows in-memory frame platform test 能在具備 Windows App Runtime package graph 的 packaged test context 執行；在此之前維持現有 `Inconclusive` 分類，不把它誤報為 passed。
 
 Begins only after the first slice is verified. It may address：
 
