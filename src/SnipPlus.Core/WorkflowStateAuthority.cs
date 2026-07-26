@@ -46,7 +46,7 @@ public sealed class WorkflowStateAuthority
         WorkflowState.Starting => to is WorkflowState.Selecting or WorkflowState.Cancelled or WorkflowState.Failed,
         WorkflowState.Selecting => to is WorkflowState.Capturing or WorkflowState.Cancelled or WorkflowState.Failed,
         WorkflowState.Capturing => to is WorkflowState.ResultReady or WorkflowState.Cancelled or WorkflowState.Failed,
-        WorkflowState.ResultReady => to is WorkflowState.Delivering or WorkflowState.Completed,
+        WorkflowState.ResultReady => to is WorkflowState.Delivering or WorkflowState.Cancelled or WorkflowState.Completed,
         WorkflowState.Delivering => to is WorkflowState.Completed or WorkflowState.Cancelled or WorkflowState.Failed or WorkflowState.ResultReady,
         WorkflowState.Completed or WorkflowState.Cancelled or WorkflowState.Failed => to == WorkflowState.Idle,
         _ => false
