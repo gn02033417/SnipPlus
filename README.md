@@ -1,50 +1,56 @@
 # SnipPlus
 
-SnipPlus is an intentionally documentation-first product repository. It is
-currently establishing the product language, requirements, architecture, and
-development rules before application implementation begins.
-
-目前 Repository 沒有應用程式程式碼、build 設定、測試或已核准的產品功能。專案名稱與使用者後續提到的截圖方向只能視為背景，不代表任何功能已經定義或完成。
+SnipPlus is a documentation-first Windows desktop product repository. Product, behavioral-specification and abstract-architecture baselines are established; implementation has not started.
 
 ## Start here
 
-- [Documentation index](docs/index.md) — 文件入口與導覽。
-- [Research framework](docs/Research/README.md) — 外部事實研究的格式與來源政策。
-- [Analysis framework](docs/Analysis/README.md) — 將研究整理成可審查的流程與狀態分析。
-- [Decision framework](docs/Decision/README.md) — 記錄採用判斷、證據、風險與開放問題。
-- [Product foundation](PRD/PRD-0001-product-foundation.md) — 目前的產品基線與待確認事項。
-- [Specifications](Specs/README.md) — Spec 狀態與建立規則。
-- [Architecture overview](Architecture/README.md) — 系統邊界與目前架構狀態。
-- [Development Guide](docs/guides/development-guide.md) — 從需求到實作的工作流程。
-- [Contributing](CONTRIBUTING.md) — 文件與未來程式碼的協作規則。
+- [Repository current-state and implementation-readiness audit](docs/REPOSITORY-CURRENT-STATE-AND-IMPLEMENTATION-READINESS-AUDIT.md)
+- [Documentation index](docs/index.md)
+- [Project lifecycle](docs/PROJECT-LIFECYCLE.md)
+- [Frozen PRD baseline](PRD/PRD-FREEZE-REVIEW.md)
+- [Frozen Specification baseline](Specs/SPEC-BASELINE-REVIEW.md)
+- [Frozen Architecture baseline](Architecture/ARCH-BASELINE-REVIEW.md)
+- [Technology decision roadmap](Architecture/TECHNOLOGY-DECISION-ROADMAP.md)
+- [Development Guide](docs/guides/development-guide.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## Repository map
 
 ```text
 SnipPlus/
-├─ Architecture/       系統架構與 ADR
-├─ PRD/                產品需求與產品決策
-├─ Specs/              可驗收的行為規格
-├─ docs/               導覽、研究、分析、決策、指南、規範與設計草稿
-├─ AGENTS.md           Repository 工作規則
-├─ CONTRIBUTING.md     協作與變更流程
-├─ ROADMAP.md          階段與出口條件
-├─ CHANGELOG.md        可追蹤的變更紀錄
-├─ TODO.md             未完成事項與開放決策
-└─ README.md           Repository 入口
+├─ Architecture/       Architecture baseline, ADR governance and decisions
+├─ PRD/                Frozen product-requirement baseline
+├─ Specs/              Frozen observable-behavior baseline
+├─ docs/               Research, analysis, decisions, audits, guides and design references
+├─ AGENTS.md           Repository work rules
+├─ CONTRIBUTING.md     Collaboration and change workflow
+├─ ROADMAP.md          Current phase and exit criteria
+├─ CHANGELOG.md        Meaningful repository changes
+├─ TODO.md             Active decision and engineering backlog
+└─ README.md           Repository entry point
 ```
 
 ## Current status
 
 | Area | Status |
 | --- | --- |
-| Product definition | Draft / discovery required |
-| Research, Analysis and Decision | Research baseline established; Analysis and Decision in progress |
-| Behavioral Specs | Documentation baseline only |
-| Architecture | Baseline established; implementation boundaries are TBD |
+| Product requirements | PRD v1.0 `Freeze Approved` |
+| Behavioral specifications | Specification v1.0 `Freeze Approved` |
+| Architecture | Abstract baseline `Freeze Approved` |
+| UI framework | ADR-0002 Draft; WinUI 3 proposed, not accepted |
+| Other core technology decisions | Candidate / not accepted |
+| Interface contracts | Not completed |
+| Project structure | Not completed |
 | Application code | Not started |
-| Screenshot functionality | Not started and intentionally out of scope for this task |
+| Runtime verification | Not started |
+| Build, test, CI and release | Not established |
+
+## Current working direction
+
+The repository no longer needs additional prerequisite or closure-review chains. The next useful work is to accept or reject core ADRs, define consolidated contracts and project structure, then perform one implementation-readiness review.
+
+`docs/Research/Technology/29–80` remains historical research and governance evidence. The 039–052 documentary chain is closed and must not be extended automatically without new evidence or an explicit human decision.
 
 ## Working principle
 
-先確認問題、使用者與可驗收行為，再決定架構與實作。任何尚未確認的內容都必須明確標示，不以文件完整度假裝產品已經定案。
+Use the frozen PRD, Specification and Architecture baselines as upstream sources. Keep `Draft`, `Candidate`, `UNKNOWN` and `TBD` visible. Documentation completeness does not authorize implementation; coding requires an explicit implementation task.
