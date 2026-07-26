@@ -1,0 +1,12 @@
+<Project Sdk="MSTest.Sdk">
+  <PropertyGroup>
+    <RootNamespace>SnipPlus.Contracts.Tests</RootNamespace>
+    <AssemblyName>SnipPlus.Contracts.Tests</AssemblyName>
+    <IsTestProject>true</IsTestProject>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SnipPlus.Contracts\SnipPlus.Contracts.csproj" />
+  </ItemGroup>
+</Project>

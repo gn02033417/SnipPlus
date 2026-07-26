@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>SnipPlus.Core</RootNamespace>
+    <AssemblyName>SnipPlus.Core</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SnipPlus.Contracts\SnipPlus.Contracts.csproj" />
+  </ItemGroup>
+</Project>

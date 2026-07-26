@@ -1,0 +1,57 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnipPlus.Contracts", "src\SnipPlus.Contracts\SnipPlus.Contracts.csproj", "{4C7A0A76-AC65-49FC-8D74-11CFF5DF3D2A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnipPlus.Core", "src\SnipPlus.Core\SnipPlus.Core.csproj", "{B8F1F4AF-D9AF-4B7E-8A7E-A5E4C7000F73}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnipPlus.Windows", "src\SnipPlus.Windows\SnipPlus.Windows.csproj", "{90E88B67-0EC8-4E71-B2A8-BBDF7D8CFDB0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnipPlus.App", "src\SnipPlus.App\SnipPlus.App.csproj", "{1D8F7E48-4F85-4CC4-BF11-9AC30E5A1E47}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnipPlus.Contracts.Tests", "tests\SnipPlus.Contracts.Tests\SnipPlus.Contracts.Tests.csproj", "{E2354F85-4BC8-467F-B99B-970D79E42E6B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnipPlus.Core.Tests", "tests\SnipPlus.Core.Tests\SnipPlus.Core.Tests.csproj", "{DCEBAAC0-DA21-49C3-8BA0-9F6DDE9A5B99}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnipPlus.Windows.Tests", "tests\SnipPlus.Windows.Tests\SnipPlus.Windows.Tests.csproj", "{7F6E1C49-7E46-465B-B9D5-0EF0D8A0BD8B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4C7A0A76-AC65-49FC-8D74-11CFF5DF3D2A}.Debug|x64.ActiveCfg = Debug|x64
+		{4C7A0A76-AC65-49FC-8D74-11CFF5DF3D2A}.Debug|x64.Build.0 = Debug|x64
+		{4C7A0A76-AC65-49FC-8D74-11CFF5DF3D2A}.Release|x64.ActiveCfg = Release|x64
+		{4C7A0A76-AC65-49FC-8D74-11CFF5DF3D2A}.Release|x64.Build.0 = Release|x64
+		{B8F1F4AF-D9AF-4B7E-8A7E-A5E4C7000F73}.Debug|x64.ActiveCfg = Debug|x64
+		{B8F1F4AF-D9AF-4B7E-8A7E-A5E4C7000F73}.Debug|x64.Build.0 = Debug|x64
+		{B8F1F4AF-D9AF-4B7E-8A7E-A5E4C7000F73}.Release|x64.ActiveCfg = Release|x64
+		{B8F1F4AF-D9AF-4B7E-8A7E-A5E4C7000F73}.Release|x64.Build.0 = Release|x64
+		{90E88B67-0EC8-4E71-B2A8-BBDF7D8CFDB0}.Debug|x64.ActiveCfg = Debug|x64
+		{90E88B67-0EC8-4E71-B2A8-BBDF7D8CFDB0}.Debug|x64.Build.0 = Debug|x64
+		{90E88B67-0EC8-4E71-B2A8-BBDF7D8CFDB0}.Release|x64.ActiveCfg = Release|x64
+		{90E88B67-0EC8-4E71-B2A8-BBDF7D8CFDB0}.Release|x64.Build.0 = Release|x64
+		{1D8F7E48-4F85-4CC4-BF11-9AC30E5A1E47}.Debug|x64.ActiveCfg = Debug|x64
+		{1D8F7E48-4F85-4CC4-BF11-9AC30E5A1E47}.Debug|x64.Build.0 = Debug|x64
+		{1D8F7E48-4F85-4CC4-BF11-9AC30E5A1E47}.Release|x64.ActiveCfg = Release|x64
+		{1D8F7E48-4F85-4CC4-BF11-9AC30E5A1E47}.Release|x64.Build.0 = Release|x64
+		{E2354F85-4BC8-467F-B99B-970D79E42E6B}.Debug|x64.ActiveCfg = Debug|x64
+		{E2354F85-4BC8-467F-B99B-970D79E42E6B}.Debug|x64.Build.0 = Debug|x64
+		{E2354F85-4BC8-467F-B99B-970D79E42E6B}.Release|x64.ActiveCfg = Release|x64
+		{E2354F85-4BC8-467F-B99B-970D79E42E6B}.Release|x64.Build.0 = Release|x64
+		{DCEBAAC0-DA21-49C3-8BA0-9F6DDE9A5B99}.Debug|x64.ActiveCfg = Debug|x64
+		{DCEBAAC0-DA21-49C3-8BA0-9F6DDE9A5B99}.Debug|x64.Build.0 = Debug|x64
+		{DCEBAAC0-DA21-49C3-8BA0-9F6DDE9A5B99}.Release|x64.ActiveCfg = Release|x64
+		{DCEBAAC0-DA21-49C3-8BA0-9F6DDE9A5B99}.Release|x64.Build.0 = Release|x64
+		{7F6E1C49-7E46-465B-B9D5-0EF0D8A0BD8B}.Debug|x64.ActiveCfg = Debug|x64
+		{7F6E1C49-7E46-465B-B9D5-0EF0D8A0BD8B}.Debug|x64.Build.0 = Debug|x64
+		{7F6E1C49-7E46-465B-B9D5-0EF0D8A0BD8B}.Release|x64.ActiveCfg = Release|x64
+		{7F6E1C49-7E46-465B-B9D5-0EF0D8A0BD8B}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

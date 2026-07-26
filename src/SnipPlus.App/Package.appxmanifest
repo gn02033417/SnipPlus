@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  IgnorableNamespaces="uap">
+  <Identity Name="SnipPlus.App" Publisher="CN=SnipPlus" Version="1.0.0.0" />
+  <Properties>
+    <DisplayName>SnipPlus</DisplayName>
+    <PublisherDisplayName>SnipPlus</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.svg</Logo>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.26100.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Resources>
+    <Resource Language="x-generate" />
+  </Resources>
+  <Applications>
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        AppListEntry="none"
+        DisplayName="SnipPlus"
+        Description="SnipPlus"
+        Square150x150Logo="Assets\Square150x150Logo.svg"
+        Square44x44Logo="Assets\Square44x44Logo.svg" />
+    </Application>
+  </Applications>
+</Package>

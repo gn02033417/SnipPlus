@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>SnipPlus.Contracts</RootNamespace>
+    <AssemblyName>SnipPlus.Contracts</AssemblyName>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Window
+    x:Class="SnipPlus.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Padding="32">
+        <StackPanel Spacing="12">
+            <TextBlock FontSize="28" Text="SnipPlus" />
+            <TextBlock Text="First vertical slice baseline" />
+        </StackPanel>
+    </Grid>
+</Window>

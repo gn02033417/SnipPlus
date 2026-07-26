@@ -20,6 +20,7 @@
 - 新增 `Architecture/IMPLEMENTATION-CONTRACTS.md`，定義 workflow、capture、image、render、clipboard、output、failure、retry、thread 與 cleanup contracts。
 - 新增 `Architecture/PROJECT-STRUCTURE.md`，固定 C# 14、.NET 10.0.302、Windows App SDK 2.3.1、Win2D 1.4.0、MSTest.Sdk 4.1.0、x64 與 project mapping。
 - 新增 `docs/IMPLEMENTATION-READINESS-REVIEW.md`，結論為 `Approved for first vertical slice implementation`。
+- 建立第一階段 solution／project skeleton：`SnipPlus.sln`、4 個 source projects、3 個 test projects、中央套件管理與 committed lock files。
 
 ### Changed
 
@@ -28,6 +29,13 @@
 - ROADMAP Current Phase 改為 `First vertical slice implementation — Ready; not started`。
 - TODO 移除前置文件 backlog，改為 solution、source、test 與 evidence 工作。
 - 明確凍結第一個 vertical slice 的前置文件；沒有實作發現或 scope change 時不再新增 pre-coding paperwork。
+- `global.json` 加入 .NET 10 的 `Microsoft.Testing.Platform` test runner opt-in，讓 `dotnet test` 使用 MTP 而非已不支援的 VSTest target。
+
+### Verified
+
+- `dotnet restore SnipPlus.sln --locked-mode`：成功。
+- `dotnet build SnipPlus.sln -c Release -p:Platform=x64 --no-restore`：成功，0 warnings、0 errors。
+- `dotnet test SnipPlus.sln -c Release -p:Platform=x64 --no-build -- --filter "TestCategory!=Interactive&TestCategory!=Manual"`：3 個 baseline test assemblies 成功，3 passed、0 failed、0 skipped。
 
 ### Not released
 

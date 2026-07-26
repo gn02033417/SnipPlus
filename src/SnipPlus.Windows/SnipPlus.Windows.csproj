@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>SnipPlus.Windows</RootNamespace>
+    <AssemblyName>SnipPlus.Windows</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" />
+    <ProjectReference Include="..\SnipPlus.Contracts\SnipPlus.Contracts.csproj" />
+  </ItemGroup>
+</Project>
