@@ -83,136 +83,136 @@ This document must not identify recipients, collectors, reviewers, role holders,
 
 | ID | Role block | Reassessment requirement | State |
 | --- | --- | --- | --- |
-| CLIP-D1-GOVROLEBLOCK-001 | Role block 001 | Future request must preserve this block as a separate governed input area | Not identified |
-| CLIP-D1-GOVROLEBLOCK-002 | Role block 002 | Future request must preserve this block as a separate governed input area | Not identified |
-| CLIP-D1-GOVROLEBLOCK-003 | Role block 003 | Future request must preserve this block as a separate governed input area | Not identified |
-| CLIP-D1-GOVROLEBLOCK-004 | Role block 004 | Future request must preserve this block as a separate governed input area | Not identified |
-| CLIP-D1-GOVROLEBLOCK-005 | Role block 005 | Future request must preserve this block as a separate governed input area | Not identified |
+| CLIP-D1-GOVROLE-001 | Role block 001 | Future request must preserve this block as a separate governed input area | Not identified |
+| CLIP-D1-GOVROLE-002 | Role block 002 | Future request must preserve this block as a separate governed input area | Not identified |
+| CLIP-D1-GOVROLE-003 | Role block 003 | Future request must preserve this block as a separate governed input area | Not identified |
+| CLIP-D1-GOVROLE-004 | Role block 004 | Future request must preserve this block as a separate governed input area | Not identified |
+| CLIP-D1-GOVROLE-005 | Role block 005 | Future request must preserve this block as a separate governed input area | Not identified |
 
 ## Role-field Reassessment
 
 | ID | Field no. | Role block | Role field | Reassessment requirement | State |
 | --- | --- | --- | --- | --- | --- |
-| CLIP-D1-GOVROLE-001 | 01 | RB-001 | Governance Role Input Block ID | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-002 | 02 | RB-001 | Functional Role ID | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-003 | 03 | RB-001 | Functional Role name | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-004 | 04 | RB-001 | Applicable Portfolio Items | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-005 | 05 | RB-001 | Holder required at Draft stage | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-006 | 06 | RB-001 | Holder required before Submission | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-007 | 07 | RB-001 | Holder required before Human Decision | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-008 | 08 | RB-001 | Holder required before Execution Permission | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-009 | 09 | RB-001 | Holder required before Execution | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-010 | 10 | RB-001 | Future Role-holder governance identity reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-011 | 11 | RB-001 | Identification source | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-012 | 12 | RB-001 | Role acceptance | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-013 | 13 | RB-001 | Responsibility acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-014 | 14 | RB-001 | Permitted-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-015 | 15 | RB-001 | Prohibited-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-016 | 16 | RB-001 | Required access-class acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-017 | 17 | RB-001 | Eligibility assessment reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-018 | 18 | RB-001 | Disqualifying-condition assessment reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-019 | 19 | RB-001 | Conflict disclosure reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-020 | 20 | RB-001 | Required separation safeguard | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-021 | 21 | RB-001 | Effective scope | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-022 | 22 | RB-001 | Effective date/time | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-023 | 23 | RB-001 | Withdrawal/replacement rule | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-024 | 24 | RB-001 | Recorded human identification reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-025 | 01 | RB-002 | Governance Role Input Block ID | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-026 | 02 | RB-002 | Functional Role ID | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-027 | 03 | RB-002 | Functional Role name | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-028 | 04 | RB-002 | Applicable Portfolio Items | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-029 | 05 | RB-002 | Holder required at Draft stage | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-030 | 06 | RB-002 | Holder required before Submission | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-031 | 07 | RB-002 | Holder required before Human Decision | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-032 | 08 | RB-002 | Holder required before Execution Permission | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-033 | 09 | RB-002 | Holder required before Execution | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-034 | 10 | RB-002 | Future Role-holder governance identity reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-035 | 11 | RB-002 | Identification source | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-036 | 12 | RB-002 | Role acceptance | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-037 | 13 | RB-002 | Responsibility acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-038 | 14 | RB-002 | Permitted-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-039 | 15 | RB-002 | Prohibited-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-040 | 16 | RB-002 | Required access-class acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-041 | 17 | RB-002 | Eligibility assessment reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-042 | 18 | RB-002 | Disqualifying-condition assessment reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-043 | 19 | RB-002 | Conflict disclosure reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-044 | 20 | RB-002 | Required separation safeguard | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-045 | 21 | RB-002 | Effective scope | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-046 | 22 | RB-002 | Effective date/time | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-047 | 23 | RB-002 | Withdrawal/replacement rule | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-048 | 24 | RB-002 | Recorded human identification reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-049 | 01 | RB-003 | Governance Role Input Block ID | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-050 | 02 | RB-003 | Functional Role ID | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-051 | 03 | RB-003 | Functional Role name | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-052 | 04 | RB-003 | Applicable Portfolio Items | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-053 | 05 | RB-003 | Holder required at Draft stage | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-054 | 06 | RB-003 | Holder required before Submission | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-055 | 07 | RB-003 | Holder required before Human Decision | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-056 | 08 | RB-003 | Holder required before Execution Permission | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-057 | 09 | RB-003 | Holder required before Execution | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-058 | 10 | RB-003 | Future Role-holder governance identity reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-059 | 11 | RB-003 | Identification source | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-060 | 12 | RB-003 | Role acceptance | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-061 | 13 | RB-003 | Responsibility acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-062 | 14 | RB-003 | Permitted-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-063 | 15 | RB-003 | Prohibited-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-064 | 16 | RB-003 | Required access-class acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-065 | 17 | RB-003 | Eligibility assessment reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-066 | 18 | RB-003 | Disqualifying-condition assessment reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-067 | 19 | RB-003 | Conflict disclosure reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-068 | 20 | RB-003 | Required separation safeguard | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-069 | 21 | RB-003 | Effective scope | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-070 | 22 | RB-003 | Effective date/time | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-071 | 23 | RB-003 | Withdrawal/replacement rule | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-072 | 24 | RB-003 | Recorded human identification reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-073 | 01 | RB-004 | Governance Role Input Block ID | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-074 | 02 | RB-004 | Functional Role ID | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-075 | 03 | RB-004 | Functional Role name | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-076 | 04 | RB-004 | Applicable Portfolio Items | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-077 | 05 | RB-004 | Holder required at Draft stage | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-078 | 06 | RB-004 | Holder required before Submission | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-079 | 07 | RB-004 | Holder required before Human Decision | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-080 | 08 | RB-004 | Holder required before Execution Permission | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-081 | 09 | RB-004 | Holder required before Execution | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-082 | 10 | RB-004 | Future Role-holder governance identity reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-083 | 11 | RB-004 | Identification source | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-084 | 12 | RB-004 | Role acceptance | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-085 | 13 | RB-004 | Responsibility acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-086 | 14 | RB-004 | Permitted-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-087 | 15 | RB-004 | Prohibited-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-088 | 16 | RB-004 | Required access-class acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-089 | 17 | RB-004 | Eligibility assessment reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-090 | 18 | RB-004 | Disqualifying-condition assessment reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-091 | 19 | RB-004 | Conflict disclosure reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-092 | 20 | RB-004 | Required separation safeguard | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-093 | 21 | RB-004 | Effective scope | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-094 | 22 | RB-004 | Effective date/time | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-095 | 23 | RB-004 | Withdrawal/replacement rule | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-096 | 24 | RB-004 | Recorded human identification reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-097 | 01 | RB-005 | Governance Role Input Block ID | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-098 | 02 | RB-005 | Functional Role ID | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-099 | 03 | RB-005 | Functional Role name | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-100 | 04 | RB-005 | Applicable Portfolio Items | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-101 | 05 | RB-005 | Holder required at Draft stage | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-102 | 06 | RB-005 | Holder required before Submission | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-103 | 07 | RB-005 | Holder required before Human Decision | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-104 | 08 | RB-005 | Holder required before Execution Permission | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-105 | 09 | RB-005 | Holder required before Execution | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-106 | 10 | RB-005 | Future Role-holder governance identity reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-107 | 11 | RB-005 | Identification source | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-108 | 12 | RB-005 | Role acceptance | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-109 | 13 | RB-005 | Responsibility acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-110 | 14 | RB-005 | Permitted-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-111 | 15 | RB-005 | Prohibited-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-112 | 16 | RB-005 | Required access-class acknowledgement | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-113 | 17 | RB-005 | Eligibility assessment reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-114 | 18 | RB-005 | Disqualifying-condition assessment reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-115 | 19 | RB-005 | Conflict disclosure reference | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-116 | 20 | RB-005 | Required separation safeguard | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-117 | 21 | RB-005 | Effective scope | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-118 | 22 | RB-005 | Effective date/time | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-119 | 23 | RB-005 | Withdrawal/replacement rule | Future request must classify this field and its minimum source | Not identified |
-| CLIP-D1-GOVROLE-120 | 24 | RB-005 | Recorded human identification reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-001 | 01 | CLIP-D1-GOVROLE-001 | Governance Role Input Block ID | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-002 | 02 | CLIP-D1-GOVROLE-001 | Functional Role ID | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-003 | 03 | CLIP-D1-GOVROLE-001 | Functional Role name | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-004 | 04 | CLIP-D1-GOVROLE-001 | Applicable Portfolio Items | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-005 | 05 | CLIP-D1-GOVROLE-001 | Holder required at Draft stage | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-006 | 06 | CLIP-D1-GOVROLE-001 | Holder required before Submission | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-007 | 07 | CLIP-D1-GOVROLE-001 | Holder required before Human Decision | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-008 | 08 | CLIP-D1-GOVROLE-001 | Holder required before Execution Permission | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-009 | 09 | CLIP-D1-GOVROLE-001 | Holder required before Execution | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-010 | 10 | CLIP-D1-GOVROLE-001 | Future Role-holder governance identity reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-011 | 11 | CLIP-D1-GOVROLE-001 | Identification source | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-012 | 12 | CLIP-D1-GOVROLE-001 | Role acceptance | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-013 | 13 | CLIP-D1-GOVROLE-001 | Responsibility acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-014 | 14 | CLIP-D1-GOVROLE-001 | Permitted-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-015 | 15 | CLIP-D1-GOVROLE-001 | Prohibited-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-016 | 16 | CLIP-D1-GOVROLE-001 | Required access-class acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-017 | 17 | CLIP-D1-GOVROLE-001 | Eligibility assessment reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-018 | 18 | CLIP-D1-GOVROLE-001 | Disqualifying-condition assessment reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-019 | 19 | CLIP-D1-GOVROLE-001 | Conflict disclosure reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-020 | 20 | CLIP-D1-GOVROLE-001 | Required separation safeguard | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-021 | 21 | CLIP-D1-GOVROLE-001 | Effective scope | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-022 | 22 | CLIP-D1-GOVROLE-001 | Effective date/time | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-023 | 23 | CLIP-D1-GOVROLE-001 | Withdrawal/replacement rule | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-024 | 24 | CLIP-D1-GOVROLE-001 | Recorded human identification reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-025 | 01 | CLIP-D1-GOVROLE-002 | Governance Role Input Block ID | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-026 | 02 | CLIP-D1-GOVROLE-002 | Functional Role ID | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-027 | 03 | CLIP-D1-GOVROLE-002 | Functional Role name | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-028 | 04 | CLIP-D1-GOVROLE-002 | Applicable Portfolio Items | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-029 | 05 | CLIP-D1-GOVROLE-002 | Holder required at Draft stage | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-030 | 06 | CLIP-D1-GOVROLE-002 | Holder required before Submission | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-031 | 07 | CLIP-D1-GOVROLE-002 | Holder required before Human Decision | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-032 | 08 | CLIP-D1-GOVROLE-002 | Holder required before Execution Permission | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-033 | 09 | CLIP-D1-GOVROLE-002 | Holder required before Execution | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-034 | 10 | CLIP-D1-GOVROLE-002 | Future Role-holder governance identity reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-035 | 11 | CLIP-D1-GOVROLE-002 | Identification source | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-036 | 12 | CLIP-D1-GOVROLE-002 | Role acceptance | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-037 | 13 | CLIP-D1-GOVROLE-002 | Responsibility acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-038 | 14 | CLIP-D1-GOVROLE-002 | Permitted-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-039 | 15 | CLIP-D1-GOVROLE-002 | Prohibited-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-040 | 16 | CLIP-D1-GOVROLE-002 | Required access-class acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-041 | 17 | CLIP-D1-GOVROLE-002 | Eligibility assessment reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-042 | 18 | CLIP-D1-GOVROLE-002 | Disqualifying-condition assessment reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-043 | 19 | CLIP-D1-GOVROLE-002 | Conflict disclosure reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-044 | 20 | CLIP-D1-GOVROLE-002 | Required separation safeguard | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-045 | 21 | CLIP-D1-GOVROLE-002 | Effective scope | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-046 | 22 | CLIP-D1-GOVROLE-002 | Effective date/time | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-047 | 23 | CLIP-D1-GOVROLE-002 | Withdrawal/replacement rule | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-048 | 24 | CLIP-D1-GOVROLE-002 | Recorded human identification reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-049 | 01 | CLIP-D1-GOVROLE-003 | Governance Role Input Block ID | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-050 | 02 | CLIP-D1-GOVROLE-003 | Functional Role ID | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-051 | 03 | CLIP-D1-GOVROLE-003 | Functional Role name | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-052 | 04 | CLIP-D1-GOVROLE-003 | Applicable Portfolio Items | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-053 | 05 | CLIP-D1-GOVROLE-003 | Holder required at Draft stage | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-054 | 06 | CLIP-D1-GOVROLE-003 | Holder required before Submission | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-055 | 07 | CLIP-D1-GOVROLE-003 | Holder required before Human Decision | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-056 | 08 | CLIP-D1-GOVROLE-003 | Holder required before Execution Permission | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-057 | 09 | CLIP-D1-GOVROLE-003 | Holder required before Execution | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-058 | 10 | CLIP-D1-GOVROLE-003 | Future Role-holder governance identity reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-059 | 11 | CLIP-D1-GOVROLE-003 | Identification source | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-060 | 12 | CLIP-D1-GOVROLE-003 | Role acceptance | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-061 | 13 | CLIP-D1-GOVROLE-003 | Responsibility acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-062 | 14 | CLIP-D1-GOVROLE-003 | Permitted-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-063 | 15 | CLIP-D1-GOVROLE-003 | Prohibited-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-064 | 16 | CLIP-D1-GOVROLE-003 | Required access-class acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-065 | 17 | CLIP-D1-GOVROLE-003 | Eligibility assessment reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-066 | 18 | CLIP-D1-GOVROLE-003 | Disqualifying-condition assessment reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-067 | 19 | CLIP-D1-GOVROLE-003 | Conflict disclosure reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-068 | 20 | CLIP-D1-GOVROLE-003 | Required separation safeguard | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-069 | 21 | CLIP-D1-GOVROLE-003 | Effective scope | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-070 | 22 | CLIP-D1-GOVROLE-003 | Effective date/time | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-071 | 23 | CLIP-D1-GOVROLE-003 | Withdrawal/replacement rule | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-072 | 24 | CLIP-D1-GOVROLE-003 | Recorded human identification reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-073 | 01 | CLIP-D1-GOVROLE-004 | Governance Role Input Block ID | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-074 | 02 | CLIP-D1-GOVROLE-004 | Functional Role ID | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-075 | 03 | CLIP-D1-GOVROLE-004 | Functional Role name | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-076 | 04 | CLIP-D1-GOVROLE-004 | Applicable Portfolio Items | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-077 | 05 | CLIP-D1-GOVROLE-004 | Holder required at Draft stage | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-078 | 06 | CLIP-D1-GOVROLE-004 | Holder required before Submission | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-079 | 07 | CLIP-D1-GOVROLE-004 | Holder required before Human Decision | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-080 | 08 | CLIP-D1-GOVROLE-004 | Holder required before Execution Permission | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-081 | 09 | CLIP-D1-GOVROLE-004 | Holder required before Execution | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-082 | 10 | CLIP-D1-GOVROLE-004 | Future Role-holder governance identity reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-083 | 11 | CLIP-D1-GOVROLE-004 | Identification source | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-084 | 12 | CLIP-D1-GOVROLE-004 | Role acceptance | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-085 | 13 | CLIP-D1-GOVROLE-004 | Responsibility acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-086 | 14 | CLIP-D1-GOVROLE-004 | Permitted-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-087 | 15 | CLIP-D1-GOVROLE-004 | Prohibited-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-088 | 16 | CLIP-D1-GOVROLE-004 | Required access-class acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-089 | 17 | CLIP-D1-GOVROLE-004 | Eligibility assessment reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-090 | 18 | CLIP-D1-GOVROLE-004 | Disqualifying-condition assessment reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-091 | 19 | CLIP-D1-GOVROLE-004 | Conflict disclosure reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-092 | 20 | CLIP-D1-GOVROLE-004 | Required separation safeguard | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-093 | 21 | CLIP-D1-GOVROLE-004 | Effective scope | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-094 | 22 | CLIP-D1-GOVROLE-004 | Effective date/time | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-095 | 23 | CLIP-D1-GOVROLE-004 | Withdrawal/replacement rule | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-096 | 24 | CLIP-D1-GOVROLE-004 | Recorded human identification reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-097 | 01 | CLIP-D1-GOVROLE-005 | Governance Role Input Block ID | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-098 | 02 | CLIP-D1-GOVROLE-005 | Functional Role ID | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-099 | 03 | CLIP-D1-GOVROLE-005 | Functional Role name | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-100 | 04 | CLIP-D1-GOVROLE-005 | Applicable Portfolio Items | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-101 | 05 | CLIP-D1-GOVROLE-005 | Holder required at Draft stage | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-102 | 06 | CLIP-D1-GOVROLE-005 | Holder required before Submission | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-103 | 07 | CLIP-D1-GOVROLE-005 | Holder required before Human Decision | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-104 | 08 | CLIP-D1-GOVROLE-005 | Holder required before Execution Permission | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-105 | 09 | CLIP-D1-GOVROLE-005 | Holder required before Execution | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-106 | 10 | CLIP-D1-GOVROLE-005 | Future Role-holder governance identity reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-107 | 11 | CLIP-D1-GOVROLE-005 | Identification source | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-108 | 12 | CLIP-D1-GOVROLE-005 | Role acceptance | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-109 | 13 | CLIP-D1-GOVROLE-005 | Responsibility acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-110 | 14 | CLIP-D1-GOVROLE-005 | Permitted-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-111 | 15 | CLIP-D1-GOVROLE-005 | Prohibited-action acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-112 | 16 | CLIP-D1-GOVROLE-005 | Required access-class acknowledgement | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-113 | 17 | CLIP-D1-GOVROLE-005 | Eligibility assessment reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-114 | 18 | CLIP-D1-GOVROLE-005 | Disqualifying-condition assessment reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-115 | 19 | CLIP-D1-GOVROLE-005 | Conflict disclosure reference | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-116 | 20 | CLIP-D1-GOVROLE-005 | Required separation safeguard | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-117 | 21 | CLIP-D1-GOVROLE-005 | Effective scope | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-118 | 22 | CLIP-D1-GOVROLE-005 | Effective date/time | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-119 | 23 | CLIP-D1-GOVROLE-005 | Withdrawal/replacement rule | Future request must classify this field and its minimum source | Not identified |
+| CLIP-D1-GOVROLEFIELD-120 | 24 | CLIP-D1-GOVROLE-005 | Recorded human identification reference | Future request must classify this field and its minimum source | Not identified |
 
 ## Eligibility Reassessment
 
@@ -777,47 +777,47 @@ This statement is limited to documentary coverage visible in the available sourc
 ### Collection Lane matrix
 | ID | Area | Covered rows | State |
 | --- | --- | --- | --- |
-| CLIP-D1-GOVM-LANE-001 | Lane coverage 001 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-LANE-002 | Lane coverage 002 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-LANE-003 | Lane coverage 003 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-LANE-004 | Lane coverage 004 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-LANE-005 | Lane coverage 005 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-LANE-006 | Lane coverage 006 | Source boundary is explicit | Complete |
+| CLIP-D1-GOVM-LANE-001 | Lane coverage 001 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-LANE-002 | Lane coverage 002 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-LANE-003 | Lane coverage 003 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-LANE-004 | Lane coverage 004 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-LANE-005 | Lane coverage 005 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-LANE-006 | Lane coverage 006 | Source boundary is explicit | Yes |
 
 ### Collection Scope matrix
 | ID | Area | Covered rows | State |
 | --- | --- | --- | --- |
-| CLIP-D1-GOVM-SCOPE-001 | Scope coverage 001 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-SCOPE-002 | Scope coverage 002 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-SCOPE-003 | Scope coverage 003 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-SCOPE-004 | Scope coverage 004 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-SCOPE-005 | Scope coverage 005 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-SCOPE-006 | Scope coverage 006 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-SCOPE-007 | Scope coverage 007 | Source boundary is explicit | Complete |
-| CLIP-D1-GOVM-SCOPE-008 | Scope coverage 008 | Source boundary is explicit | Complete |
+| CLIP-D1-GOVM-SCOPE-001 | Scope coverage 001 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-SCOPE-002 | Scope coverage 002 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-SCOPE-003 | Scope coverage 003 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-SCOPE-004 | Scope coverage 004 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-SCOPE-005 | Scope coverage 005 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-SCOPE-006 | Scope coverage 006 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-SCOPE-007 | Scope coverage 007 | Source boundary is explicit | Yes |
+| CLIP-D1-GOVM-SCOPE-008 | Scope coverage 008 | Source boundary is explicit | Yes |
 
 ### Role-block matrix
 | ID | Area | Covered rows | State |
 | --- | --- | --- | --- |
-| CLIP-D1-GOVM-ROLE-001 | Role-block coverage 001 | Role holders remain unidentified | Complete |
-| CLIP-D1-GOVM-ROLE-002 | Role-block coverage 002 | Role holders remain unidentified | Complete |
-| CLIP-D1-GOVM-ROLE-003 | Role-block coverage 003 | Role holders remain unidentified | Complete |
-| CLIP-D1-GOVM-ROLE-004 | Role-block coverage 004 | Role holders remain unidentified | Complete |
-| CLIP-D1-GOVM-ROLE-005 | Role-block coverage 005 | Role holders remain unidentified | Complete |
+| CLIP-D1-GOVM-ROLE-001 | Role-block coverage 001 | Role holders remain unidentified | Yes |
+| CLIP-D1-GOVM-ROLE-002 | Role-block coverage 002 | Role holders remain unidentified | Yes |
+| CLIP-D1-GOVM-ROLE-003 | Role-block coverage 003 | Role holders remain unidentified | Yes |
+| CLIP-D1-GOVM-ROLE-004 | Role-block coverage 004 | Role holders remain unidentified | Yes |
+| CLIP-D1-GOVM-ROLE-005 | Role-block coverage 005 | Role holders remain unidentified | Yes |
 
 ### Channel-block matrix
 | ID | Area | Covered rows | State |
 | --- | --- | --- | --- |
-| CLIP-D1-GOVM-CHAN-001 | Channel-block coverage 001 | Channel remains unselected | Complete |
-| CLIP-D1-GOVM-CHAN-002 | Channel-block coverage 002 | Channel remains unselected | Complete |
-| CLIP-D1-GOVM-CHAN-003 | Channel-block coverage 003 | Channel remains unselected | Complete |
-| CLIP-D1-GOVM-CHAN-004 | Channel-block coverage 004 | Channel remains unselected | Complete |
+| CLIP-D1-GOVM-CHAN-001 | Channel-block coverage 001 | Channel remains unselected | Yes |
+| CLIP-D1-GOVM-CHAN-002 | Channel-block coverage 002 | Channel remains unselected | Yes |
+| CLIP-D1-GOVM-CHAN-003 | Channel-block coverage 003 | Channel remains unselected | Yes |
+| CLIP-D1-GOVM-CHAN-004 | Channel-block coverage 004 | Channel remains unselected | Yes |
 
 ### Request-block matrix
 | ID | Area | Covered rows | State |
 | --- | --- | --- | --- |
-| CLIP-D1-GOVM-REQ-001 | Request-block coverage 001 | Request draft remains not created | Complete |
-| CLIP-D1-GOVM-REQ-002 | Request-block coverage 002 | Request draft remains not created | Complete |
+| CLIP-D1-GOVM-REQ-001 | Request-block coverage 001 | Request draft remains not created | Yes |
+| CLIP-D1-GOVM-REQ-002 | Request-block coverage 002 | Request draft remains not created | Yes |
 
 ### Final-gate matrix
 | ID | Area | Result |
@@ -870,10 +870,21 @@ No D1 inspection operation is authorized for execution
 ```mermaid
 flowchart LR
   A["035 prior research"] --> B["036 prior research"] --> C["037 blank worksheet"] --> D["038 structural specification"] --> E["039 request-readiness closure"] --> F["040 request-readiness reassessment"]
-  F -. future Collection Request Draft .-> G["Future Collection Request"]
-  G -. future human authorization .-> H["Future collection start"]
-  H -. future D1 inspection permission .-> I["Future D1 inspection"]
-  I -. future observation and persistence .-> J["Future observation and persistence"]
+  F -. future Collection Request Draft preparation .-> G["Future Collection Request Draft"]
+  G -. future Worksheet Submission .-> H["Future Worksheet Submission"]
+  H -. future Worksheet Distribution .-> I["Future Worksheet Distribution"]
+  I -. future recipient acknowledgement .-> J["Future recipient acknowledgement"]
+  J -. future Human Input Collection .-> K["Future Human Input Collection"]
+  K -. future Attestation .-> L["Future Attestation"]
+  L -. future Human Collection Authorization .-> M["Future Human Collection Authorization"]
+  M -. future Collection-start Permission .-> N["Future Collection-start Permission"]
+  N -. future Human Decision .-> O["Future Human Decision"]
+  O -. future Execution Permission .-> P["Future Execution Permission"]
+  P -. future Execution .-> Q["Future Execution"]
+  Q -. future D1 Inspection .-> R["Future D1 Inspection"]
+  R -. future Session Observation .-> S["Future Session Observation"]
+  S -. future Observation persistence .-> T["Future Observation persistence"]
+  T -. future Persistent Evidence .-> U["Future Persistent Evidence"]
 ```
 
 Solid arrows preserve the documentary source chain. Dashed arrows are future transitions only and are not authorized by this document.
