@@ -1,89 +1,54 @@
 # Architecture
 
-狀態：`Accepted baseline / Draft maturity`
+狀態：`Implementation baseline accepted`
 
-本區描述 SnipPlus 的抽象系統邊界、責任分層、ownership、dependency 與長期技術決策。Architecture baseline 已 Freeze Approved；UI Framework 與 Rendering Technology 已 Accepted；Capture、Image、Clipboard、Testing、contracts、Project Structure 與 runtime evidence 尚未完成。
+SnipPlus 的抽象 Architecture、implementation-critical ADR、cross-project contracts 與 Project Structure 已完成第一個 vertical slice 所需的收斂。
 
-## Architecture v1.0 baseline
+## Effective sources
 
-- [ARCH-0001 Architecture Principles](ARCH-0001-architecture-principles.md)
-- [ARCH-0002 Layer Model](ARCH-0002-layer-model.md)
-- [ARCH-0003 Module Catalog](ARCH-0003-module-catalog.md)
-- [ARCH-0004 Component Boundaries](ARCH-0004-component-boundaries.md)
-- [ARCH-0005 Component Interactions](ARCH-0005-component-interactions.md)
-- [Architecture Baseline Review](ARCH-BASELINE-REVIEW.md)
+- [Architecture Baseline Review](ARCH-BASELINE-REVIEW.md) — Layer、Module、Component、Interaction ownership。
+- [ADR index](adr/README.md) — Accepted technology decisions。
+- [Implementation Contracts](IMPLEMENTATION-CONTRACTS.md) — Cross-project information/lifecycle boundaries。
+- [Project Structure](PROJECT-STRUCTURE.md) — Toolchain、project mapping、build/test baseline。
+- [Implementation Readiness Review](../docs/IMPLEMENTATION-READINESS-REVIEW.md) — Approved implementation scope。
 
-Freeze Decision：`Freeze Approved`。
-Readiness：`Ready for ADR and Technology Selection`。
+## Accepted technology baseline
 
-Architecture Stability 仍為 `Draft`，表示成熟度尚未宣告 Stable；不否定 v1.0 baseline 的 Freeze Decision。
+| Area | Decision |
+| --- | --- |
+| UI | WinUI 3 |
+| Rendering | WinUI XAML／Microsoft.UI.Composition + Win2D adapter |
+| Capture | Windows.Graphics.Capture |
+| Image | BGRA8 premultiplied SoftwareBitmap |
+| Clipboard | WinRT DataPackage |
+| Testing | MSTest.Sdk + Microsoft.Testing.Platform |
+| Language/runtime | C# 14 / .NET 10 |
+| Initial platform | Windows 11 24H2 x64 |
 
-## Decision and navigation documents
-
-- [System overview](system-overview.md)
-- [Mermaid architecture diagram](architecture-diagram.md)
-- [ADR Baseline](ADR-BASELINE.md)
-- [Technology Decision Roadmap](TECHNOLOGY-DECISION-ROADMAP.md)
-- [ADR index](adr/README.md)
-- [Accepted UI Framework ADR](adr/ADR-0002-ui-framework-selection.md)
-- [Accepted Rendering Technology ADR](adr/ADR-0003-rendering-technology.md)
-- [Repository readiness audit](../docs/REPOSITORY-CURRENT-STATE-AND-IMPLEMENTATION-READINESS-AUDIT.md)
-
-## 建議閱讀順序
-
-1. [PRD Freeze Review](../PRD/PRD-FREEZE-REVIEW.md)
-2. [Specification Baseline Review](../Specs/SPEC-BASELINE-REVIEW.md)
-3. [Architecture Baseline Review](ARCH-BASELINE-REVIEW.md)
-4. [ADR-0002 UI Framework Selection](adr/ADR-0002-ui-framework-selection.md)
-5. [ADR-0003 Rendering Technology](adr/ADR-0003-rendering-technology.md)
-6. [Technology Decision Roadmap](TECHNOLOGY-DECISION-ROADMAP.md)
-7. [ADR index](adr/README.md)
-
-## Fixed architecture boundaries
+## Fixed ownership boundaries
 
 - Product Workflow → Feature Coordination → Domain Capability → Platform Integration。
-- COMP-001 是唯一 Shared State Authority。
-- Annotation 維持 Optional。
-- Clipboard 與 Output 維持平行 downstream。
-- Platform-specific behavior 必須隔離在 Platform Integration boundary。
-- Implementation 不得直接改寫 Feature、Module、Component 或 Interaction ownership。
+- COMP-001 是唯一 Workflow State Authority。
+- COMP-001 through COMP-013 map to `SnipPlus.Core`。
+- COMP-014 through COMP-018 map to `SnipPlus.Windows`。
+- Cross-project semantic types map to `SnipPlus.Contracts`。
+- WinUI host/composition root maps to `SnipPlus.App`。
+- Clipboard and Output remain parallel downstream paths。
+- Annotation remains optional。
+- Platform adapters do not own product semantics。
 
-## Accepted technology boundaries
+## Current implementation state
 
-| Area | Accepted decision | Scope boundary |
-| --- | --- | --- |
-| Desktop UI Framework | WinUI 3 through ADR-0002 | UI host only; does not select Language／Runtime、SDK version、Capture、Clipboard、Packaging、Testing or Project Structure |
-| Rendering Technology | WinUI XAML／Microsoft.UI.Composition + Win2D through ADR-0003 | Rendering adapter only; does not own Capture、Clipboard、Output delivery、image representation or workflow state |
-
-## Remaining engineering gaps
-
-| Area | Current state | Required next stage |
-| --- | --- | --- |
-| Capture Backend | Candidate | TD-003 Capture Backend ADR; next primary decision |
-| Image Representation | Candidate | TD-005 Image Representation ADR／contract |
-| Clipboard Integration | Candidate | TD-004 Clipboard Integration ADR |
-| Testing Strategy | Candidate | TD-011 Testing Strategy ADR |
-| Shared Result／rendering contract | TBD | Consolidated contract package |
-| Failure and retry semantics | TBD | Contract review |
-| Clipboard／Output completion semantics | TBD | ADR or contract review |
-| Component interaction sync／async | TBD | ADR／contract decision |
-| Language／Runtime／SDK versions | TBD | Project Structure decision |
-| Component-to-project mapping | TBD | Project Structure |
-| Runtime verification | Not performed | First authorized vertical slice／verification stage |
-
-## Current architecture status
-
-| Layer | Current state |
+| Area | State |
 | --- | --- |
-| Product intent | Frozen PRD baseline |
-| User-visible behavior | Frozen Specification baseline |
-| Abstract architecture | Freeze Approved |
-| UI framework | WinUI 3 Accepted |
-| Rendering | WinUI Composition + Win2D Accepted; runtime not verified |
-| Remaining technology selection | In progress |
-| Interface and data contracts | Incomplete |
-| Project / assembly mapping | Incomplete |
-| Application implementation | Not started |
-| Build / test / runtime verification | Not established |
+| Documentation readiness | Approved |
+| Solution/projects | Not created |
+| Source code | Not started |
+| Restore/build/test | Not performed |
+| Runtime verification | Not performed |
 
-任何新增實作都必須先說明它位於哪一層、對應哪個 Module／Component、依賴方向為何，以及如何由 Frozen Spec 與 Accepted ADR 驗收。
+The absence of runtime evidence is now an implementation task, not a documentation blocker.
+
+## Next action
+
+Create the approved solution/projects and implement the bounded first vertical slice. Additional Architecture planning is prohibited unless an actual implementation finding requires a targeted correction or superseding decision.
