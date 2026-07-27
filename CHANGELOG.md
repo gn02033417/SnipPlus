@@ -6,62 +6,54 @@
 
 ### Added
 
-- 建立 Repository 文件治理、Research／Analysis／Decision、PRD、Specs、Architecture、ADR governance、Development Guide、Coding Standard、ROADMAP 與 TODO。
-- 建立第一階段 solution／project skeleton：`SnipPlus.sln`、4 個 source projects、3 個 test projects、中央套件管理與 committed lock files。
-- 新增 `ADR-0002`：WinUI 3 UI Framework。
-- 新增 `ADR-0003`：WinUI XAML／Microsoft.UI.Composition + Win2D rendering adapter。
-- 新增 `ADR-0004`：Windows.Graphics.Capture Capture Backend。
-- 新增 `ADR-0005`：BGRA8 premultiplied SoftwareBitmap canonical image representation。
-- 新增 `ADR-0006`：WinRT DataPackage Clipboard integration with history／roaming disabled by default。
-- 新增 `ADR-0007`：MSTest.Sdk + Microsoft.Testing.Platform testing strategy。
+- 建立 Repository 文件治理、PRD、Specs、Architecture、ADR、Development Guide、Coding Standard、ROADMAP 與 TODO。
+- 建立 solution／project skeleton：`SnipPlus.sln`、4 個 source projects、3 個 test projects、中央套件管理與 committed lock files。
+- 新增 ADR-0002 至 ADR-0007。
 - 新增 `Architecture/IMPLEMENTATION-CONTRACTS.md` 與 `Architecture/PROJECT-STRUCTURE.md`。
-- 新增 `SnipPlus.Contracts` workflow、capture、coordinate、image、failure、Clipboard 與 Output contracts。
-- 新增 `SnipPlus.Core` workflow state authority、coordinate mapping 與 capture／Clipboard coordination foundation。
-- 新增 canonical BGRA8 premultiplied `SoftwareBitmap` image pipeline、PNG encoding、crop 與 Win2D rendering adapter。
-- 新增 Windows.Graphics.Capture monitor adapter、WinRT Clipboard adapter、packaged WinUI shell 與 deterministic test foundations。
-- 新增 `PRD-TRACEABILITY-MATRIX-001`，逐項比對 accepted v1 requirements、current code、tests and runtime evidence。
+- 新增 Contracts、Core、Windows、WinUI shell 與 deterministic test foundations。
+- 新增 `PRD-TRACEABILITY-MATRIX-001` 比對 accepted v1 requirements、current code、tests and runtime evidence。
 
 ### Changed
 
-- 產品基線更新為 Accepted v1.2。
-- MainWindow `X` 的正式行為固定為直接結束 SnipPlus、解除 PrintScreen 接管、不隱藏至 System Tray；若存在 Tray Exit，使用相同結束路徑。
+- 產品與品質基線完成定案；不再存在會阻塞 v1 實作的可見產品決策。
+- MainWindow `X` 固定為直接結束 SnipPlus、解除 PrintScreen 接管、不隱藏至 System Tray。
 - 不規則螢幕排列中的非顯示區域固定為最終影像透明像素，並要求 BGRA／PNG／Clipboard 保留 alpha。
-- Windows Save As 初始資料夾固定為使用者的下載資料夾，預設檔名維持 `SnipPlus_yyyy-MM-dd_HHmmss.png`，使用者可更改路徑與檔名。
-- PNG 成功但後續 Clipboard 失敗時，PNG 保留在使用者選定位置；流程返回 Editing、保留 Selection／Annotation 並回報 Clipboard 失敗，不刪除或回滾檔案。
-- `PRD-0004`–`PRD-0006`、`SPEC-0003`、`SPEC-0005`–`SPEC-0008`、`SPEC-0010`、`IMPLEMENTATION-CONTRACTS-001`、ADR-0004–ADR-0006、Implementation Readiness、Repository rules、Roadmap、TODO 與 Conformance Matrix 已同步上述決策。
-- 第一個 Coding Slice 的產品決策阻塞已解除；正式範圍為 resident lifecycle、direct exit、PrintScreen takeover setting 及 takeover release，仍需使用者明確授權後才開始 Coding。
-- 產品主流程維持：手動啟動並常駐、使用者控制 PrintScreen 接管、凍結所有螢幕、跨螢幕矩形選區、SelectionLocked、mandatory Editing／confirmation、required Annotation tools、Complete-to-Clipboard、Save-to-PNG-and-Clipboard、Cancel／failure preservation／focus restoration。
-- `ARCH-0001`–`ARCH-0005`、Architecture Baseline Review、System Overview、Architecture Diagram、Project Structure and Architecture index 已重整，移除 optional-Annotation、single-display、mouse-release-to-output 與 unconditional parallel Clipboard／Output assumptions。
-- `README.md`、`docs/index.md`、`ROADMAP.md`、`TODO.md`、PRD／Specs index、Development Guide、Technology Decision Roadmap、Repository Audit 與 UI Wireframe 已對齊目前 Repository 狀態與 conformance correction order。
-- PRD Freeze Review 與 Specification Baseline Review 更新為目前 acceptance records；早期 review content 保留為歷史背景，不再覆蓋 Accepted baseline。
-- 目前程式正式分類為可重用的單螢幕 WGC／same-frame crop／image／PNG／Clipboard technical prototype，而不是 SnipPlus v1 product-complete implementation。
-- 現行實作順序固定為 resident lifecycle／direct exit → PrintScreen → Frozen Virtual Desktop → cross-monitor Selection → SelectionLocked adjustment → accepted state graph → function bar／commitments／focus → Annotation → history／clipping → Complete／transparent gaps → Save／Downloads／retained file → failure／revision／accessibility → authorized multi-display verification。
-- `global.json` 加入 .NET 10 的 Microsoft.Testing.Platform test runner opt-in。
-- Packaged `win-x64` restore graph、manifest assets、runtime identifiers and framework-dependent MSIX validation were corrected without replacing accepted SDK or package versions。
-- Capture workflow technical prototype 改為 Selection 前只取得一次完整 monitor frame，Selection 顯示同一張 frame，最終 Crop 使用同一 Frozen Frame，不再於 Selection 後重新擷取。
-- Packaged runtime verification 改用 SnipPlus 內部 synthetic checkerboard source；正常產品啟動不建立該 source，未加入 external GUI fixture launch code。
-- Clipboard adapter 保留 production WinRT publication／Flush behavior and deterministic retry／cancellation seams。
+- Windows Save As 初始資料夾固定為下載資料夾；PNG 成功但後續 Clipboard 失敗時保留 PNG、返回 Editing 並回報部分成功。
+- 定義 v1 支援容量：`1`–`4` 個 logical displays、每個最大 `7,680 × 4,320`、總來源像素 `66,355,200`、Virtual Desktop 單邊最大 `16,384`、Selection 面積最大 `67,108,864` pixels。
+- 超過任何容量限制時，流程必須在 Selection 前失敗、不可省略或部分擷取螢幕、必須清理並恢復先前工作內容。
+- 定義量化效能目標：capture start p95 `500 ms`／`1,000 ms`、interaction p95 `33 ms` frame time、input response p95 `100 ms`、Complete p95 `1.5／4／8 s`、Save p95 `2／6／12 s`。
+- 定義 commit 超過 `300 ms` 的 non-blocking progress、idle `250 MB`、maximum peak `2.0 GB`、cleanup 與 20-session memory limits。
+- 定義完整 Keyboard-only Editing／Annotation：從 `SelectionLocked` 開始，包含 F6／Tab focus model、tool shortcuts、keyboard object creation、`1`／`10` pixel movement／resize、IME、High Contrast、200% scaling、Narrator state 與 no keyboard trap。
+- 初始 crosshair Selection 維持 pointer-driven；keyboard-only 標準涵蓋完整 Editing／Annotation stage，而不是整個 capture entry。
+- Esc 行為固定為：先關閉 transient picker／popover／text editor／uncommitted creation，再由 stable Editing 的 Esc 取消 capture session。
+- `PRD-0006` 更新為 v1.3；`SPEC-0003` v1.3、`SPEC-0005` v1.2、`SPEC-0006` v1.2、`SPEC-0009` v1.1、`SPEC-0010` v1.2。
+- `IMPLEMENTATION-CONTRACTS-001` 更新為 v2.2；Conformance Matrix 更新為 v2.2。
+- Repository rules、Readiness Review、Freeze Review、Spec Baseline Review、README、Architecture index、Roadmap、TODO 與 docs index 已同步完整品質基線。
+- 現行實作順序固定為 resident lifecycle／direct exit → PrintScreen → capacity／Frozen Virtual Desktop → cross-monitor Selection → SelectionLocked → state graph → function bar／progress／focus → Annotation／keyboard → history／clipping → Complete → Save → failure／performance／accessibility → authorized Standard／Maximum verification。
+- Capture technical prototype維持 Selection 前只取得一次 frame，Selection 與 Crop 使用相同 Frozen Frame。
+- 正常產品與 non-interactive tests 不啟動 Paint 或其他 external GUI fixture。
 
 ### Verified — Historical Technical Foundation
 
-- Locked restore、Release x64 build and packaged WinUI 3 build succeeded for the earlier technical slice。
-- Non-interactive Unit／Contract／Rendering／Clipboard tests and categorized Windows platform tests were previously recorded as passing at the time of execution。
-- One-display Windows.Graphics.Capture frame acquisition、same-frame crop、BGRA8 result、PNG encoding、Win2D presentation and Clipboard publication were verified through synthetic or categorized platform evidence。
-- Packaged synthetic checkerboard verification demonstrated the superseded sequence `Start Capture → one-display Selection → mouse release → immediate crop／Clipboard`。
-- The historical verification did not persist private desktop screenshots or Clipboard payloads and did not launch Paint during the corrected synthetic run。
+- Locked restore、Release x64 build and packaged WinUI 3 build曾於早期 technical slice 成功。
+- Non-interactive Unit／Contract／Rendering／Clipboard tests and categorized Windows platform tests曾記錄成功。
+- One-display WGC、same-frame crop、BGRA8、PNG encoding、Win2D presentation and Clipboard publication曾以 synthetic 或 categorized evidence 驗證。
+- Packaged synthetic checkerboard驗證的是已淘汰的 `Start Capture → one-display Selection → mouse release → immediate crop／Clipboard` 流程。
 
-The historical build／test／runtime evidence remains valid only for those technical foundations. It is not evidence of accepted v1 resident PrintScreen、direct exit、all-display freeze、cross-monitor Selection、transparent gaps、Editing／Annotation、Save As or focus restoration conformance.
+Historical evidence只適用於上述技術基礎，不證明 resident PrintScreen、capacity、cross-monitor Selection、keyboard Editing、quantitative performance、Save As 或 focus restoration conforming。
 
 ### Current Conformance Status
 
 - Resident lifecycle、direct application exit and PrintScreen takeover：Missing／Partial foundation only。
+- Capacity policy and unsupported-limit outcomes：Missing。
 - Frozen Virtual Desktop and per-display frame ownership：Missing。
-- Cross-monitor selection and transparent gap output：Missing。
-- Mouse-release-to-output behavior：Incorrect／obsolete。
+- Cross-monitor Selection and transparent gap output：Missing。
+- Mouse-release-to-output：Incorrect／obsolete。
 - Selection adjustment and accepted state graph：Missing／obsolete current model。
-- Editing function bar and required Annotation tools：Missing。
-- Save As、Downloads default、PNG file-delivery and retained-file workflow：Missing。
-- Recoverable Editing preservation、stale-revision protection and focus restoration：Missing。
+- Editing function bar、Annotation tools and keyboard focus model：Missing。
+- Save As、Downloads default、PNG delivery and retained-file workflow：Missing。
+- Performance／memory measurement evidence：Missing。
+- Recoverable Editing preservation、stale-revision protection、accessibility and focus restoration：Missing。
 
 Detailed status and required actions are maintained in `PRD/PRD-TRACEABILITY-MATRIX.md`.
 
