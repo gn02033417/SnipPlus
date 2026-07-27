@@ -4,63 +4,48 @@
 
 | Field | Value |
 | --- | --- |
-| Document ID | PROJECT-STRUCTURE-001 |
-| Status | Accepted |
-| Version | 1.0 |
+| Document ID | `PROJECT-STRUCTURE-001` |
+| Status | `Accepted` |
+| Version | `1.1` |
 | Owner | Repository owner |
-| Date accepted | 2026-07-26 |
-| Scope | First vertical slice development, build and test baseline |
-| Normative References | Frozen PRD／Specs、ARCH-0002 through ARCH-0005、ADR-0002 through ADR-0007、IMPLEMENTATION-CONTRACTS-001 |
-| Implementation authorized | No; owned by the Implementation Readiness Review |
+| Last reviewed | `2026-07-27` |
+| Scope | Current SnipPlus v1 implementation、build and test baseline |
+| Normative references | Accepted PRD／Specs、`ARCH-0001`–`ARCH-0005`、ADR-0002 through ADR-0007、`IMPLEMENTATION-CONTRACTS-001` |
 
 ## 1. Purpose
 
-This document fixes the minimum language、SDK、dependency、solution and project boundaries required to create a reproducible first vertical slice. It maps existing Modules and Components to projects without changing Architecture ownership.
+This document records the current solution、project dependency direction、toolchain and build／test baseline. The projects already exist. It does not authorize a specific coding or runtime task; task execution remains controlled by `AGENTS.md` and the current user instruction.
 
 ## 2. Toolchain Baseline
 
 | Item | Accepted baseline |
 | --- | --- |
 | Language | C# 14 |
-| .NET SDK | 10.0.302, pinned through `global.json` with roll-forward limited to latest patch in the feature band |
+| .NET SDK | 10.0.302 pinned through `global.json` |
 | Target framework | `net10.0-windows10.0.26100.0` |
-| First-slice minimum OS | Windows 11 version 24H2 / build 26100 |
-| Windows SDK target | 10.0.26100 or newer installed supported SDK; project target remains 26100 |
+| Current Windows baseline | Windows 11 24H2／build 26100 x64 |
 | Windows App SDK | 2.3.1 stable |
 | Win2D | `Microsoft.Graphics.Win2D` 1.4.0 |
 | Test SDK | `MSTest.Sdk` 4.1.0 |
-| Test platform | Microsoft.Testing.Platform only |
-| Process architecture | x64 only for the first vertical slice |
+| Test platform | Microsoft.Testing.Platform |
+| Process architecture | x64 for the current implementation baseline |
 | Build configurations | Debug and Release |
 | Nullable | Enabled |
-| Implicit usings | Enabled where appropriate |
-| Warnings | Treat repository-owned code warnings as errors; generated WinUI code excluded where necessary |
-| Package management | Central Package Management through `Directory.Packages.props` |
-| Dependency restore | Lock files enabled and committed for reproducibility |
+| Package management | Central Package Management |
+| Restore | Lock files enabled and committed |
 
-This is an implementation baseline, not the final public support matrix. Expanding below Windows 11 24H2、adding ARM64 or changing the canonical toolchain requires an explicit compatibility review, not silent project edits.
+This is not the final public support matrix. ARM64、older Windows support and broader compatibility require later explicit review.
 
 ## 3. Packaging and Runtime Model
 
-The first vertical slice uses：
+Current development model:
 
-- WinUI 3 single-project MSIX.
+- WinUI 3 single-project MSIX application.
 - Framework-dependent Windows App SDK deployment.
-- Development/test package identity.
-- x64 package only.
+- Development／test package identity.
+- x64 package baseline.
 
-Reasons：
-
-- It follows the default WinUI 3 project model.
-- Package identity and dependency installation are explicit.
-- It avoids adding unpackaged bootstrapper/runtime deployment complexity to the first slice.
-- It does not predetermine final Store、enterprise or direct-download distribution.
-
-Rules：
-
-- Development signing certificates or signing secrets are not committed.
-- Release signing、Store identity、installer、update and distribution remain deferred to TD-010 Packaging.
-- CI may build the package but must not publish or deploy it without explicit release authorization.
+Release signing、Store identity、installer、distribution and update strategy remain deferred. Development certificates or signing secrets are not committed.
 
 ## 4. Repository Layout
 
@@ -73,89 +58,76 @@ SnipPlus/
 ├─ .editorconfig
 ├─ src/
 │  ├─ SnipPlus.Contracts/
-│  │  └─ SnipPlus.Contracts.csproj
 │  ├─ SnipPlus.Core/
-│  │  └─ SnipPlus.Core.csproj
 │  ├─ SnipPlus.Windows/
-│  │  └─ SnipPlus.Windows.csproj
 │  └─ SnipPlus.App/
-│     ├─ SnipPlus.App.csproj
-│     ├─ Package.appxmanifest
-│     └─ Assets/
 ├─ tests/
 │  ├─ SnipPlus.Contracts.Tests/
-│  │  └─ SnipPlus.Contracts.Tests.csproj
 │  ├─ SnipPlus.Core.Tests/
-│  │  └─ SnipPlus.Core.Tests.csproj
 │  └─ SnipPlus.Windows.Tests/
-│     └─ SnipPlus.Windows.Tests.csproj
-├─ test-assets/
-│  └─ synthetic/
-├─ artifacts/                 # ignored build/test output
-└─ docs/ and Architecture/
+├─ PRD/
+├─ Specs/
+├─ Architecture/
+└─ docs/
 ```
 
-No additional source project is created until a demonstrated dependency or build-isolation need exists.
+No additional source project is created until a demonstrated dependency、deployment or test-isolation need exists.
 
 ## 5. Project Responsibilities
 
-### SnipPlus.Contracts
+### `SnipPlus.Contracts`
 
-Owns stable cross-project semantic types from IMPLEMENTATION-CONTRACTS-001：
+Owns platform-neutral cross-project contracts:
 
-- Workflow state and transition requests.
-- CaptureIntent and CaptureOutcome.
-- ImageResult metadata and lifetime abstractions.
-- RenderIntent and RenderOutcome.
-- Clipboard／Output request and result contracts.
-- Failure、recoverability and retry semantics.
-- Platform context abstractions.
+- workflow state and outcomes;
+- capture session、Virtual Desktop、display snapshot and frame identity;
+- selection and revision identities;
+- annotation document／object contracts where cross-project exchange is required;
+- image results and final-render requests;
+- Clipboard and PNG output requests／results;
+- failure、retry、cancellation and cleanup outcomes.
 
-It contains no WGC、Win2D、Composition、Clipboard or file-system implementation.
+Must not reference WinUI、WGC、Win2D、DataPackage、Save Picker or filesystem implementation types.
 
-### SnipPlus.Core
+### `SnipPlus.Core`
 
-Owns Product Workflow、Feature Coordination and Domain Capability behavior：
+Owns product and domain behavior:
 
-- MOD-001 through MOD-007.
-- COMP-001 through COMP-013.
-- State authority、session lifecycle and feature coordination.
-- Selection and coordinate-domain validation.
-- Capture result publication semantics.
-- Optional annotation semantics.
-- Clipboard/Output handoff semantics.
-- Completion、cancellation、failure classification and feedback requirements.
+- `COMP-001` Workflow State Authority;
+- session and feature coordination;
+- Virtual Desktop／selection rules;
+- editing／annotation rules and history;
+- commitment sequencing;
+- failure classification、stale-revision protection and cleanup orchestration.
 
-It depends only on `SnipPlus.Contracts` and .NET base libraries.
+Depends only on `SnipPlus.Contracts`.
 
-### SnipPlus.Windows
+### `SnipPlus.Windows`
 
-Owns Windows-specific implementation and the rendering adapter：
+Owns reusable Windows platform adapters:
 
-- MOD-008 through MOD-011.
-- COMP-014 through COMP-018.
-- WGC capture adapter.
-- WinUI/Win32 monitor、DPI、focus and input context adapters.
-- ADR-0003 Composition/Win2D renderer.
-- ADR-0005 SoftwareBitmap conversion/encoding support.
-- ADR-0006 DataPackage Clipboard adapter.
-- Optional Output adapter when the first output task is authorized.
+- display／DPI／foreground context;
+- Windows.Graphics.Capture;
+- image conversion、crop、composition and PNG encoding;
+- WinRT Clipboard;
+- Windows Save As／file delivery;
+- platform input boundaries where they do not require App-window ownership.
 
-It depends on `SnipPlus.Contracts`、Windows App SDK、Win2D and Windows platform APIs. It does not depend on `SnipPlus.Core`.
+Depends on `SnipPlus.Contracts` plus accepted platform packages. It does not mutate shared state or declare product completion.
 
-### SnipPlus.App
+### `SnipPlus.App`
 
-Owns：
+Owns application composition and WinUI presentation:
 
-- WinUI 3 application host and package manifest.
-- Presentation composition.
-- Dependency composition root.
-- UI dispatcher integration.
-- User command entry and visible feedback.
+- application and resident-window lifecycle composition;
+- main window、capture overlays and function bar;
+- wiring Core to Windows adapters;
+- UI input translation into product intents;
+- accessible control presentation.
 
-It references Contracts、Core and Windows. It contains no domain state authority or reusable platform implementation.
+It must not embed product state transitions or platform-independent annotation rules in code-behind.
 
-## 6. Project Dependency Graph
+## 6. Project Dependency Direction
 
 ```mermaid
 flowchart LR
@@ -171,100 +143,44 @@ flowchart LR
     App --> Windows
 ```
 
-Prohibited：
+Rules:
 
-- Contracts depending on any source project.
-- Core depending on Windows or App.
-- Windows depending on Core or App.
-- Circular references.
-- App becoming the owner of workflow/domain/platform contracts.
+- Contracts depends on no source project.
+- Core does not reference Windows or App.
+- Windows does not reference Core or App.
+- App is the composition root.
+- No circular references.
 
-## 7. Component-to-Project Mapping
+## 7. Test Project Responsibilities
 
-| Components | Project |
-| --- | --- |
-| COMP-001 through COMP-013 | SnipPlus.Core |
-| COMP-014 Platform Capture Adapter | SnipPlus.Windows |
-| COMP-015 Platform Clipboard Adapter | SnipPlus.Windows |
-| COMP-016 Platform Output Adapter | SnipPlus.Windows |
-| COMP-017 Platform Input Boundary | SnipPlus.Windows |
-| COMP-018 Platform Display Context Boundary | SnipPlus.Windows |
-| Cross-component contract types | SnipPlus.Contracts |
-| WinUI presentation and composition root | SnipPlus.App |
+### `SnipPlus.Contracts.Tests`
 
-Rendering is an accepted technical adapter inside `SnipPlus.Windows`; it does not create a new Architecture Module or Component ID.
+- contract defaults and invariants;
+- required IDs and value validation;
+- ownership and disposal semantics;
+- platform-neutral serialization／equality behavior only when explicitly introduced.
 
-## 8. Test Project Mapping
+### `SnipPlus.Core.Tests`
 
-### SnipPlus.Contracts.Tests
+- legal state transitions;
+- session and revision identity;
+- Virtual Desktop mapping and selection geometry;
+- Annotation document and Undo／Redo;
+- Complete／Save sequencing;
+- cancellation、failure preservation and stale-outcome rejection.
 
-- Contract invariants.
-- Serialization-free value semantics.
-- Pixel/alpha metadata validation.
-- Failure/retry contract behavior.
+### `SnipPlus.Windows.Tests`
 
-### SnipPlus.Core.Tests
+- image conversion、crop、render and PNG behavior;
+- Clipboard retry and privacy options;
+- platform adapter outcomes;
+- explicitly categorized interactive tests for WGC、PrintScreen、display topology and focus restoration.
 
-- COMP-001 state authority.
-- Session lifecycle and legal transitions.
-- Selection/coordinate calculations.
-- Coordination、cancel、failure and retry decisions.
-- Clipboard/Output independence.
+Interactive tests never run as part of the default non-interactive test command.
 
-### SnipPlus.Windows.Tests
+## 8. Authorized Commands
 
-- Deterministic renderer and synthetic pixel tests.
-- SoftwareBitmap conversion/encoding.
-- Category-filtered WGC and Clipboard platform integration tests.
-- Resource cleanup and dispatcher/apartment behavior.
-
-The WinUI App project has no separate test project initially. Presentation logic that needs automated tests must be moved into Core or a testable Contracts/Windows boundary rather than requiring full UI automation by default.
-
-## 9. Package References
-
-Central versions include at minimum：
-
-| Package / SDK | Version | Consumer |
-| --- | --- | --- |
-| Microsoft.WindowsAppSDK | 2.3.1 | SnipPlus.App、SnipPlus.Windows as required by template/build |
-| Microsoft.Graphics.Win2D | 1.4.0 | SnipPlus.Windows |
-| MSTest.Sdk | 4.1.0 | All test projects through global.json SDK mapping |
-
-No third-party DI、logging、reactive、MVVM、graphics、retry or serialization package is added to the initial slice. Use platform/.NET primitives until a concrete need and trade-off are demonstrated.
-
-## 10. Configuration Files
-
-### global.json
-
-Must pin：
-
-- .NET SDK `10.0.302`.
-- `rollForward` no broader than `latestPatch` or the agreed feature-band policy.
-- `MSTest.Sdk` `4.1.0` under `msbuild-sdks`.
-
-### Directory.Build.props
-
-Must centralize：
-
-- Target framework.
-- x64 platform.
-- Nullable and implicit usings.
-- Deterministic build.
-- Warnings-as-errors policy.
-- Analysis level.
-- Repository and artifacts paths.
-
-### Directory.Packages.props
-
-Must enable central package management and pin every direct package version.
-
-### .editorconfig
-
-Must define formatting、naming and analyzer severity without overriding generated WinUI files incorrectly.
-
-## 11. Build and Test Commands
-
-These commands become authorized only after the Implementation Readiness Review and an explicit coding task：
+Run only when the current task explicitly authorizes them:
 
 ```powershell
 dotnet restore SnipPlus.sln --locked-mode
@@ -273,56 +189,8 @@ dotnet test SnipPlus.sln -c Release -p:Platform=x64 --no-build -- --filter "Test
 dotnet format SnipPlus.sln --verify-no-changes --no-restore
 ```
 
-Interactive platform tests use a separate explicit command/filter in an authorized Windows desktop session.
+## 9. Current Implementation Note
 
-## 12. CI Baseline
+The current project structure is valid and does not need replacement for the accepted v1 correction. Existing code inside the projects is only partially conforming; row-level status is maintained by `PRD/PRD-TRACEABILITY-MATRIX.md`.
 
-Required jobs after source creation：
-
-1. Markdown and link checks.
-2. Locked restore.
-3. Release x64 build.
-4. Unit、Contract and deterministic Rendering tests.
-5. Formatting verification.
-6. Upload TRX、coverage and approved synthetic diff artifacts.
-
-Interactive WGC/Clipboard verification remains a separate Windows-session job or explicit local verification until a suitable secure runner is established.
-
-## 13. First Vertical Slice Build Boundary
-
-The first implementation task may create only：
-
-- The listed solution/configuration files.
-- The seven listed source/test projects.
-- Minimal app shell and dependency composition.
-- Contracts and implementations necessary for the approved first vertical slice.
-- Synthetic test assets and test code.
-
-It must not add global hotkeys、advanced annotation tools、multi-monitor stitching、telemetry、cloud、update or release infrastructure.
-
-## 14. Revisit Conditions
-
-Review this baseline if：
-
-- Official package compatibility blocks the selected versions.
-- Build evidence shows .NET 10／Windows App SDK 2.3.1／Win2D 1.4.0 incompatibility.
-- ARM64 becomes a required target.
-- The minimum Windows support policy changes.
-- Project boundaries cause a verified dependency cycle or unacceptable build friction.
-- Packaging ADR selects a different long-term deployment model.
-
-A failed initial restore/build may adjust patch-level versions through a documented corrective change; it must not silently change Accepted architectural decisions.
-
-## 15. Acceptance Verification
-
-| Check | Result |
-| --- | --- |
-| Language/runtime/SDK versions fixed | PASS |
-| Project mapping preserves Modules/Components | PASS |
-| Dependency graph acyclic | PASS |
-| Platform implementation isolated | PASS |
-| Test projects and commands defined | PASS |
-| Packaging development model defined | PASS |
-| First-slice boundary defined | PASS |
-| Build/runtime evidence already exists | No |
-| Coding authorized by this document | No |
+Do not add a new project merely to avoid correcting obsolete workflow code in the existing ownership boundary.
