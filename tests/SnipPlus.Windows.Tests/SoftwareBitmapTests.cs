@@ -55,6 +55,20 @@ public sealed class SoftwareBitmapTests
 
     [TestMethod]
     [TestCategory("Rendering")]
+    public void CropRejectsZeroSizeAndOutOfBoundsRegions()
+    {
+        using var source = SoftwareBitmapFactory.CreateFromPremultipliedBgra(
+            new byte[4 * 4 * 4],
+            CreateMetadata(4, 4, 16));
+
+        AssertOutOfRange(() =>
+            SoftwareBitmapCropper.Crop(source, new PhysicalRect(1, 1, 1, 3), Guid.NewGuid(), DateTimeOffset.UnixEpoch));
+        AssertOutOfRange(() =>
+            SoftwareBitmapCropper.Crop(source, new PhysicalRect(0, 0, 5, 4), Guid.NewGuid(), DateTimeOffset.UnixEpoch));
+    }
+
+    [TestMethod]
+    [TestCategory("Rendering")]
     public async Task PngEncodingProducesAReadableInMemoryStream()
     {
         using var result = SoftwareBitmapFactory.CreateFromPremultipliedBgra(
@@ -120,5 +134,19 @@ public sealed class SoftwareBitmapTests
         using var reader = DataReader.FromBuffer(buffer);
         reader.ReadBytes(pixels);
         return pixels;
+    }
+
+    private static void AssertOutOfRange(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return;
+        }
+
+        Assert.Fail("Expected ArgumentOutOfRangeException.");
     }
 }

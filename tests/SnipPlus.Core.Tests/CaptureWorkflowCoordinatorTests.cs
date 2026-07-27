@@ -10,76 +10,89 @@ public sealed class CaptureWorkflowCoordinatorTests
     [TestCategory("Unit")]
     public async Task SuccessfulCaptureAndClipboardDeliveryCleanupToIdle()
     {
-        var image = new TestImageResult();
-        var coordinator = new CaptureWorkflowCoordinator(new WorkflowStateAuthority());
-        var capture = new FakeCaptureService(_ => new CaptureOutcome.Succeeded(
-            Guid.Empty,
-            Guid.Empty,
-            2,
-            2,
-            new PhysicalRect(0, 0, 2, 2),
-            new PhysicalRect(0, 0, 2, 2),
-            DateTimeOffset.UnixEpoch,
-            image,
-            Array.Empty<string>()));
-        var clipboard = new FakeClipboardService(_ => new ClipboardDeliveryResult.Delivered(Guid.Empty, Guid.Empty, image.Metadata.ResultId, 1));
+        var frozenImage = new TestImageResult();
+        var croppedImage = new TestImageResult();
+        var capture = new FakeCaptureService(
+            _ => FrameSuccess(frozenImage),
+            (intent, frame) =>
+            {
+                Assert.AreSame(frozenImage, frame.ImageResult);
+                return Success(intent, croppedImage);
+            });
+        var clipboard = new FakeClipboardService(request =>
+        {
+            Assert.AreSame(croppedImage, request.ImageResult);
+            return new ClipboardDeliveryResult.Delivered(
+                request.DeliveryId,
+                request.SessionId,
+                request.ResultId,
+                1);
+        });
 
-        var result = await coordinator.RunAsync(CreateIntent(), capture, clipboard, CancellationToken.None);
-
-        Assert.AreEqual(WorkflowOutcomeKind.Completed, result.Outcome);
-        Assert.AreEqual(WorkflowState.Idle, result.FinalState);
-        Assert.IsNull(result.RetainedResult);
-        Assert.IsTrue(image.IsDisposed);
-    }
-
-    [TestMethod]
-    [TestCategory("Unit")]
-    public async Task RetryableClipboardFailureRetainsValidResultAtResultReady()
-    {
-        var image = new TestImageResult();
-        var coordinator = new CaptureWorkflowCoordinator(new WorkflowStateAuthority());
-        var clipboardFailure = Failure.Create(
-            FailureCode.ClipboardBusy,
-            FailureCategory.Contention,
-            FailureRecoverability.RetrySameIntent,
-            "fake-clipboard",
-            Guid.NewGuid(),
-            "synthetic clipboard busy");
-        var clipboard = new FakeClipboardService(request => new ClipboardDeliveryResult.RetryableFailure(
-            request.DeliveryId,
-            request.SessionId,
-            request.ResultId,
-            clipboardFailure,
-            2));
-
-        var result = await coordinator.RunAsync(
+        var result = await new CaptureWorkflowCoordinator(new WorkflowStateAuthority()).RunAsync(
             CreateIntent(),
-            new FakeCaptureService(_ => Success(image)),
+            capture,
             clipboard,
             CancellationToken.None);
 
-        Assert.AreEqual(WorkflowOutcomeKind.RetryableFailure, result.Outcome);
-        Assert.AreEqual(WorkflowState.ResultReady, result.FinalState);
-        Assert.AreSame(image, result.RetainedResult);
-        Assert.IsFalse(image.IsDisposed);
-        Assert.AreEqual(FailureCode.ClipboardBusy, result.Failure?.Code);
+        Assert.AreEqual(WorkflowOutcomeKind.Completed, result.Outcome);
+        Assert.AreEqual(WorkflowState.Idle, result.FinalState);
+        Assert.AreEqual(1, capture.CaptureFrameCalls);
+        Assert.AreEqual(1, capture.CropFrameCalls);
+        Assert.IsNull(result.RetainedResult);
+        Assert.IsTrue(frozenImage.IsDisposed);
+        Assert.IsTrue(croppedImage.IsDisposed);
     }
 
     [TestMethod]
     [TestCategory("Unit")]
-    public async Task CaptureCancellationDoesNotPublishAResult()
+    [TestCategory("Cancellation")]
+    public async Task CancellingSelectionDisposesFrozenFrameAndSkipsCrop()
     {
+        var frozenImage = new TestImageResult();
+        var capture = new FakeCaptureService(_ => FrameSuccess(frozenImage));
         var coordinator = new CaptureWorkflowCoordinator(new WorkflowStateAuthority());
-        var result = await coordinator.RunAsync(
-            CreateIntent(),
-            new FakeCaptureService(_ => new CaptureOutcome.Cancelled(Guid.Empty, Guid.Empty, "user", true, true)),
-            null,
-            CancellationToken.None);
+
+        var frameOutcome = await coordinator.BeginSelectionAsync(CreateIntent(), capture, CancellationToken.None);
+        var succeeded = frameOutcome as CaptureFrameOutcome.Succeeded;
+        Assert.IsNotNull(succeeded);
+        Assert.AreEqual(WorkflowState.Selecting, coordinator.StateAuthority.CurrentState);
+
+        var result = coordinator.CancelSelection(Guid.NewGuid(), succeeded.FrozenFrame);
 
         Assert.AreEqual(WorkflowOutcomeKind.Cancelled, result.Outcome);
         Assert.AreEqual(WorkflowState.Idle, result.FinalState);
-        Assert.IsNull(result.RetainedResult);
         Assert.IsTrue(result.CleanupCompleted);
+        Assert.IsTrue(frozenImage.IsDisposed);
+        Assert.AreEqual(0, capture.CropFrameCalls);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task CaptureFailureDoesNotEnterSelectionOrCrop()
+    {
+        var failure = Failure.Create(
+            FailureCode.CaptureSourceUnavailable,
+            FailureCategory.Device,
+            FailureRecoverability.RetryNewIntent,
+            "fake-capture",
+            Guid.NewGuid(),
+            "synthetic source unavailable");
+        var capture = new FakeCaptureService(_ => new CaptureFrameOutcome.Failed(
+            Guid.Empty,
+            Guid.Empty,
+            failure,
+            true,
+            true));
+        var coordinator = new CaptureWorkflowCoordinator(new WorkflowStateAuthority());
+
+        var frameOutcome = await coordinator.BeginSelectionAsync(CreateIntent(), capture, CancellationToken.None);
+
+        var failed = frameOutcome as CaptureFrameOutcome.Failed;
+        Assert.IsNotNull(failed);
+        Assert.AreEqual(FailureCode.CaptureSourceUnavailable, failed.Failure.Code);
+        Assert.AreEqual(WorkflowState.Idle, coordinator.StateAuthority.CurrentState);
+        Assert.AreEqual(0, capture.CropFrameCalls);
     }
 
     [TestMethod]
@@ -106,13 +119,17 @@ public sealed class CaptureWorkflowCoordinatorTests
     [TestCategory("Cancellation")]
     public async Task ResultReadyCancellationDisposesImageAndSkipsClipboard()
     {
-        var image = new TestImageResult();
+        var frozenImage = new TestImageResult();
+        var croppedImage = new TestImageResult();
         var clipboard = new FakeClipboardService(_ => throw new AssertFailedException("Clipboard must not be called."));
         var coordinator = new CaptureWorkflowCoordinator(new WorkflowStateAuthority());
+        var capture = new FakeCaptureService(
+            _ => FrameSuccess(frozenImage),
+            (intent, _) => Success(intent, croppedImage));
 
         var result = await coordinator.RunAsync(
             CreateIntent(),
-            new FakeCaptureService(_ => Success(image)),
+            capture,
             clipboard,
             CancellationToken.None,
             (_, _) => ThrowCancellationAsync());
@@ -120,58 +137,77 @@ public sealed class CaptureWorkflowCoordinatorTests
         Assert.AreEqual(WorkflowOutcomeKind.Cancelled, result.Outcome);
         Assert.AreEqual(WorkflowState.Idle, result.FinalState);
         Assert.IsTrue(result.CleanupCompleted);
-        Assert.IsTrue(image.IsDisposed);
+        Assert.IsTrue(frozenImage.IsDisposed);
+        Assert.IsTrue(croppedImage.IsDisposed);
         Assert.IsFalse(clipboard.WasCalled);
     }
 
     [TestMethod]
     [TestCategory("Unit")]
-    [TestCategory("Cancellation")]
-    public async Task ClipboardCancellationDisposesImageAndReturnsIdle()
+    public async Task RetryableClipboardFailureRetainsOnlyTheCroppedResult()
     {
-        var image = new TestImageResult();
+        var frozenImage = new TestImageResult();
+        var croppedImage = new TestImageResult();
         var coordinator = new CaptureWorkflowCoordinator(new WorkflowStateAuthority());
-        var clipboard = new FakeClipboardService(request => new ClipboardDeliveryResult.Cancelled(
+        var clipboardFailure = Failure.Create(
+            FailureCode.ClipboardBusy,
+            FailureCategory.Contention,
+            FailureRecoverability.RetrySameIntent,
+            "fake-clipboard",
+            Guid.NewGuid(),
+            "synthetic clipboard busy");
+        var clipboard = new FakeClipboardService(request => new ClipboardDeliveryResult.RetryableFailure(
             request.DeliveryId,
             request.SessionId,
             request.ResultId,
-            "CancellationToken"));
+            clipboardFailure,
+            2));
 
         var result = await coordinator.RunAsync(
             CreateIntent(),
-            new FakeCaptureService(_ => Success(image)),
+            new FakeCaptureService(
+                _ => FrameSuccess(frozenImage),
+                (intent, _) => Success(intent, croppedImage)),
             clipboard,
             CancellationToken.None);
 
-        Assert.AreEqual(WorkflowOutcomeKind.Cancelled, result.Outcome);
-        Assert.AreEqual(WorkflowState.Idle, result.FinalState);
-        Assert.IsTrue(result.CleanupCompleted);
-        Assert.IsTrue(image.IsDisposed);
+        Assert.AreEqual(WorkflowOutcomeKind.RetryableFailure, result.Outcome);
+        Assert.AreEqual(WorkflowState.ResultReady, result.FinalState);
+        Assert.AreSame(croppedImage, result.RetainedResult);
+        Assert.IsFalse(croppedImage.IsDisposed);
+        Assert.IsTrue(frozenImage.IsDisposed);
+        Assert.AreEqual(FailureCode.ClipboardBusy, result.Failure?.Code);
+
+        croppedImage.Dispose();
     }
 
     [TestMethod]
     [TestCategory("Unit")]
-    public async Task TerminalCaptureFailureReturnsTypedFailureAndCleanup()
+    public async Task TerminalCropFailureReturnsTypedFailureAndCleanup()
     {
+        var frozenImage = new TestImageResult();
         var failure = Failure.Create(
-            FailureCode.CaptureSourceUnavailable,
-            FailureCategory.Device,
+            FailureCode.InvalidCaptureIntent,
+            FailureCategory.Validation,
             FailureRecoverability.RetryNewIntent,
-            "fake-capture",
+            "fake-crop",
             Guid.NewGuid(),
-            "synthetic source unavailable");
-        var coordinator = new CaptureWorkflowCoordinator(new WorkflowStateAuthority());
+            "synthetic crop failure");
+        var capture = new FakeCaptureService(
+            _ => FrameSuccess(frozenImage),
+            (_, _) => new CaptureOutcome.Failed(Guid.Empty, Guid.Empty, failure, true, true));
 
-        var result = await coordinator.RunAsync(
+        var result = await new CaptureWorkflowCoordinator(new WorkflowStateAuthority()).RunAsync(
             CreateIntent(),
-            new FakeCaptureService(_ => new CaptureOutcome.Failed(Guid.Empty, Guid.Empty, failure, true, true)),
+            capture,
             null,
             CancellationToken.None);
 
         Assert.AreEqual(WorkflowOutcomeKind.TerminalFailure, result.Outcome);
         Assert.AreEqual(WorkflowState.Idle, result.FinalState);
-        Assert.AreEqual(FailureCode.CaptureSourceUnavailable, result.Failure?.Code);
+        Assert.AreEqual(FailureCode.InvalidCaptureIntent, result.Failure?.Code);
         Assert.IsTrue(result.CleanupCompleted);
+        Assert.IsTrue(frozenImage.IsDisposed);
     }
 
     private static CaptureIntent CreateIntent() => new()
@@ -190,9 +226,14 @@ public sealed class CaptureWorkflowCoordinatorTests
         RequestedAt = DateTimeOffset.UnixEpoch
     };
 
-    private static CaptureOutcome.Succeeded Success(TestImageResult image) => new(
+    private static CaptureFrameOutcome.Succeeded FrameSuccess(TestImageResult image) => new(
         Guid.Empty,
         Guid.Empty,
+        new FrozenCaptureFrame(image));
+
+    private static CaptureOutcome.Succeeded Success(CaptureIntent intent, TestImageResult image) => new(
+        intent.RequestId,
+        intent.SessionId,
         2,
         2,
         new PhysicalRect(0, 0, 2, 2),
@@ -209,21 +250,54 @@ public sealed class CaptureWorkflowCoordinatorTests
 
     private sealed class ThrowingCaptureService(CancellationToken cancellationToken) : ICaptureService
     {
-        public ValueTask<CaptureOutcome> CaptureAsync(CaptureIntent intent, CancellationToken ignored)
-            => ValueTask.FromException<CaptureOutcome>(new OperationCanceledException(cancellationToken));
+        public ValueTask<CaptureFrameOutcome> CaptureFrameAsync(CaptureIntent intent, CancellationToken ignored)
+            => ValueTask.FromException<CaptureFrameOutcome>(new OperationCanceledException(cancellationToken));
+
+        public ValueTask<CaptureOutcome> CropFrameAsync(
+            CaptureIntent intent,
+            FrozenCaptureFrame frozenFrame,
+            CancellationToken cancellationToken)
+            => ValueTask.FromException<CaptureOutcome>(new AssertFailedException("Crop must not be called."));
     }
 
-    private sealed class FakeCaptureService(Func<CaptureIntent, CaptureOutcome> handler) : ICaptureService
+    private sealed class FakeCaptureService(
+        Func<CaptureIntent, CaptureFrameOutcome> frameHandler,
+        Func<CaptureIntent, FrozenCaptureFrame, CaptureOutcome>? cropHandler = null) : ICaptureService
     {
-        public ValueTask<CaptureOutcome> CaptureAsync(CaptureIntent intent, CancellationToken cancellationToken)
-            => ValueTask.FromResult(handler(intent));
+        public int CaptureFrameCalls { get; private set; }
+
+        public int CropFrameCalls { get; private set; }
+
+        public ValueTask<CaptureFrameOutcome> CaptureFrameAsync(
+            CaptureIntent intent,
+            CancellationToken cancellationToken)
+        {
+            CaptureFrameCalls++;
+            return ValueTask.FromResult(frameHandler(intent));
+        }
+
+        public ValueTask<CaptureOutcome> CropFrameAsync(
+            CaptureIntent intent,
+            FrozenCaptureFrame frozenFrame,
+            CancellationToken cancellationToken)
+        {
+            CropFrameCalls++;
+            if (cropHandler is not null)
+            {
+                return ValueTask.FromResult(cropHandler(intent, frozenFrame));
+            }
+
+            return ValueTask.FromResult<CaptureOutcome>(Success(intent, new TestImageResult()));
+        }
     }
 
     private sealed class FakeClipboardService(Func<ClipboardDeliveryRequest, ClipboardDeliveryResult> handler) : IClipboardDeliveryService
     {
         public bool WasCalled { get; private set; }
 
-        public ValueTask<ClipboardDeliveryResult> DeliverAsync(ClipboardDeliveryRequest request, CancellationToken cancellationToken)
+        public ValueTask<ClipboardDeliveryResult> DeliverAsync(
+            ClipboardDeliveryRequest request,
+            CancellationToken cancellationToken)
         {
             WasCalled = true;
             return ValueTask.FromResult(handler(request));

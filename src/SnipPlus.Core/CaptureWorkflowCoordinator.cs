@@ -11,24 +11,131 @@ public sealed class CaptureWorkflowCoordinator
 
     public WorkflowStateAuthority StateAuthority { get; }
 
-    public async ValueTask<WorkflowRunResult> RunAsync(
+    public async ValueTask<CaptureFrameOutcome> BeginSelectionAsync(
+        CaptureIntent fullFrameIntent,
+        ICaptureService captureService,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(captureService);
+
+        if (!TryTransition(WorkflowState.Idle, WorkflowState.Starting, fullFrameIntent.RequestId, out var transitionFailure)
+            || !TryTransition(WorkflowState.Starting, WorkflowState.Selecting, fullFrameIntent.RequestId, out transitionFailure))
+        {
+            return new CaptureFrameOutcome.Failed(
+                fullFrameIntent.RequestId,
+                fullFrameIntent.SessionId,
+                transitionFailure!,
+                false,
+                true);
+        }
+
+        CaptureFrameOutcome frameOutcome;
+        try
+        {
+            frameOutcome = await captureService.CaptureFrameAsync(fullFrameIntent, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            var cleanup = Cancelled(fullFrameIntent.RequestId, true);
+            return new CaptureFrameOutcome.Cancelled(
+                fullFrameIntent.RequestId,
+                fullFrameIntent.SessionId,
+                "CancellationToken",
+                true,
+                cleanup.CleanupCompleted);
+        }
+        catch (Exception exception)
+        {
+            var failure = Failure.Create(
+                FailureCode.UnexpectedFailure,
+                FailureCategory.Unexpected,
+                FailureRecoverability.TerminalForSession,
+                "CaptureWorkflowCoordinator.CaptureFrame",
+                fullFrameIntent.RequestId,
+                exception.GetType().Name,
+                nativeCode: exception.HResult);
+            var cleanup = FailAndCleanup(failure, false);
+            return new CaptureFrameOutcome.Failed(
+                fullFrameIntent.RequestId,
+                fullFrameIntent.SessionId,
+                failure,
+                cleanup.CleanupCompleted,
+                true);
+        }
+
+        switch (frameOutcome)
+        {
+            case CaptureFrameOutcome.Succeeded:
+                return frameOutcome;
+            case CaptureFrameOutcome.Cancelled cancelled:
+            {
+                var cleanup = Cancelled(fullFrameIntent.RequestId, cancelled.CleanupCompleted);
+                return new CaptureFrameOutcome.Cancelled(
+                    cancelled.RequestId,
+                    cancelled.SessionId,
+                    cancelled.CancellationOrigin,
+                    cancelled.SourceSessionStarted,
+                    cleanup.CleanupCompleted);
+            }
+            case CaptureFrameOutcome.Failed failed:
+            {
+                var cleanup = FailAndCleanup(failed.Failure, failed.CleanupCompleted);
+                return new CaptureFrameOutcome.Failed(
+                    failed.RequestId,
+                    failed.SessionId,
+                    failed.Failure,
+                    cleanup.CleanupCompleted,
+                    failed.RequiresNewIntent);
+            }
+            default:
+            {
+                var failure = Failure.Create(
+                    FailureCode.UnexpectedFailure,
+                    FailureCategory.Unexpected,
+                    FailureRecoverability.TerminalForSession,
+                    "CaptureWorkflowCoordinator.CaptureFrameOutcome",
+                    fullFrameIntent.RequestId,
+                    "Unknown capture frame outcome.");
+                var cleanup = FailAndCleanup(failure, false);
+                return new CaptureFrameOutcome.Failed(
+                    fullFrameIntent.RequestId,
+                    fullFrameIntent.SessionId,
+                    failure,
+                    cleanup.CleanupCompleted,
+                    true);
+            }
+        }
+    }
+
+    public WorkflowRunResult CancelSelection(
+        Guid correlationId,
+        FrozenCaptureFrame? frozenFrame)
+    {
+        frozenFrame?.Dispose();
+        return Cancelled(correlationId, true);
+    }
+
+    public async ValueTask<WorkflowRunResult> CompleteSelectionAsync(
         CaptureIntent intent,
+        FrozenCaptureFrame frozenFrame,
         ICaptureService captureService,
         IClipboardDeliveryService? clipboardService,
         CancellationToken cancellationToken,
         Func<IImageResult, CancellationToken, ValueTask>? onResultReady = null)
     {
-        if (!TryTransition(WorkflowState.Idle, WorkflowState.Starting, intent.RequestId, out var transitionFailure)
-            || !TryTransition(WorkflowState.Starting, WorkflowState.Selecting, intent.RequestId, out transitionFailure)
-            || !TryTransition(WorkflowState.Selecting, WorkflowState.Capturing, intent.RequestId, out transitionFailure))
+        ArgumentNullException.ThrowIfNull(frozenFrame);
+        ArgumentNullException.ThrowIfNull(captureService);
+
+        if (!TryTransition(WorkflowState.Selecting, WorkflowState.Capturing, intent.RequestId, out var transitionFailure))
         {
+            frozenFrame.Dispose();
             return TerminalFailure(transitionFailure!);
         }
 
         CaptureOutcome captureOutcome;
         try
         {
-            captureOutcome = await captureService.CaptureAsync(intent, cancellationToken);
+            captureOutcome = await captureService.CropFrameAsync(intent, frozenFrame, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -48,35 +155,69 @@ public sealed class CaptureWorkflowCoordinator
                     FailureCode.UnexpectedFailure,
                     FailureCategory.Unexpected,
                     FailureRecoverability.TerminalForSession,
-                    "CaptureWorkflowCoordinator.Capture",
+                    "CaptureWorkflowCoordinator.CropFrame",
                     intent.RequestId,
-                    exception.GetType().Name),
+                    exception.GetType().Name,
+                    nativeCode: exception.HResult),
                 false,
                 true);
         }
-
-        switch (captureOutcome)
+        finally
         {
-            case CaptureOutcome.Cancelled cancelled:
-                return Cancelled(intent.RequestId, cancelled.CleanupCompleted);
-            case CaptureOutcome.Failed failed:
-                return FailAndCleanup(failed.Failure, failed.CleanupCompleted);
-            case CaptureOutcome.Succeeded succeeded:
-                return await HandleSuccessAsync(
-                    intent,
-                    succeeded.ImageResult,
-                    clipboardService,
-                    onResultReady,
-                    cancellationToken);
-            default:
-                return FailAndCleanup(Failure.Create(
-                    FailureCode.UnexpectedFailure,
-                    FailureCategory.Unexpected,
-                    FailureRecoverability.TerminalForSession,
-                    "CaptureWorkflowCoordinator.CaptureOutcome",
-                    intent.RequestId,
-                    "Unknown capture outcome."), false);
+            frozenFrame.Dispose();
         }
+
+        return captureOutcome switch
+        {
+            CaptureOutcome.Cancelled cancelled => Cancelled(intent.RequestId, cancelled.CleanupCompleted),
+            CaptureOutcome.Failed failed => FailAndCleanup(failed.Failure, failed.CleanupCompleted),
+            CaptureOutcome.Succeeded succeeded => await HandleSuccessAsync(
+                intent,
+                succeeded.ImageResult,
+                clipboardService,
+                onResultReady,
+                cancellationToken),
+            _ => FailAndCleanup(Failure.Create(
+                FailureCode.UnexpectedFailure,
+                FailureCategory.Unexpected,
+                FailureRecoverability.TerminalForSession,
+                "CaptureWorkflowCoordinator.CaptureOutcome",
+                intent.RequestId,
+                "Unknown crop outcome."), false)
+        };
+    }
+
+    public async ValueTask<WorkflowRunResult> RunAsync(
+        CaptureIntent intent,
+        ICaptureService captureService,
+        IClipboardDeliveryService? clipboardService,
+        CancellationToken cancellationToken,
+        Func<IImageResult, CancellationToken, ValueTask>? onResultReady = null)
+    {
+        var frameOutcome = await BeginSelectionAsync(intent, captureService, cancellationToken);
+        return frameOutcome switch
+        {
+            CaptureFrameOutcome.Succeeded succeeded => await CompleteSelectionAsync(
+                intent,
+                succeeded.FrozenFrame,
+                captureService,
+                clipboardService,
+                cancellationToken,
+                onResultReady),
+            CaptureFrameOutcome.Cancelled cancelled => new WorkflowRunResult(
+                WorkflowOutcomeKind.Cancelled,
+                StateAuthority.CurrentState,
+                null,
+                null,
+                cancelled.CleanupCompleted),
+            CaptureFrameOutcome.Failed failed => new WorkflowRunResult(
+                WorkflowOutcomeKind.TerminalFailure,
+                StateAuthority.CurrentState,
+                null,
+                failed.Failure,
+                failed.CleanupCompleted),
+            _ => throw new InvalidOperationException("Unknown capture frame outcome.")
+        };
     }
 
     private async ValueTask<WorkflowRunResult> HandleSuccessAsync(

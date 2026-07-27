@@ -63,4 +63,22 @@ public sealed class CoordinateMapperTests
         Assert.AreEqual(FailureCode.InvalidCoordinateMapping, failure.Failure.Code);
         Assert.AreEqual(FailureRecoverability.RetryNewIntent, failure.Failure.Recoverability);
     }
+
+    [TestMethod]
+    [TestCategory("Contract")]
+    public void ZeroWidthSelectionIsRejected()
+    {
+        var context = new DisplayContextSnapshot("display-v1", "synthetic-monitor", new(0, 0, 100, 100), 1, 1);
+
+        var result = CoordinateMapper.CreateMonitorIntent(
+            context,
+            new DipRect(10, 10, 10, 30),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            DateTimeOffset.UnixEpoch);
+
+        var failure = result as CoordinateMappingResult.FailureResult;
+        Assert.IsNotNull(failure);
+        Assert.AreEqual(FailureCode.InvalidCoordinateMapping, failure.Failure.Code);
+    }
 }

@@ -59,6 +59,48 @@ public sealed record CaptureIntent
     public CancellationToken Cancellation { get; init; }
 }
 
+public sealed class FrozenCaptureFrame : IDisposable
+{
+    private IImageResult? _imageResult;
+
+    public FrozenCaptureFrame(IImageResult imageResult)
+    {
+        _imageResult = imageResult ?? throw new ArgumentNullException(nameof(imageResult));
+    }
+
+    public IImageResult ImageResult =>
+        _imageResult ?? throw new ObjectDisposedException(nameof(FrozenCaptureFrame));
+
+    public bool IsDisposed => _imageResult is null;
+
+    public void Dispose()
+    {
+        Interlocked.Exchange(ref _imageResult, null)?.Dispose();
+    }
+}
+
+public abstract record CaptureFrameOutcome(Guid RequestId, Guid SessionId)
+{
+    public sealed record Succeeded(
+        Guid RequestId,
+        Guid SessionId,
+        FrozenCaptureFrame FrozenFrame) : CaptureFrameOutcome(RequestId, SessionId);
+
+    public sealed record Cancelled(
+        Guid RequestId,
+        Guid SessionId,
+        string CancellationOrigin,
+        bool SourceSessionStarted,
+        bool CleanupCompleted) : CaptureFrameOutcome(RequestId, SessionId);
+
+    public sealed record Failed(
+        Guid RequestId,
+        Guid SessionId,
+        Failure Failure,
+        bool CleanupCompleted,
+        bool RequiresNewIntent) : CaptureFrameOutcome(RequestId, SessionId);
+}
+
 public abstract record CaptureOutcome(Guid RequestId, Guid SessionId)
 {
     public sealed record Succeeded(
@@ -89,5 +131,12 @@ public abstract record CaptureOutcome(Guid RequestId, Guid SessionId)
 
 public interface ICaptureService
 {
-    ValueTask<CaptureOutcome> CaptureAsync(CaptureIntent intent, CancellationToken cancellationToken);
+    ValueTask<CaptureFrameOutcome> CaptureFrameAsync(
+        CaptureIntent fullFrameIntent,
+        CancellationToken cancellationToken);
+
+    ValueTask<CaptureOutcome> CropFrameAsync(
+        CaptureIntent intent,
+        FrozenCaptureFrame frozenFrame,
+        CancellationToken cancellationToken);
 }

@@ -70,8 +70,13 @@ public sealed class WindowsGraphicsCapturePlatformTests
         }
 
         using var device = CanvasDevice.GetSharedDevice();
-        var adapter = new WindowsGraphicsCaptureAdapter(device, captureItem);
-        var sourceBounds = new PhysicalRect(0, 0, 1, 1);
+        using var adapter = new WindowsGraphicsCaptureAdapter(device, captureItem);
+        var outerBounds = displayArea.OuterBounds;
+        var sourceBounds = new PhysicalRect(
+            outerBounds.X,
+            outerBounds.Y,
+            outerBounds.X + outerBounds.Width,
+            outerBounds.Y + outerBounds.Height);
         var requestId = Guid.NewGuid();
         var intent = new CaptureIntent
         {
@@ -80,36 +85,38 @@ public sealed class WindowsGraphicsCapturePlatformTests
             SourceKind = SourceKind.Monitor,
             SourceId = displayId.Value.ToString(CultureInfo.InvariantCulture),
             SourcePhysicalBounds = sourceBounds,
-            SelectionDipBounds = new DipRect(0, 0, 1, 1),
-            SelectionPhysicalBounds = new PhysicalRect(sourceBounds.Left, sourceBounds.Top, sourceBounds.Left + 1, sourceBounds.Top + 1),
-            CropBoundsInSource = new PhysicalRect(0, 0, 1, 1),
+            SelectionDipBounds = new DipRect(0, 0, sourceBounds.Width, sourceBounds.Height),
+            SelectionPhysicalBounds = sourceBounds,
+            CropBoundsInSource = new PhysicalRect(0, 0, sourceBounds.Width, sourceBounds.Height),
             DpiScaleX = 1,
             DpiScaleY = 1,
             CoordinateVersion = "platform-test",
             Cancellation = CancellationToken.None
         };
 
-        var outcome = await adapter.CaptureAsync(intent, CancellationToken.None);
-        if (outcome is CaptureOutcome.Succeeded succeeded)
+        var outcome = await adapter.CaptureFrameAsync(intent, CancellationToken.None);
+        if (outcome is CaptureFrameOutcome.Succeeded succeeded)
         {
-            using (succeeded.ImageResult)
+            using (succeeded.FrozenFrame)
             {
-                Assert.AreEqual(1, succeeded.ImageResult.Metadata.PixelWidth);
-                Assert.AreEqual(1, succeeded.ImageResult.Metadata.PixelHeight);
-                Assert.AreEqual(ImagePixelFormat.Bgra8, succeeded.ImageResult.Metadata.PixelFormat);
-                Assert.AreEqual(ImageAlphaMode.Premultiplied, succeeded.ImageResult.Metadata.AlphaMode);
-                Assert.AreEqual(ImageColorSpace.SrgbSdr, succeeded.ImageResult.Metadata.ColorSpace);
+                Assert.IsTrue(succeeded.FrozenFrame.ImageResult.Metadata.PixelWidth > 0);
+                Assert.IsTrue(succeeded.FrozenFrame.ImageResult.Metadata.PixelHeight > 0);
+                Assert.AreEqual(sourceBounds.Width, succeeded.FrozenFrame.ImageResult.Metadata.PixelWidth);
+                Assert.AreEqual(sourceBounds.Height, succeeded.FrozenFrame.ImageResult.Metadata.PixelHeight);
+                Assert.AreEqual(ImagePixelFormat.Bgra8, succeeded.FrozenFrame.ImageResult.Metadata.PixelFormat);
+                Assert.AreEqual(ImageAlphaMode.Premultiplied, succeeded.FrozenFrame.ImageResult.Metadata.AlphaMode);
+                Assert.AreEqual(ImageColorSpace.SrgbSdr, succeeded.FrozenFrame.ImageResult.Metadata.ColorSpace);
             }
 
             return;
         }
 
-        if (outcome is CaptureOutcome.Cancelled cancelled)
+        if (outcome is CaptureFrameOutcome.Cancelled cancelled)
         {
             Assert.Fail($"Capture was cancelled unexpectedly: {cancelled.CancellationOrigin}");
         }
 
-        var failure = ((CaptureOutcome.Failed)outcome).Failure;
+        var failure = ((CaptureFrameOutcome.Failed)outcome).Failure;
         Assert.Fail($"Monitor frame capture failed: {failure.Code} ({failure.DiagnosticMessage})");
     }
 

@@ -23,9 +23,14 @@
             </Border>
         </Grid>
 
-        <Grid x:Name="SelectionSurface" Grid.RowSpan="2" Background="#99000000" IsTabStop="True" KeyDown="SelectionSurface_KeyDown" Visibility="Collapsed">
+        <Grid x:Name="SelectionSurface" Grid.RowSpan="2" IsTabStop="True" KeyDown="SelectionSurface_KeyDown" Visibility="Collapsed">
+            <Image x:Name="SelectionFrameImage" Stretch="Fill" />
             <Canvas x:Name="SelectionCanvas" Background="Transparent" PointerPressed="SelectionCanvas_PointerPressed" PointerMoved="SelectionCanvas_PointerMoved" PointerReleased="SelectionCanvas_PointerReleased">
-                <Rectangle x:Name="SelectionRectangle" Fill="#33518DFF" Stroke="#FFBBD7FF" StrokeThickness="2" Visibility="Collapsed" />
+                <Rectangle x:Name="SelectionMaskTop" Fill="#99000000" />
+                <Rectangle x:Name="SelectionMaskLeft" Fill="#99000000" />
+                <Rectangle x:Name="SelectionMaskRight" Fill="#99000000" />
+                <Rectangle x:Name="SelectionMaskBottom" Fill="#99000000" />
+                <Rectangle x:Name="SelectionRectangle" Fill="Transparent" Stroke="#FFBBD7FF" StrokeThickness="2" Visibility="Collapsed" />
             </Canvas>
             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="24" Spacing="8">
                 <TextBlock Foreground="White" Text="Drag to select a region" />

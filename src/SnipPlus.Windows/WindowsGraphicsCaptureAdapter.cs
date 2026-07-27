@@ -7,10 +7,10 @@ using Windows.Security.Authorization.AppCapabilityAccess;
 
 namespace SnipPlus.Windows;
 
-public sealed class WindowsGraphicsCaptureAdapter : ICaptureService
+public sealed class WindowsGraphicsCaptureAdapter : ICaptureService, IDisposable
 {
     private readonly CanvasDevice _canvasDevice;
-    private readonly GraphicsCaptureItem _captureItem;
+    private GraphicsCaptureItem? _captureItem;
 
     public WindowsGraphicsCaptureAdapter(CanvasDevice canvasDevice, GraphicsCaptureItem captureItem)
     {
@@ -55,8 +55,8 @@ public sealed class WindowsGraphicsCaptureAdapter : ICaptureService
         return captureItem is null ? null : new WindowsGraphicsCaptureAdapter(canvasDevice, captureItem);
     }
 
-    public async ValueTask<CaptureOutcome> CaptureAsync(
-        CaptureIntent intent,
+    public async ValueTask<CaptureFrameOutcome> CaptureFrameAsync(
+        CaptureIntent fullFrameIntent,
         CancellationToken cancellationToken)
     {
         Direct3D11CaptureFramePool? framePool = null;
@@ -66,24 +66,36 @@ public sealed class WindowsGraphicsCaptureAdapter : ICaptureService
             cancellationToken.ThrowIfCancellationRequested();
             if (!IsSupported)
             {
-                return Failed(intent, Failure.Create(
+                return FrameFailed(fullFrameIntent, Failure.Create(
                     FailureCode.UnsupportedCapture,
                     FailureCategory.Unsupported,
                     FailureRecoverability.UserActionRequired,
                     "WindowsGraphicsCaptureAdapter.Support",
-                    intent.RequestId,
+                    fullFrameIntent.RequestId,
                     "Windows.Graphics.Capture is not supported."), true, true);
             }
 
-            var sourceSize = _captureItem.Size;
+            var captureItem = _captureItem;
+            if (captureItem is null)
+            {
+                return FrameFailed(fullFrameIntent, Failure.Create(
+                    FailureCode.CaptureSourceClosed,
+                    FailureCategory.Device,
+                    FailureRecoverability.RetryNewIntent,
+                    "WindowsGraphicsCaptureAdapter.CaptureFrame",
+                    fullFrameIntent.RequestId,
+                    "The frozen capture source has been closed."), true, true);
+            }
+
+            var sourceSize = captureItem.Size;
             if (sourceSize.Width <= 0 || sourceSize.Height <= 0)
             {
-                return Failed(intent, Failure.Create(
+                return FrameFailed(fullFrameIntent, Failure.Create(
                     FailureCode.CaptureSourceUnavailable,
                     FailureCategory.Device,
                     FailureRecoverability.RetryNewIntent,
                     "WindowsGraphicsCaptureAdapter.Source",
-                    intent.RequestId,
+                    fullFrameIntent.RequestId,
                     "Capture source returned an empty size."), true, true);
             }
 
@@ -92,37 +104,34 @@ public sealed class WindowsGraphicsCaptureAdapter : ICaptureService
                 DirectXPixelFormat.B8G8R8A8UIntNormalized,
                 1,
                 sourceSize);
-            captureSession = framePool.CreateCaptureSession(_captureItem);
+            captureSession = framePool.CreateCaptureSession(captureItem);
             captureSession.IsCursorCaptureEnabled = false;
             captureSession.StartCapture();
 
             using var frame = await WaitForFrameAsync(framePool, cancellationToken);
             if (frame is null)
             {
-                return Failed(intent, Failure.Create(
+                return FrameFailed(fullFrameIntent, Failure.Create(
                     FailureCode.CaptureFrameTimeout,
                     FailureCategory.Device,
                     FailureRecoverability.RetryNewIntent,
                     "WindowsGraphicsCaptureAdapter.Frame",
-                    intent.RequestId,
+                    fullFrameIntent.RequestId,
                     "No usable frame arrived before the bounded timeout."), true, true);
             }
 
             var contentSize = frame.ContentSize;
             var contentWidth = checked((int)contentSize.Width);
             var contentHeight = checked((int)contentSize.Height);
-            if (contentWidth <= 0
-                || contentHeight <= 0
-                || intent.CropBoundsInSource.Right > contentWidth
-                || intent.CropBoundsInSource.Bottom > contentHeight)
+            if (contentWidth <= 0 || contentHeight <= 0)
             {
-                return Failed(intent, Failure.Create(
+                return FrameFailed(fullFrameIntent, Failure.Create(
                     FailureCode.CaptureFrameSizeChanged,
                     FailureCategory.Device,
                     FailureRecoverability.RetryNewIntent,
                     "WindowsGraphicsCaptureAdapter.ContentSize",
-                    intent.RequestId,
-                    "Frame content size does not contain the capture intent."), true, true);
+                    fullFrameIntent.RequestId,
+                    "Frame content size is empty."), true, true);
             }
 
             using var canvasBitmap = CanvasBitmap.CreateFromDirect3D11Surface(_canvasDevice, frame.Surface);
@@ -131,61 +140,56 @@ public sealed class WindowsGraphicsCaptureAdapter : ICaptureService
             var sourceMetadata = new ImageResultMetadata
             {
                 ResultId = Guid.NewGuid(),
-                SessionId = intent.SessionId,
+                SessionId = fullFrameIntent.SessionId,
                 PixelWidth = pixelWidth,
                 PixelHeight = pixelHeight,
                 PixelFormat = ImagePixelFormat.Bgra8,
                 AlphaMode = ImageAlphaMode.Premultiplied,
                 ColorSpace = ImageColorSpace.SrgbSdr,
-                DpiX = intent.DpiScaleX * 96,
-                DpiY = intent.DpiScaleY * 96,
+                DpiX = fullFrameIntent.DpiScaleX * 96,
+                DpiY = fullFrameIntent.DpiScaleY * 96,
                 RowStride = checked(pixelWidth * 4),
-                SourceKind = intent.SourceKind,
-                SourcePhysicalBounds = intent.SourcePhysicalBounds,
-                CropPhysicalBounds = intent.SourcePhysicalBounds,
+                SourceKind = fullFrameIntent.SourceKind,
+                SourcePhysicalBounds = fullFrameIntent.SourcePhysicalBounds,
+                CropPhysicalBounds = fullFrameIntent.SourcePhysicalBounds,
                 CapturedAt = DateTimeOffset.UtcNow,
                 CursorIncluded = false
             };
-            using var fullResult = SoftwareBitmapFactory.CreateFromPremultipliedBgra(canvasBitmap.GetPixelBytes(), sourceMetadata);
-            var croppedResult = SoftwareBitmapCropper.Crop(
-                fullResult,
-                intent.CropBoundsInSource,
-                Guid.NewGuid(),
-                sourceMetadata.CapturedAt);
-
-            return new CaptureOutcome.Succeeded(
-                intent.RequestId,
-                intent.SessionId,
-                pixelWidth,
-                pixelHeight,
-                intent.SourcePhysicalBounds,
-                intent.CropBoundsInSource,
-                sourceMetadata.CapturedAt,
-                croppedResult,
-                Array.Empty<string>());
+            var fullResult = SoftwareBitmapFactory.CreateFromPremultipliedBgra(
+                canvasBitmap.GetPixelBytes(),
+                sourceMetadata);
+            return new CaptureFrameOutcome.Succeeded(
+                fullFrameIntent.RequestId,
+                fullFrameIntent.SessionId,
+                new FrozenCaptureFrame(fullResult));
         }
         catch (OperationCanceledException)
         {
-            return new CaptureOutcome.Cancelled(intent.RequestId, intent.SessionId, "CancellationToken", true, true);
+            return new CaptureFrameOutcome.Cancelled(
+                fullFrameIntent.RequestId,
+                fullFrameIntent.SessionId,
+                "CancellationToken",
+                true,
+                true);
         }
         catch (UnauthorizedAccessException exception)
         {
-            return Failed(intent, Failure.Create(
+            return FrameFailed(fullFrameIntent, Failure.Create(
                 FailureCode.CapturePermissionDenied,
                 FailureCategory.Permission,
                 FailureRecoverability.UserActionRequired,
                 "WindowsGraphicsCaptureAdapter.Capture",
-                intent.RequestId,
+                fullFrameIntent.RequestId,
                 exception.GetType().Name), true, true);
         }
         catch (Exception exception)
         {
-            return Failed(intent, Failure.Create(
+            return FrameFailed(fullFrameIntent, Failure.Create(
                 FailureCode.UnexpectedFailure,
                 FailureCategory.Unexpected,
                 FailureRecoverability.RetryNewIntent,
                 "WindowsGraphicsCaptureAdapter.Capture",
-                intent.RequestId,
+                fullFrameIntent.RequestId,
                 exception.GetType().Name,
                 nativeCode: exception.HResult), true, true);
         }
@@ -193,6 +197,80 @@ public sealed class WindowsGraphicsCaptureAdapter : ICaptureService
         {
             captureSession?.Dispose();
             framePool?.Dispose();
+        }
+    }
+
+    public ValueTask<CaptureOutcome> CropFrameAsync(
+        CaptureIntent intent,
+        FrozenCaptureFrame frozenFrame,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(frozenFrame);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (frozenFrame.ImageResult is not SoftwareBitmapImageResult source)
+            {
+                return ValueTask.FromResult<CaptureOutcome>(Failed(intent, Failure.Create(
+                    FailureCode.InvalidCaptureIntent,
+                    FailureCategory.Validation,
+                    FailureRecoverability.TerminalForSession,
+                    "WindowsGraphicsCaptureAdapter.CropFrame",
+                    intent.RequestId,
+                    "The frozen frame is not a canonical SoftwareBitmap."), true, true));
+            }
+
+            var sourceBounds = new PhysicalRect(
+                0,
+                0,
+                source.Metadata.PixelWidth,
+                source.Metadata.PixelHeight);
+            if (!sourceBounds.Contains(intent.CropBoundsInSource))
+            {
+                return ValueTask.FromResult<CaptureOutcome>(Failed(intent, Failure.Create(
+                    FailureCode.InvalidCaptureIntent,
+                    FailureCategory.Validation,
+                    FailureRecoverability.RetryNewIntent,
+                    "WindowsGraphicsCaptureAdapter.CropFrame",
+                    intent.RequestId,
+                    "The crop bounds exceed the frozen frame."), true, true));
+            }
+
+            var croppedResult = SoftwareBitmapCropper.Crop(
+                source,
+                intent.CropBoundsInSource,
+                Guid.NewGuid(),
+                source.Metadata.CapturedAt);
+            return ValueTask.FromResult<CaptureOutcome>(new CaptureOutcome.Succeeded(
+                intent.RequestId,
+                intent.SessionId,
+                source.Metadata.PixelWidth,
+                source.Metadata.PixelHeight,
+                intent.SourcePhysicalBounds,
+                intent.CropBoundsInSource,
+                source.Metadata.CapturedAt,
+                croppedResult,
+                Array.Empty<string>()));
+        }
+        catch (OperationCanceledException)
+        {
+            return ValueTask.FromResult<CaptureOutcome>(new CaptureOutcome.Cancelled(
+                intent.RequestId,
+                intent.SessionId,
+                "CancellationToken",
+                true,
+                true));
+        }
+        catch (Exception exception)
+        {
+            return ValueTask.FromResult<CaptureOutcome>(Failed(intent, Failure.Create(
+                FailureCode.UnexpectedFailure,
+                FailureCategory.Unexpected,
+                FailureRecoverability.RetryNewIntent,
+                "WindowsGraphicsCaptureAdapter.CropFrame",
+                intent.RequestId,
+                exception.GetType().Name,
+                nativeCode: exception.HResult), true, true));
         }
     }
 
@@ -225,4 +303,21 @@ public sealed class WindowsGraphicsCaptureAdapter : ICaptureService
             failure,
             cleanupCompleted,
             requiresNewIntent);
+
+    private static CaptureFrameOutcome.Failed FrameFailed(
+        CaptureIntent intent,
+        Failure failure,
+        bool cleanupCompleted,
+        bool requiresNewIntent) => new(
+            intent.RequestId,
+            intent.SessionId,
+            failure,
+            cleanupCompleted,
+            requiresNewIntent);
+
+    public void Dispose()
+    {
+        _captureItem = null;
+        GC.SuppressFinalize(this);
+    }
 }
