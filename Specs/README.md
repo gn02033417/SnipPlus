@@ -1,6 +1,6 @@
 # Specs
 
-Specifications define observable、testable behavior. They must implement accepted PRD without inventing product decisions or treating existing code as the source of truth.
+Specifications define observable、testable behavior. They implement accepted PRD without inventing product decisions or treating existing code as the source of truth.
 
 ## Effective Specification Baseline
 
@@ -15,8 +15,9 @@ The effective first-release baseline is the accepted `2026-07-27` revision:
 - [SPEC-0008 Capture Output](SPEC-0008-capture-output.md) — `Accepted v1.0`
 - [SPEC-0009 Annotation Capability](SPEC-0009-annotation-capability.md) — `Accepted v1.0`
 - [SPEC-0010 Feature Integration](SPEC-0010-feature-integration.md) — `Accepted v1.0`
+- [Specification Baseline Review](SPEC-BASELINE-REVIEW.md) — current acceptance record
 
-The earlier Specification Baseline Review remains a historical record. Where it conflicts with the accepted revision above, the accepted revision is normative.
+Earlier draft wording is historical only. Where an old review or Research file conflicts with the accepted specifications above, the accepted specifications are normative.
 
 ## Key Corrected Behavior
 
@@ -36,8 +37,8 @@ The earlier Specification Baseline Review remains a historical record. Where it 
 - Acceptance criteria describe user-visible or externally observable behavior.
 - Architecture and code may not redefine accepted Spec behavior.
 - Unknown product choices must be marked and escalated.
-- Do not create additional readiness or closure Specs merely because implementation is incomplete.
+- Do not create additional readiness or closure Specs because implementation is incomplete.
 
-## Next Review Activity
+## Current implementation relationship
 
-Update the existing requirements traceability／conformance matrix against current code and tests. Do not begin new feature coding while performing that review.
+`PRD/PRD-TRACEABILITY-MATRIX.md` is the current authority for mapping these Specs to code、tests and runtime evidence. The next implementation work follows that matrix; no additional Specification planning document is required.
