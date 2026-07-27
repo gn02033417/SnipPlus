@@ -4,154 +4,148 @@
 
 | Field | Value |
 | --- | --- |
-| Document ID | ADR-0006 |
+| Document ID | `ADR-0006` |
 | Title | Clipboard Integration |
-| Status | Accepted |
-| Decision Category | Clipboard / Platform Integration |
-| Version | 1.0 |
+| Status | `Accepted` |
+| Decision category | Clipboard／Platform Integration |
+| Version | `1.1` |
 | Owner | Repository owner |
-| Date proposed | 2026-07-26 |
-| Date reviewed | 2026-07-26 |
-| Date accepted | 2026-07-26 |
+| Date accepted | `2026-07-26` |
+| Last reviewed | `2026-07-27` |
 | Supersedes | None |
 | Superseded by | None |
-| Normative References | ADR-0002、ADR-0005、PRD-0005、PRD-0006、SPEC-0006、SPEC-0007、SPEC-0010、ARCH-0002、ARCH-0003、ARCH-0004、ARCH-0005、ADR-BASELINE |
-| Informative References | RESEARCH-TECH-CLIPBOARD-001 through RESEARCH-TECH-CLIPBOARD-052、official Windows DataTransfer Clipboard documentation |
+| Normative references | Accepted PRD／Specs、Architecture baseline、ADR-0002、ADR-0005 |
 
 ## Context
 
-The Clipboard path must deliver a completed immutable image without owning Capture、Rendering、Annotation、Output or Shared Workflow State. Research 29–80 accumulated official evidence and governance history but did not publish Clipboard content or create runtime evidence.
+SnipPlus v1 publishes Clipboard content only after an explicit user commitment:
 
-ADR-0005 now defines a canonical BGRA8 premultiplied `SoftwareBitmap`. The initial Clipboard path must be straightforward for WinUI 3、privacy-aware and independently testable.
+- Complete; or
+- Save after PNG creation succeeds.
 
-## Options Considered
+Clipboard publication is not triggered by PrintScreen、frame freeze、mouse release、selection adjustment、Annotation edits、Save As cancellation or Cancel.
+
+The Clipboard adapter must accept one immutable final rendered image without owning Capture、Selection、Annotation、PNG Output or shared workflow state.
+
+## Options considered
 
 ### WPF Clipboard wrapper
 
-Rejected because the accepted host is WinUI 3 and adding WPF solely for Clipboard would create an unnecessary framework dependency.
+Rejected because the accepted host is WinUI 3 and adding WPF only for Clipboard creates unnecessary framework coupling.
 
 ### WinRT DataPackage Clipboard
 
-Native Windows Runtime path aligned with WinUI 3. Supports bitmap streams、content options、history/roaming controls and flush semantics.
+Native Windows Runtime path aligned with WinUI 3. Supports bitmap streams、history／roaming controls and Flush semantics.
 
 ### Win32 OLE IDataObject
 
-Powerful multi-format and delayed-rendering model, but adds COM ownership and more complex format/lifetime handling than the first slice requires.
+Powerful multi-format model, but adds COM ownership and interoperability complexity before required consumer evidence exists.
 
 ### Raw Win32 Clipboard APIs
 
-Maximum control over CF_DIBV5 and registered PNG formats, but requires explicit open/close、global-memory ownership and contention handling. Deferred until compatibility evidence requires it.
+Maximum format control, but requires manual global-memory and contention handling and is not justified by current requirements.
 
-## Accepted Decision
+## Decision
 
-Use `Windows.ApplicationModel.DataTransfer.DataPackage` and `Clipboard.SetContentWithOptions` as the initial Clipboard adapter.
+Use `Windows.ApplicationModel.DataTransfer.DataPackage` and `Clipboard.SetContentWithOptions` as the v1 Clipboard adapter.
 
-1. Encode the immutable canonical result as an in-memory PNG stream.
-2. Publish that stream through `DataPackage.SetBitmap(RandomAccessStreamReference)`.
+1. Encode the immutable final result as an in-memory PNG stream.
+2. Publish through `DataPackage.SetBitmap(RandomAccessStreamReference)`.
 3. Set `RequestedOperation = Copy`.
-4. Use `ClipboardContentOptions` with:
-   - `IsAllowedInHistory = false` by default.
-   - `IsRoamable = false` by default.
-5. Call `Clipboard.SetContentWithOptions` from the WinUI dispatcher/UI apartment.
-6. If publication succeeds, call `Clipboard.Flush()` so content remains after application shutdown and the DataPackage is released from the source app.
-7. Treat a `false` publication result or Clipboard-in-use exception as contention, not success.
-8. Use a bounded retry policy owned by the Clipboard adapter: at most five attempts within one second, cancellation-aware, with increasing delays and no busy loop.
-9. Return a typed delivery result to Feature Coordination; the adapter must not mutate Shared State directly.
+4. Set `IsAllowedInHistory = false` by default.
+5. Set `IsRoamable = false` by default.
+6. Execute the required publication operation on the appropriate WinUI／Windows apartment.
+7. Call `Clipboard.Flush()` after successful publication so payload lifetime is independent of transient capture UI resources.
+8. Treat rejected publication or Clipboard contention as failure, never success.
+9. Apply a bounded、cancellable retry policy: at most five attempts within one second unless a later accepted contract supersedes that limit.
 10. Do not clear existing Clipboard content before a successful replacement.
+11. Return a typed delivery result containing Delivery ID、Session ID and Result ID.
+12. The adapter never mutates shared workflow state or declares the SnipPlus session complete.
 
-## Privacy Defaults
+## Commitment boundary
 
-- Clipboard History：disabled for SnipPlus-published image by default.
-- Cross-device roaming：disabled by default.
-- No application-specific private metadata, paths, window titles, account identifiers or source handles are placed in the DataPackage.
-- The user may later opt into history/roaming only through an Accepted product/settings change.
-- Clipboard is system-wide and cross-process; publication must be treated as intentional external disclosure.
+### Complete
 
-## Data and Lifetime Boundary
+```text
+User chooses Complete
+→ freeze current Selection／Annotation revisions
+→ render final image
+→ publish Clipboard
+→ on success cleanup and restore focus
+→ on recoverable failure return to Editing
+```
 
-- Input：immutable `ImageResult` from ADR-0005.
-- Publication payload：owned in-memory PNG stream reference.
-- The stream must remain valid through `SetContentWithOptions` and `Flush`.
-- After flush and completion, temporary stream resources are disposed.
-- The canonical SoftwareBitmap remains owned by Shared Result until workflow release.
-- Clipboard completion is independent of File Output completion.
+Complete creates no file.
 
-## Failure Categories
+### Save
 
-- `ClipboardBusy`
-- `PublicationRejected`
-- `EncodingFailed`
-- `InvalidResult`
-- `Cancelled`
-- `Unsupported`
-- `UnexpectedFailure`
+```text
+User chooses Save
+→ render final image
+→ Save As and PNG creation succeed
+→ publish the same Result ID to Clipboard
+→ only after Clipboard success may Save complete
+```
 
-A failure must preserve the completed image result so the user can retry or use Output. It must not report overall capture failure if capture and result creation already succeeded.
+Save As cancellation and PNG failure do not publish Clipboard.
 
-## Deferred Compatibility Path
+When Clipboard fails after PNG creation:
 
-If consumer verification shows that `DataPackage.SetBitmap` is insufficient for required applications, a later ADR may add a Win32 OLE adapter that publishes multiple equivalent formats, such as DIBV5 and a registered PNG format.
+- the workflow remains in Editing;
+- the failure is disclosed;
+- the current Editing state is preserved;
+- the file retention／rollback behavior remains an explicit unresolved product decision and must not be guessed by the adapter.
 
-That path is not implemented speculatively.
+## Privacy defaults
 
-## Verification Requirements
+- Clipboard History eligibility is disabled.
+- Cross-device roaming is disabled.
+- No private path、window title、account identifier、display handle or Annotation metadata is published.
+- Real Clipboard payloads are not committed as test evidence.
+- History or roaming opt-in requires a later explicit product/settings decision.
 
-- Publish and paste into at least two representative Windows consumers.
-- Alpha behavior through PNG/bitmap publication.
-- Application shutdown after flush.
-- History and roaming exclusion behavior where OS settings are enabled.
-- Clipboard contention and bounded retry.
-- Cancellation during retry.
-- Large image behavior and memory cleanup.
-- Clipboard success independent from Output failure and vice versa.
+## Ownership and lifetime
 
-## External Evidence
+- Input is one immutable canonical final image result.
+- The delivery request carries current Session ID and Result ID.
+- The PNG stream remains valid through publication and Flush.
+- Temporary stream resources are disposed after delivery outcome is known.
+- Recoverable failure may retain the final image through the Editing session for retry.
+- Completion or terminal cleanup disposes retained results according to the session owner.
+- A stale delivery outcome cannot advance a newer or cancelled session.
 
-| Source | Evidence used |
-| --- | --- |
-| [DataPackage.SetBitmap](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.datapackage.setbitmap) | Publishes a bitmap using a RandomAccessStreamReference. |
-| [Clipboard.SetContentWithOptions](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.clipboard.setcontentwithoptions) | Publishes DataPackage content with history/roaming options and reports contention as failure. |
-| [ClipboardContentOptions.IsAllowedInHistory](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.clipboardcontentoptions.isallowedinhistory) | Controls Clipboard History eligibility. |
-| [ClipboardContentOptions.IsRoamable](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.clipboardcontentoptions.isroamable) | Controls cross-device roaming eligibility. |
-| [Clipboard.Flush](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.clipboard.flush) | Releases DataPackage from the app and preserves content after shutdown. |
-| [Clipboard formats](https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats) | Multiple formats may be added later if interoperability evidence requires them. |
+## Failure categories
 
-## Trade-offs
+At minimum:
 
-### Benefits
+- Clipboard busy／contention;
+- publication rejected;
+- PNG stream encoding failed;
+- invalid or stale result identity;
+- cancellation;
+- unsupported platform behavior;
+- unexpected failure.
 
-- Native WinUI-compatible API.
-- Explicit privacy controls.
-- Simple lifecycle after `Flush`.
-- No WPF、OLE or raw-memory dependency in the initial slice.
-- Clear bounded retry and independent downstream failure.
+Failure handling does not overwrite the user’s previous Clipboard content unless the replacement has actually succeeded.
 
-### Costs
+## Verification requirements
 
-- Consumer compatibility depends on the WinRT bitmap publication path.
-- PNG encoding adds memory and CPU cost.
-- Advanced multi-format interoperability is Deferred.
-- Runtime apartment and contention behavior must be verified.
+- Successful publication and paste into representative Windows consumers.
+- Alpha behavior and PNG payload fidelity.
+- Flush lifetime after capture UI cleanup.
+- History and roaming defaults.
+- Bounded retry success、budget exhaustion and cancellation.
+- Large-image resource cleanup.
+- No publication before Complete or successful PNG creation in Save.
+- Recoverable failure returns to Editing with the same revisions.
+- Stale result／session callbacks cannot complete another session.
 
-## Review Record
+## Current implementation state
 
-| Field | Value |
-| --- | --- |
-| Reviewer | ChatGPT repository review |
-| Review date | 2026-07-26 |
-| Review result | Approved |
-| Open comments | Multi-format OLE publication deferred pending evidence |
-| Resolution | Selected the smallest native privacy-aware path and converted compatibility risk into verification |
-| Acceptance authority | Repository owner through explicit instruction to continue toward coding readiness |
+- WinRT DataPackage publication、PNG stream encoding、Flush、privacy defaults and bounded retry are implemented and covered by deterministic tests.
+- Current historical workflow invokes Clipboard immediately after mouse release, which is an incorrect product placement.
+- The adapter is a conforming reusable technical foundation; workflow integration must move it behind explicit Complete and Save commitments.
 
-## Implementation State
+## Deferred compatibility path
 
-| Artifact | Status |
-| --- | --- |
-| Adapter implementation | Not implemented |
-| Runtime verification | Not verified |
-| Coding authorized | No |
-
-## Non-goals
-
-This ADR does not read or clear Clipboard content、implement Clipboard History UI、publish private metadata、create code、or authorize Build／Run.
+A later verified consumer-compatibility problem may justify a superseding ADR for Win32 OLE or multi-format publication. That path is not implemented speculatively.
