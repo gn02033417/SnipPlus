@@ -38,6 +38,7 @@ Report before expanding scope if：
 
 - [x] Harden cancellation transition／cleanup paths and verify packaged `Start Capture → Cancel` runtime behavior.
 - [x] Run the Windows in-memory frame platform test with a resolvable Windows App Runtime 2.3 package graph and an actual display id.
+- [x] Add deterministic Clipboard adapter tests for busy retry success、retry budget boundary、cancellation and Flush/privacy options.
 - [ ] Decide whether to add file Output UI.
 - [ ] Define production logging/configuration needs from actual failures.
 - [ ] Decide final packaging、signing and distribution.

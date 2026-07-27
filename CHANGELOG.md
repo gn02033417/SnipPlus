@@ -41,6 +41,7 @@
 - Package manifest 改用 AppX 接受的 PNG logo assets，補上 `BackgroundColor` 與 `runFullTrust`，以符合 packaged WinUI 3 build validation。
 - 修正 `ResultReady → Cancelled` 狀態 transition，並補上 capture service、ResultReady presentation callback 與 Clipboard cancellation cleanup tests。
 - Windows platform test 改用 Windows App SDK 2.3 bootstrap 與 `DisplayArea.GetFromPoint` 取得實際 display id；未更換核准 package 版本。
+- Clipboard adapter 保留 production WinRT `SetContentWithOptions`／`Flush` default，新增 publisher／flush injection seam 以 deterministic 驗證 bounded retry 與 cancellation。
 
 ### Verified
 
@@ -53,8 +54,9 @@
 - Windows capture platform test 已建立為 `Platform`／`Capture`／`Interactive` category，未混入非互動測試。
 - Clipboard retry policy tests 已加入一般非互動測試集合；完整非互動測試目前 24 passed、0 failed、0 skipped。
 - Cancellation hardening tests 已驗證 capture `OperationCanceledException`、ResultReady callback cancellation、Clipboard cancellation 與 `ResultReady → Cancelled` legal transition。
+- Clipboard adapter filter 已驗證 busy retry success、retry budget boundary 與 retry cancellation：3 passed、0 failed、0 skipped；成功路徑只呼叫一次 `Flush()`，History／roaming 仍為 false。
 - Packaged runtime cancellation verification 已完成；`Start Capture → Cancel` 回到主畫面並回報 `Capture cancelled.`。
-- 完整非互動測試更新為 28 passed、0 failed、0 skipped。
+- 完整非互動測試更新為 31 passed、0 failed、0 skipped。
 - Windows platform test 已可用 `Platform`／`Capture`／`Interactive` filter 單獨執行；support check 與 in-memory monitor frame check 均 passed，0 failed、0 skipped。
 - Packaged runtime verification 已使用 public synthetic blank Paint fixture 完成 selection、monitor frame、crop、render、PNG encode、Clipboard publication 與成功狀態回報；未保存 desktop screenshot、Clipboard payload 或任何私人資料。
 - Application shell 已通過 packaged WinUI 3 Release x64 build；publish 僅有 `mspdbcmf.exe` 缺少造成的 symbol generation warning，未影響 package build 或 runtime verification。

@@ -63,7 +63,7 @@ Exit criteria：
 
 狀態：`In progress`
 
-進入條件已滿足。目前已完成第一個 hardening slice：cancellation transition／cleanup tests 與 packaged `Start Capture → Cancel` runtime verification。
+進入條件已滿足。目前已完成 hardening slices：cancellation transition／cleanup、packaged `Start Capture → Cancel` runtime verification、Windows platform frame verification，以及 Clipboard adapter bounded retry／cancellation tests。
 
 Windows in-memory frame platform test 現已透過 Windows App SDK 2.3 bootstrap 建立 package graph，並以實際 primary display id 執行成功。下一個 bounded slice 尚未選定；不得因目前測試全綠而擴張至明確 non-goal。
 
