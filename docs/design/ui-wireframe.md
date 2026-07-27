@@ -2,11 +2,9 @@
 
 狀態：`Accepted behavioral wireframe`
 
-This low-fidelity wireframe records the accepted v1 screen responsibilities and interaction order. Exact visual styling、spacing、icons and animation remain implementation design choices unless constrained by PRD／Specs.
+This low-fidelity wireframe records accepted v1 screen responsibilities and interaction order. Exact visual styling、spacing、icons and animation remain implementation design choices unless constrained by PRD／Specs.
 
 ## 1. Resident Main-window Responsibility
-
-The user manually starts SnipPlus. The main window provides at least:
 
 ```text
 +--------------------------------------------------+
@@ -21,20 +19,17 @@ The user manually starts SnipPlus. The main window provides at least:
 +--------------------------------------------------+
 ```
 
-Behavior:
-
-- The in-app Start Capture command is secondary or diagnostic, not the primary v1 entry.
 - MainWindow `X` directly exits SnipPlus.
 - `X` does not hide the application to the System Tray.
-- Application exit releases PrintScreen takeover and leaves no hidden resident process.
-- If a System Tray surface exists, its explicit Exit command uses the same shutdown path.
+- Exit releases PrintScreen takeover and leaves no hidden process.
+- A tray Exit command, if present, uses the same path.
 
 ## 2. Initial Capture Presentation
 
-After enabled PrintScreen:
+After enabled PrintScreen and successful capacity validation:
 
 ```text
-All connected displays
+All connected supported displays
 ┌──────────────────────────────┐ ┌──────────────────────────────┐
 │ Frozen display content       │ │ Frozen display content       │
 │ covered by translucent mask  │ │ covered by translucent mask  │
@@ -44,13 +39,9 @@ All connected displays
 └──────────────────────────────┘ └──────────────────────────────┘
 ```
 
-Requirements:
-
-- one frozen frame exists for every connected display before interaction;
-- all displays participate in one logical Virtual Desktop;
-- the pointer is a crosshair throughout the selectable area;
-- SnipPlus normal windows are excluded from frozen content;
-- Esc cancels the complete capture session.
+- All-display Selection becomes interactive within p95 `500 ms` Standard or `1,000 ms` Maximum.
+- Configurations exceeding the accepted capacity envelope show an actionable error before this surface appears.
+- Partial display capture is not shown.
 
 ## 3. Dragging a Cross-monitor Selection
 
@@ -66,21 +57,17 @@ Display A                         Display B
 └──────────────────────────────┘ └──────────────────────────────┘
 ```
 
-- One rectangular selection may cross display boundaries.
-- The selected interior shows original frozen content without the mask.
-- The exterior remains dimmed.
-- Mouse release locks the selection and does not create output.
-- A physical gap between displays has no source image. In final output, that part of the rectangle is transparent.
+- One rectangular Selection may cross display boundaries.
+- A physical display gap has no source image and becomes transparent in final output.
+- Mouse release validates size、locks Selection and creates no output.
 
 ## 4. Locked Selection and Function Bar
-
-After a valid mouse release:
 
 ```text
 ┌───────────────────────────────────────────────┐
 │                                               │
 │     ┌─────────────────────────────────┐       │
-│     │         locked selection        │       │
+│     │         locked Selection        │       │
 │     │   annotations are drawn here    │       │
 │     └─────────────────────────────────┘       │
 │       ◉ handles on corners and edges          │
@@ -92,88 +79,87 @@ After a valid mouse release:
 └───────────────────────────────────────────────┘
 ```
 
-Function-bar placement:
+- Prefer the function bar below Selection; move above when required.
+- Keep it inside an available display work area.
+- Pointer and keyboard interaction maintain p95 frame time `≤ 33 ms` and visible response p95 `≤ 100 ms`.
 
-- Prefer below the selection.
-- Move above when there is insufficient space.
-- Remain inside an available display work area.
+## 5. Keyboard-only Editing Model
 
-Before commitment the user can:
+Scope begins after a valid `SelectionLocked`; initial crosshair Selection remains pointer-driven.
 
-- drag inside the selection to move it;
-- drag four edges or four corners to resize;
-- drag elsewhere to replace it;
-- create or edit annotations;
-- perform no annotation action and choose Complete;
-- choose Save or Cancel.
+```text
+F6               switch Function Bar / Canvas zones
+Tab / Shift+Tab  navigate controls, Selection, objects and handles
+V R A H T M N    Selection / Rectangle / Arrow / Highlighter / Text / Mosaic / Number
+Ctrl+Z / Ctrl+Y  Undo / Redo
+Ctrl+S           Save
+Ctrl+Enter       Complete
+Delete           delete selected annotation
+Arrow            move or resize by 1 pixel
+Shift+Arrow      move or resize by 10 pixels
+```
 
-## 5. Annotation Controls
+Keyboard tool activation creates and focuses a deterministic default object:
 
-Required v1 tools:
+- Rectangle and Mosaic／Blur: centered default rectangle.
+- Arrow／Line: centered horizontal segment.
+- Highlighter: short centered horizontal stroke.
+- Text: focused text box.
+- Numbered Marker: marker at Selection center.
 
-| Tool | Required behavior |
-| --- | --- |
-| Selection | Select、move、resize or delete applicable annotation objects; adjust current capture region. |
-| Rectangle | Outline with color and line thickness. |
-| Arrow／Line | End arrow or no-arrow straight-line mode. |
-| Highlighter | Semi-transparent freehand stroke with rounded ends. |
-| Text | Microsoft JhengHei by default; content edit、move、color、font size and bold. |
-| Mosaic／Blur | One rectangular privacy tool with mode switch stored per object. |
-| Numbered Marker | Solid circular marker、automatic numbering、configurable next number、color and size. |
-| Undo／Redo | Annotation changes only; selection geometry changes are excluded. |
-| Color | Applies to compatible objects. |
-| Thickness／Size | Contextual control for line、text or marker size. |
+The first Esc closes transient picker、popover、text editor or uncommitted creation. Esc from stable Editing cancels the capture session.
 
-Annotation objects remain anchored to Frozen Virtual Desktop coordinates. Changing the capture selection does not scale or move existing annotation objects. Output clips objects to the current selection without deleting clipped data.
+Visible focus、High Contrast、200% scaling、Narrator names／states、Chinese IME and no keyboard trap are required.
 
 ## 6. Complete Path
 
 ```text
-[Complete]
-→ lock current Selection and Annotation revisions
-→ render selected source plus visible annotations
-→ use transparent pixels for physical display gaps
+[Complete] or Ctrl+Enter
+→ validate output dimensions
+→ render source + annotations + transparent gap pixels
+→ if still running after 300 ms, show non-blocking progress
 → write Clipboard
-→ on success close overlays and function bar
+→ close capture UI
 → restore the pre-capture application
 → no success notification
 ```
 
-On recoverable Clipboard or render failure, remain in Editing、preserve user work and show an actionable retry／cancel path.
+Latency targets depend on output pixels: p95 `1.5 s`、`4 s` or `8 s`.
 
 ## 7. Save Path
 
 ```text
-[Save]
-→ lock current revisions
-→ render final image with transparent display-gap pixels
+[Save] or Ctrl+S
+→ validate output dimensions
+→ render final image
 → Windows Save As opens in Downloads by default
 → propose SnipPlus_yyyy-MM-dd_HHmmss.png
 → user may change destination and filename
-→ write PNG
-→ retain the PNG
+→ write and retain PNG
+→ if post-dialog work remains after 300 ms, show non-blocking progress
 → write the same final image to Clipboard
 → on both successes close capture UI and restore focus
 ```
 
-- Save As cancellation returns to Editing without an error.
+- Save As cancellation returns to Editing and restores focus.
 - PNG failure leaves Editing open and does not update Clipboard.
-- Clipboard failure after PNG creation leaves Editing open and retains the PNG at the selected destination.
-- Feedback states that file saving succeeded but Clipboard delivery failed.
+- Clipboard failure after PNG creation leaves Editing open、retains PNG and reports the partial outcome.
+- Save latency after path confirmation uses p95 `2 s`、`6 s` or `12 s` tiers.
 
-## 8. Cancel Path
+## 8. Cancel and Exit
+
+### Capture Cancel
 
 ```text
-Esc or [Cancel]
+Esc from stable stage or [Cancel]
 → create no file
 → write no Clipboard
-→ close all overlays and function bars
-→ dispose capture-session resources
-→ restore the pre-capture application
-→ do not automatically show the SnipPlus main window
+→ close capture UI
+→ dispose session resources
+→ restore pre-capture application
 ```
 
-## 9. Application Exit Path
+### Application Exit
 
 ```text
 MainWindow [X] or explicit Exit
@@ -183,14 +169,22 @@ MainWindow [X] or explicit Exit
 → terminate SnipPlus
 ```
 
-This is not capture Cancel and is not hide-to-tray behavior.
+## 9. Capacity Feedback
+
+Accepted limits:
+
+- `1`–`4` logical displays;
+- each `≤ 7,680 × 4,320`;
+- total source pixels `≤ 66,355,200`;
+- Virtual Desktop width／height each `≤ 16,384`;
+- final Selection area `≤ 67,108,864` pixels with dimension caps.
+
+An over-limit message states the supported boundary、does not expose private display identifiers and returns SnipPlus to resident readiness after cleanup.
 
 ## 10. Deferred UI Capabilities
 
-Do not include in v1:
-
 - opaque freehand pen;
-- ellipse;
+- ellipse Annotation;
 - pin image to desktop;
 - OCR;
 - capture history;
@@ -198,10 +192,6 @@ Do not include in v1:
 - additional save formats;
 - font-family selection、italic、underline or text background.
 
-## 11. Remaining Open Design Decisions
+## 11. Remaining Visual Design Freedom
 
-- Exact visual styling beyond accepted behavior.
-- Final keyboard-only Annotation interaction standard.
-- Quantitative performance and maximum-display limits after measurement.
-
-System Tray close behavior、transparent gap output、Downloads default and PNG retention are resolved and must not be treated as open.
+Exact visual theme、icons、spacing、animation and progress-indicator styling remain implementation design choices. Product behavior、capacity、performance thresholds and keyboard operation are fixed and are not open design decisions.
