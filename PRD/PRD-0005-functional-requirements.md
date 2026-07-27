@@ -7,7 +7,7 @@
 | Field | Value |
 | --- | --- |
 | Document ID | `PRD-0005` |
-| Version | `1.1` |
+| Version | `1.2` |
 | Status | `Accepted` |
 | Product authority | Repository owner through explicit product decisions |
 | Last reviewed | `2026-07-27` |
@@ -20,15 +20,17 @@
 - Requirements describe observable product capability, not implementation APIs.
 - Specs、Architecture、code and tests must trace to these IDs.
 
-## 3. Capture Entry and Residency
+## 3. Capture Entry、Residency and Exit
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| `FR-001` | The user can manually start SnipPlus and keep it resident in the background. | `Must` |
+| `FR-001` | The user can manually start SnipPlus and keep it resident while the application is running. | `Must` |
 | `FR-002` | SnipPlus provides a setting to enable or disable PrintScreen takeover. | `Must` |
 | `FR-003` | When takeover is enabled and SnipPlus is resident, pressing PrintScreen starts one capture session. | `Must` |
-| `FR-004` | When takeover is disabled, SnipPlus does not intercept PrintScreen. | `Must` |
+| `FR-004` | When takeover is disabled or SnipPlus exits, SnipPlus does not intercept PrintScreen. | `Must` |
 | `FR-005` | An in-app capture command may exist as a secondary or diagnostic entry but is not the primary v1 entry. | `Must` |
+| `FR-046` | Closing MainWindow with `X` directly exits SnipPlus, releases PrintScreen takeover and does not hide the application to the System Tray. | `Must` |
+| `FR-047` | If a System Tray surface exists, its explicit Exit action uses the same application-exit and PrintScreen-release path. | `Must` |
 
 ## 4. Multi-display Freeze and Selection
 
@@ -41,6 +43,7 @@
 | `FR-010` | During drag, the selected region shows the original frozen content without the mask while the outside region remains dimmed. | `Must` |
 | `FR-011` | Releasing the mouse locks the selection but does not complete capture or write Clipboard. | `Must` |
 | `FR-012` | Before output, the user can move the locked selection、resize it from edges or corners、or drag elsewhere to create a new selection. | `Must` |
+| `FR-048` | Final-image pixels corresponding to physical non-display gaps inside a cross-monitor selection are transparent. | `Must` |
 
 ## 5. Editing and Confirmation
 
@@ -79,11 +82,13 @@
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | `FR-030` | Complete renders the current selection and annotations、writes the final image to Clipboard and ends only after Clipboard delivery succeeds. | `Must` |
-| `FR-031` | Save opens Windows Save As、supports PNG only in v1 and proposes `SnipPlus_yyyy-MM-dd_HHmmss.png`. | `Must` |
+| `FR-031` | Save opens Windows Save As、supports PNG only in v1、initially proposes the Downloads folder and proposes `SnipPlus_yyyy-MM-dd_HHmmss.png`. | `Must` |
 | `FR-032` | A successful Save writes the same final image to both the selected PNG file and Clipboard, then ends the session. | `Must` |
 | `FR-033` | Cancelling Save As returns to the editing stage without cancelling the capture session. | `Must` |
 | `FR-034` | Save or Clipboard failure leaves the editing stage open and provides an actionable error. | `Must` |
 | `FR-035` | Successful completion does not show a success notification. | `Must` |
+| `FR-049` | The user may change the Save As folder and filename from their proposed defaults. | `Must` |
+| `FR-050` | If PNG creation succeeds but later Clipboard delivery fails, SnipPlus retains the created PNG at the selected destination、returns to Editing and reports the Clipboard failure. | `Must` |
 
 ## 9. Cancel and Focus Restoration
 
@@ -122,14 +127,14 @@
 
 | Capability | Requirement IDs |
 | --- | --- |
-| Entry／residency | `FR-001` – `FR-005` |
-| Multi-display selection | `FR-006` – `FR-012` |
+| Entry／residency／exit | `FR-001` – `FR-005`、`FR-046` – `FR-047` |
+| Multi-display selection／gap output | `FR-006` – `FR-012`、`FR-048` |
 | Editing confirmation | `FR-013` – `FR-016` |
 | Annotation tools | `FR-017` – `FR-025` |
 | Coordinates／clipping | `FR-026` – `FR-029` |
-| Clipboard／file output | `FR-030` – `FR-035` |
+| Clipboard／file output | `FR-030` – `FR-035`、`FR-049` – `FR-050` |
 | Cancel／focus | `FR-036` – `FR-043` |
 | Error feedback | `FR-044` – `FR-045` |
 | Deferred | `FR-D01` – `FR-D08` |
 
-The previous `FR-001`–`FR-011` draft wording is superseded by this accepted v1.1 requirement set.
+The previous `FR-001`–`FR-045` v1.1 wording remains valid except where superseded or extended by `FR-046`–`FR-050` in this accepted v1.2 requirement set.
