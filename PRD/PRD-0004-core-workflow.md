@@ -7,7 +7,7 @@
 | Field | Value |
 | --- | --- |
 | Document ID | `PRD-0004` |
-| Version | `1.2` |
+| Version | `1.3` |
 | Status | `Accepted` |
 | Product authority | Repository owner through explicit product decisions |
 | Last reviewed | `2026-07-27` |
@@ -23,21 +23,24 @@ User manually starts SnipPlus
 → User enables PrintScreen takeover
 → User presses PrintScreen
 → Preserve the current foreground-work context
+→ Validate the supported display envelope
 → Exclude SnipPlus windows from the capture source
-→ Freeze all connected displays for one capture session
-→ Present one continuous Virtual Desktop selection canvas
-→ User creates a cross-monitor rectangular selection
-→ Mouse release locks the selection
-→ Show the editing／confirmation function bar
-→ User may edit annotations or perform no annotation action
+→ Freeze all connected supported displays for one capture session
+→ Present one continuous Virtual Desktop Selection canvas
+→ User creates a cross-monitor rectangular Selection
+→ Mouse release validates and locks the Selection
+→ Show the Editing／confirmation function bar
+→ User may edit annotations by pointer or keyboard, or perform no Annotation action
 → User chooses Complete、Save or Cancel
 ```
 
 ### Complete path
 
 ```text
-Render the current selection and annotations
+Validate final Selection dimensions
+→ Render the current Selection and annotations
 → Represent non-display gaps as transparent pixels
+→ If still running after 300 ms, show non-blocking progress
 → Write the final image to Clipboard
 → Close all overlays and function bars
 → Restore the pre-capture foreground application and focus
@@ -47,17 +50,19 @@ Render the current selection and annotations
 ### Save path
 
 ```text
-Render the current selection and annotations
+Validate final Selection dimensions
+→ Render the current Selection and annotations
 → Represent non-display gaps as transparent pixels
 → Open Windows Save As with Downloads as the initial folder
-→ Save PNG
+→ Save and retain PNG
+→ If post-dialog work remains after 300 ms, show non-blocking progress
 → Write that same final image to Clipboard
-→ Close all overlays and function bars
+→ Close all overlays and function bars only after Clipboard success
 → Restore the pre-capture foreground application and focus
 → End the session without a success notification
 ```
 
-If Save As is cancelled, return to the editing stage. If PNG creation fails, remain in Editing and do not update Clipboard. If PNG creation succeeds but Clipboard delivery fails, retain the PNG at the user-selected destination, remain in Editing and show an actionable Clipboard error. The default Save As destination is the user’s Downloads folder, but the user may choose another folder.
+If Save As is cancelled, return to Editing. If PNG creation fails, remain in Editing and do not update Clipboard. If PNG creation succeeds but Clipboard delivery fails, retain the PNG at the user-selected destination、remain in Editing、restore the relevant keyboard focus context and show an actionable Clipboard error.
 
 ### Cancel path
 
@@ -78,100 +83,127 @@ Discard the current capture session
 - When takeover is disabled, SnipPlus must not intercept PrintScreen.
 - PrintScreen is the primary v1 capture entry when takeover is enabled.
 - An in-app Start Capture command may remain as a diagnostic or secondary entry, but it is not the primary product workflow.
-- Closing the MainWindow with `X` directly exits SnipPlus; it does not hide the application to the System Tray.
+- Closing MainWindow with `X` directly exits SnipPlus; it does not hide the application to the System Tray.
 - Application exit releases PrintScreen takeover immediately and leaves no hidden resident process.
-- If a System Tray surface is present, its explicit Exit action uses the same shutdown path. A separate close-to-tray behavior is not part of v1.
+- If a System Tray surface is present, its explicit Exit action uses the same shutdown path.
 
-## 4. Capture and Selection Experience
+## 4. Supported Capacity and Capture Experience
+
+The supported v1 envelope is:
+
+- `1`–`4` active logical desktop display surfaces;
+- each display no larger than `7,680 × 4,320` physical pixels;
+- total active source pixels no greater than `66,355,200`;
+- Virtual Desktop width and height each no greater than `16,384` physical pixels;
+- final Selection width and height each no greater than `16,384` pixels;
+- final Selection area no greater than `67,108,864` pixels.
+
+Transparent non-display gaps count toward final Selection area. Mirrored outputs resolving to one logical surface count once.
 
 When PrintScreen is accepted:
 
 1. SnipPlus must not present its normal main window.
-2. SnipPlus windows must not appear in the frozen capture source.
-3. All connected displays are frozen for the same capture session.
-4. Every display is covered by a semi-transparent mask.
-5. The pointer changes to a crosshair across the selectable Virtual Desktop.
-6. The user may create one rectangular selection spanning multiple displays.
-7. During drag, the region outside the selection remains dimmed and the region inside the selection shows the original frozen content without the mask.
-8. Mouse release locks the selection; it does not complete the capture and does not write Clipboard.
-9. Before Complete or Save, the user can move the selection、resize it from edges or corners、or drag elsewhere to create a new selection.
+2. The complete display topology is validated before interactive Selection.
+3. SnipPlus windows must not appear in the frozen capture source.
+4. All connected supported displays are frozen for the same capture session.
+5. Every display is covered by a semi-transparent mask.
+6. The pointer changes to a crosshair across the selectable Virtual Desktop.
+7. The user may create one rectangular Selection spanning multiple displays.
+8. During drag, the region outside the Selection remains dimmed and the region inside shows original frozen content without the mask.
+9. Mouse release validates and locks the Selection; it does not complete capture and does not write Clipboard.
+10. Before Complete or Save, the user can move the Selection、resize it from edges or corners、or replace it.
 
-The user-visible Virtual Desktop is one continuous coordinate space. Implementation may retain separate per-display frozen frames, but selection、annotations and final composition must behave as one session canvas.
+When the topology or Selection exceeds any accepted limit:
 
-When a rectangular selection crosses a physical gap between irregularly arranged displays, the gap contains no captured desktop pixels. The corresponding final-image pixels are transparent (`alpha = 0`).
+- do not omit、downscale or partially capture displays;
+- fail before interactive Selection or lock, as applicable;
+- release partial resources;
+- restore the pre-capture work context;
+- provide an actionable supported-limit message;
+- return to resident readiness.
+
+A physical gap between irregularly arranged displays contains no captured pixels. Corresponding final-image pixels are transparent (`alpha = 0`).
 
 ## 5. Editing and Confirmation Stage
 
-The editing／confirmation stage always appears after a valid selection is locked.
+The Editing／confirmation stage always appears after a valid Selection is locked.
 
 Annotation actions are optional; the stage itself is not optional. The user can immediately press Complete to produce an unannotated result.
 
-### Required v1 controls
+Required v1 controls:
 
-- Complete.
-- Save.
-- Cancel.
-- Undo and Redo.
-- Selection move、edge／corner resize and reselection.
-- Rectangle.
-- Arrow with a no-arrow line mode.
-- Highlighter.
-- Text.
-- Mosaic／Blur mode switch.
-- Numbered marker.
-- Color selection.
-- Line thickness.
+- Complete、Save and Cancel;
+- Undo and Redo;
+- Selection move、edge／corner resize and reselection;
+- Rectangle;
+- Arrow with no-arrow line mode;
+- Highlighter;
+- Text;
+- Mosaic／Blur mode switch;
+- Numbered Marker;
+- Color selection;
+- contextual thickness or size.
 
-### Deferred from v1
+The function bar appears below the Selection when space permits and moves above it when necessary to remain visible.
 
-- Opaque freehand pen.
-- Ellipse.
-- Pin image to desktop.
-- OCR.
-- Capture history.
-- Delayed capture.
+## 6. Keyboard-only Editing
 
-The function bar should appear below the selection when space permits and move above it when necessary to remain visible within an available display work area.
+The complete keyboard-only v1 scope begins after `SelectionLocked`. Initial crosshair Selection remains pointer-driven.
 
-## 6. Annotation Product Rules
+From `SelectionLocked` onward, the user can without a pointer:
 
-- All annotation objects are stored in Frozen Virtual Desktop coordinates.
-- Annotation is only rendered into the selected output bounds.
-- Content outside the current selection is clipped from output but the object is not immediately deleted.
-- Resizing or moving the selection does not scale or relocate existing annotation objects.
-- Restoring a larger selection can make previously clipped object portions visible again.
-- Created objects can be selected、moved、resized、restyled and deleted where applicable.
-- Undo／Redo covers annotation creation、deletion、movement、resize、content edits and style changes.
-- Selection movement and resizing are not part of the annotation Undo／Redo history.
+- navigate Function Bar and Canvas zones with `F6`;
+- navigate controls、Selection、objects and handles with `Tab`／`Shift+Tab`;
+- select tools with `V/R/A/H/T/M/N` when text entry is not active;
+- create every required Annotation object using deterministic default placement;
+- move Selection or objects by `1` pixel with Arrow keys and `10` pixels with Shift+Arrow;
+- resize through focused handles using the same increments;
+- edit text with normal Windows behavior and Chinese IME;
+- change supported color、thickness、size、mode、bold and number values;
+- Delete、Undo、Redo、Save、Complete and Cancel;
+- return predictably from Save As、pickers、popovers and failures without a keyboard trap.
 
-## 7. Required Annotation Behavior
+The first Esc closes or abandons transient picker、popover、text editor or uncommitted creation state. Esc from stable Editing cancels the complete capture session.
+
+Visible focus、High Contrast、200% scaling and Narrator-readable names／states are required.
+
+## 7. Annotation Product Rules
+
+- All Annotation objects are stored in Frozen Virtual Desktop physical-pixel coordinates.
+- Annotation is rendered only into selected output bounds.
+- Content outside the current Selection is clipped but not deleted.
+- Resizing or moving Selection does not scale or relocate existing Annotation objects.
+- Restoring a larger Selection can reveal previously clipped portions.
+- Applicable objects can be selected、moved、resized、restyled and deleted by pointer and keyboard.
+- Undo／Redo covers Annotation creation、deletion、movement、resize、content edits and style changes.
+- Selection geometry changes are not part of Annotation Undo／Redo history.
+
+## 8. Required Annotation Behavior
 
 ### Rectangle
 
-Creates an editable rectangular outline using the selected color and line thickness.
+Creates an editable rectangular outline. Keyboard activation creates a deterministic centered rectangle.
 
 ### Arrow／Line
 
-Creates an editable line. The end style supports at least:
-
-- arrow at the end;
-- no arrow at either end.
+Creates an editable line with end-arrow or no-arrow mode. Keyboard activation creates a centered horizontal segment.
 
 ### Highlighter
 
-Creates a semi-transparent freehand stroke with rounded ends. The general opaque freehand pen remains deferred.
+Creates a semi-transparent freehand stroke with rounded ends. Keyboard activation creates a short centered horizontal highlighter stroke.
 
 ### Text
 
-- Click inside the selection to enter text.
+- Pointer click or keyboard activation begins text entry.
 - Existing text can be moved and edited.
 - Color、font size and bold are editable.
 - Default font is Microsoft JhengHei (`微軟正黑體`).
+- Chinese IME input is supported.
 - Font selection、italic、underline and text background are deferred.
 
 ### Mosaic／Blur
 
-One privacy tool switches between Mosaic and Blur. The user applies the effect with a rectangular region, not a freehand brush.
+One privacy tool switches between Mosaic and Blur and creates a rectangular region. Keyboard activation creates a deterministic centered region.
 
 ### Numbered Marker
 
@@ -179,59 +211,75 @@ One privacy tool switches between Mosaic and Blur. The user applies the effect w
 - Deleting a marker does not renumber remaining markers.
 - The next starting number can be changed.
 - Color and size are editable.
-- Default appearance is a solid circular background with a centered number.
+- Keyboard activation places the marker at Selection center.
 
-## 8. Output Rules
+## 9. Quantitative Quality Targets
+
+### Performance
+
+- PrintScreen accepted → interactive all-display Selection: p95 `≤ 500 ms` Standard、`≤ 1,000 ms` Maximum.
+- Selection／Annotation frame time: p95 `≤ 33 ms`.
+- Discrete input → visible response: p95 `≤ 100 ms`.
+- Complete p95 tiers: `≤ 1.5 s`、`4 s`、`8 s`.
+- Save after Save As confirmation p95 tiers: `≤ 2 s`、`6 s`、`12 s`.
+- A still-running commit displays progress after `300 ms`.
+
+### Memory and measurement
+
+- Idle private working set `≤ 250 MB`.
+- Maximum-envelope peak `≤ 2.0 GB`.
+- Within `10 seconds` after cleanup, return to idle baseline plus `150 MB` or less.
+- After `20` Standard sessions, retained growth `≤ 50 MB`.
+- Verification uses Release x64、no debugger、3 warm-ups and at least 30 measured runs; report p50、p95 and maximum.
+
+Detailed profiles and output-size classes are normative in PRD-0006.
+
+## 10. Output Rules
 
 ### Complete
 
 - Writes the final image to Clipboard.
 - Does not create a file.
-- Ends the workflow only after Clipboard delivery succeeds.
-- Non-display gaps inside the selected rectangle are transparent.
+- Ends only after Clipboard succeeds.
+- Preserves transparent non-display gaps.
 
 ### Save
 
-- First-release format is PNG only.
-- Save As opens each time.
-- Save As initially opens the Downloads folder.
-- Default filename format is `SnipPlus_yyyy-MM-dd_HHmmss.png`.
-- The user may change the destination and filename.
-- A successful Save also writes the same final image to Clipboard.
-- Cancelling Save As returns to editing.
-- A PNG save failure does not close the editor and does not update Clipboard.
-- If PNG succeeds but Clipboard fails, the file is retained, the editor remains open and the Clipboard failure is reported.
+- PNG only.
+- Save As opens each time in Downloads by default.
+- Default filename is `SnipPlus_yyyy-MM-dd_HHmmss.png`.
+- The user may change destination and filename.
+- Successful Save also writes the same final image to Clipboard.
+- Save As cancellation returns to Editing.
+- PNG failure leaves Editing open and does not update Clipboard.
+- PNG success followed by Clipboard failure retains the file and Editing state.
 
-## 9. Cancellation and Focus Restoration
+## 11. Cancellation and Focus Restoration
 
-- `Esc` before selection cancels the entire session.
-- `Esc` during drag cancels the current drag and ends the entire session.
-- `Esc` after the function bar appears cancels the entire session.
+- Esc before Selection cancels the entire session.
+- Esc during drag cancels the drag and session.
+- Esc first closes transient Editing state; Esc from stable Editing cancels the session.
 - Cancel never writes Clipboard or creates a file.
 - Complete、Save success and Cancel close every capture overlay and function bar.
-- Focus returns to the application that was active before PrintScreen.
-- SnipPlus does not automatically return to or show its main window.
+- Focus returns to the application active before PrintScreen.
+- SnipPlus does not automatically show MainWindow after the session.
 
-## 10. Explicit Product Boundaries
+## 12. Explicit Product Boundaries
 
 The following previous assumptions are superseded:
 
-- In-app Start Capture is not the primary v1 entry.
-- Single-monitor selection is not the v1 product scope.
-- Cross-monitor selection is not a deferred non-goal.
-- Mouse release does not complete capture.
-- Annotation is not merely an optional handoff after capture completion.
-- Clipboard is not written immediately after region selection.
-- Closing MainWindow does not hide SnipPlus to the System Tray.
-- Non-display gaps are not filled with arbitrary captured or opaque pixels.
-- An already-created PNG is not rolled back after a later Clipboard failure.
+- In-app Start Capture as primary entry.
+- Single-monitor Selection.
+- Mouse release completing capture.
+- Annotation as optional post-capture handoff.
+- Immediate Clipboard after region Selection.
+- MainWindow close-to-tray.
+- Opaque or fabricated display-gap pixels.
+- PNG rollback after later Clipboard failure.
+- Unlimited or partial display support.
+- Undefined quantitative performance and memory acceptance.
+- Pointer-only Annotation acceptance.
 
-## 11. Remaining Product Questions
+## 13. Remaining Design Freedom
 
-The following details remain intentionally unresolved and must not be guessed:
-
-- Visual styling beyond the fixed interaction behavior.
-- Quantitative latency targets.
-- Final keyboard-only annotation acceptance scope.
-
-These questions require explicit product decisions before their affected implementation slice begins.
+Exact visual theme、icons、spacing、animation and progress-indicator styling remain implementation design choices. Product behavior、capacity、performance and keyboard acceptance are finalized and must not be guessed or silently relaxed.
