@@ -2,45 +2,83 @@
 
 狀態：`Accepted`
 
-## 1. 目的
+## 1. Purpose
 
-定義 SnipPlus 文件 Repository 在產品實作開始前必須具備的最小可維護基線。
+Define the minimum maintainable documentation baseline for the SnipPlus Repository throughout product development. This Spec governs document ownership and navigation; it does not define screenshot product behavior.
 
 ## 2. Scope
 
-本 Spec 涵蓋文件入口、PRD、Specs、Architecture、ADR、指南、協作文件、roadmap、changelog 與 todo 的責任分界。
+This Spec covers:
 
-本 Spec 不定義任何截圖或其他應用程式功能。
+- Repository entry points;
+- PRD、Specs、Architecture and ADR responsibility boundaries;
+- implementation and conformance evidence navigation;
+- guides、Roadmap、Changelog and TODO responsibilities;
+- explicit treatment of historical and superseded documents;
+- documentation anti-proliferation rules.
 
 ## 3. Requirements
 
-### DOC-001 文件入口
+### DOC-001 — Clear entry points
 
-使用者可以從根目錄 `README.md` 或 `docs/index.md` 找到所有主要文件區域。
+`README.md` and `docs/index.md` must lead to the current accepted product、behavior、Architecture、contracts、conformance and development sources.
 
-### DOC-002 需求與規格分離
+### DOC-002 — Responsibility separation
 
-產品目標與範圍放在 `PRD/`；可驗收行為放在 `Specs/`；兩者不得只靠口頭同步。
+- Product intent and scope belong in `PRD/`.
+- Observable behavior and acceptance criteria belong in `Specs/`.
+- Responsibility and dependency boundaries belong in `Architecture/`.
+- Durable technology decisions belong in `Architecture/adr/`.
+- Implementation status belongs in code、tests、`CHANGELOG.md` and the existing conformance matrix.
 
-### DOC-003 架構與決策可追溯
+### DOC-003 — Current source hierarchy
 
-系統邊界與技術責任放在 `Architecture/`；有長期取捨的決策必須在 `Architecture/adr/` 有可連結的 ADR。
+Accepted PRD／Specs／Architecture and ADRs are normative. Existing code and historical Research are evidence only and do not override accepted behavior.
 
-### DOC-004 未知內容可辨識
+### DOC-004 — Unknown behavior remains explicit
 
-任何尚未確認的內容都使用 `TBD`、`Proposal` 或 `Assumption` 標示，不能用肯定語氣偽裝成已核准需求。
+Unresolved user-visible behavior must be identified as an Open Decision. Implementation must not silently turn an unknown into a product rule.
 
-### DOC-005 命名一致
+### DOC-005 — Historical documents are labeled
 
-所有新 Markdown 文件遵守 [Markdown naming rules](../docs/standards/markdown-naming.md)，並更新對應 index。
+A historical or superseded document must state that status and link to its current replacement. It must not appear in the normal implementation reading order.
 
-### DOC-006 變更可追蹤
+### DOC-006 — Naming and navigation remain consistent
 
-對使用者或維護流程有意義的文件變更更新根目錄 `CHANGELOG.md`；未完成事項更新 `TODO.md` 或來源文件的 open decisions。
+Markdown files follow [Markdown naming rules](../docs/standards/markdown-naming.md), use one H1 and update the relevant index when their role changes.
 
-## 4. Acceptance checklist
+### DOC-007 — Changes remain traceable
 
-- `README.md` 與 `docs/index.md` 都能導向主要文件。
-- PRD、Specs、Architecture 與 ADR 各有入口。
-- 文件檔名可由規則推導，且沒有 `Final`、`Latest` 或日期版號。
-- 目前沒有應用程式碼或截圖功能實作。
+- User／maintainer-visible changes update `CHANGELOG.md`.
+- Current implementation work updates `PRD/PRD-TRACEABILITY-MATRIX.md` when evidence exists.
+- Remaining implementation tasks update `TODO.md` or the owning Open Decision.
+
+### DOC-008 — Documentation does not become a substitute for implementation
+
+Missing code、failed tests or incomplete verification do not justify creating repeated prerequisite、readiness、authorization、reassessment or closure documents.
+
+### DOC-009 — Execution claims require evidence
+
+Documentation must distinguish:
+
+- not run;
+- build／test verified;
+- runtime verified;
+- historical evidence;
+- accepted product conformance.
+
+A passing build or test count is not sufficient to claim user-visible conformance.
+
+### DOC-010 — Privacy applies to evidence
+
+Real desktop screenshots、Clipboard payloads、private window titles and machine identifiers are not committed as routine evidence.
+
+## 4. Acceptance Checklist
+
+- `README.md` and `docs/index.md` show the accepted v1 source order.
+- PRD、Specs、Architecture、ADRs、contracts and conformance matrix have clear entry points.
+- Historical reviews are labeled and do not override current sources.
+- Roadmap and TODO reflect the current v1 conformance correction rather than the old single-display slice.
+- Documentation states that source code and tests already exist while product conformance remains incomplete.
+- No current canonical document routes mouse release directly to Clipboard or treats multi-display／Annotation／PNG Save as deferred v1 scope.
+- No new repetitive readiness or closure chain is required before the next explicit implementation task.
