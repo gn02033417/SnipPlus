@@ -25,8 +25,8 @@ Research、Analysis、Decision、早期 Freeze Review 與先前 vertical-slice e
 | Specification baseline | Accepted current revision |
 | Architecture baseline | Accepted current revision |
 | ADR-0002 through ADR-0007 | Accepted |
-| Implementation Contracts | Accepted v2.2 |
-| Conformance Matrix | Reviewed v2.2 |
+| Implementation Contracts | Accepted v2.3 |
+| Conformance Matrix | Reviewed v2.3 |
 | Solution／projects | Present |
 | Technical prototype | Single-display capture／crop／Clipboard foundation present |
 | Product conformance | Correction required |
@@ -38,23 +38,31 @@ Research、Analysis、Decision、早期 Freeze Review 與先前 vertical-slice e
 
 ### Performance
 
-- Capture start p95 `≤ 500 ms` Standard、`≤ 1,000 ms` Maximum.
-- Interaction p95 `≤ 33 ms` frame time and `≤ 100 ms` visible response.
+- Capture start p95 `≤ 500 ms` Owner Reference／Standard、`≤ 1,000 ms` Maximum.
+- Pointer interaction p95 `≤ 33 ms` frame time and `≤ 100 ms` visible response.
 - Complete／Save size-tiered targets、`300 ms` progress threshold and memory limits are defined in PRD-0006.
+- Measurement uses 3 warm-up runs and at least 30 measured runs.
 
 ### Capacity
 
 - `1`–`4` logical displays.
-- Each `≤ 7,680 × 4,320`.
-- Total source pixels `≤ 66,355,200`.
+- Each `≤ 3840 × 2160`.
+- Total source pixels `≤ 33,177,600`.
 - Virtual Desktop width／height each `≤ 16,384`.
-- Selection area `≤ 67,108,864` pixels with dimensional limits.
+- Selection width／height each `≤ 16,384`; area `≤ 67,108,864` pixels.
+- 8K displays are outside v1.
 
-### Keyboard-only Editing
+### Owner Reference Configuration
 
-- Scope begins at `SelectionLocked`.
-- Complete function-bar、tool、object、style、Undo／Redo、Save、Complete and Cancel workflow works without pointer input.
-- Initial crosshair Selection remains pointer-driven in v1.
+- primary `2560 × 1440`;
+- lower `1920 × 1080` at Windows scaling `150%`;
+- left `2560 × 1440`.
+
+### Keyboard Boundary
+
+- PrintScreen capture entry and Esc cancellation are required.
+- Keyboard-only Annotation and non-PrintScreen tool／action shortcuts are deferred.
+- Required controls retain accessible names and non-color-only selected／error state.
 
 ## Product and Behavior
 
