@@ -7,7 +7,7 @@
 | Field | Value |
 | --- | --- |
 | Document ID | `SPEC-0010` |
-| Version | `1.0` |
+| Version | `1.1` |
 | Status | `Accepted` |
 | Last reviewed | `2026-07-27` |
 | Covered features | `FEAT-001`–`FEAT-005` |
@@ -30,7 +30,7 @@ ResidentReady
 ### Complete
 
 ```text
-Render current revision
+Render current revision with transparent non-display gaps
 → Clipboard
 → Cleanup
 → Restore previous focus
@@ -40,14 +40,17 @@ Render current revision
 ### Save
 
 ```text
-Render current revision
-→ Save As
-→ PNG
+Render current revision with transparent non-display gaps
+→ Save As with Downloads as initial folder
+→ PNG at user-selected destination
+→ Retain PNG
 → Clipboard
-→ Cleanup
+→ Cleanup only after Clipboard success
 → Restore previous focus
 → ResidentReady
 ```
+
+If Clipboard fails after PNG creation, retain the PNG and return to Editing with the current revision preserved.
 
 ### Cancel
 
@@ -58,14 +61,25 @@ No output
 → ResidentReady
 ```
 
+### Application Exit
+
+```text
+MainWindow X or explicit Exit
+→ Release PrintScreen takeover
+→ Cleanup owned application resources
+→ Terminate SnipPlus
+```
+
+MainWindow `X` does not hide the application to the System Tray.
+
 ## 3. Feature Ownership
 
 | Concern | Owning feature |
 | --- | --- |
-| PrintScreen entry、display freeze、Virtual Desktop selection | `FEAT-001` |
+| PrintScreen entry、display freeze、Virtual Desktop selection and application-exit entry | `FEAT-001` |
 | Function bar、annotation objects、Undo／Redo | `FEAT-002` |
 | Clipboard publication | `FEAT-003` |
-| PNG Save As and file creation | `FEAT-004` |
+| PNG Save As、Downloads default and file creation／retention | `FEAT-004` |
 | Cancel、error preservation、cleanup and focus restoration | `FEAT-005` |
 | Shared state transitions | `COMP-001` only |
 
@@ -93,23 +107,28 @@ A result from a mismatched Session ID or revision is stale and cannot advance th
 - Reselection may reveal or clip existing objects without deleting them.
 - Selection operations are not inserted into annotation Undo／Redo history.
 - Annotation actions are optional, but the function bar and explicit commitment are mandatory.
+- Non-display gaps contain no source content and contribute transparent pixels to final output.
 
 ## 6. Output Integration
 
 - Complete invokes final render and Clipboard only.
 - Save invokes final render、Save As、PNG and Clipboard.
+- Save As initially proposes Downloads and the timestamp filename; the user may change both destination and filename.
 - Complete and Save must use the same rendering semantics.
 - Mouse release、selection change and annotation change do not invoke output.
 - Save As cancellation returns to Editing.
-- Recoverable render、save or Clipboard failure returns to Editing with the current revision retained.
+- PNG save failure returns to Editing without Clipboard update.
+- Clipboard failure after PNG success retains the PNG、returns to Editing and reports the partial outcome.
 - Cleanup and focus restoration occur only after successful commitment、Cancel or terminal failure.
 
-## 7. Concurrency and Stale Results
+## 7. Residency、Exit、Concurrency and Stale Results
 
 - Only one interactive capture session may own the overlays at a time unless a later product decision changes this.
 - A second capture request while a session is active must not silently replace the current session; exact user feedback remains an implementation acceptance item.
 - Late frame、render、save or Clipboard results from an older session are ignored and cleaned up.
 - Cancel invalidates future completion of that session.
+- Closing MainWindow with `X` exits SnipPlus and releases takeover; it does not transition to a hidden tray-resident mode.
+- If a System Tray surface exists, its explicit Exit action uses the same exit path.
 
 ## 8. Acceptance Criteria
 
@@ -122,5 +141,8 @@ A result from a mismatched Session ID or revision is stale and cannot advance th
 | `SPEC-0010-AC-005` | Only COMP-001 advances shared workflow state. |
 | `SPEC-0010-AC-006` | Stale asynchronous results cannot complete a newer or cancelled session. |
 | `SPEC-0010-AC-007` | Successful and cancelled sessions restore the previous application without opening the SnipPlus main window. |
+| `SPEC-0010-AC-008` | MainWindow `X` exits SnipPlus and releases PrintScreen takeover rather than hiding to tray. |
+| `SPEC-0010-AC-009` | Non-display gaps are transparent in Complete and Save output. |
+| `SPEC-0010-AC-010` | Clipboard failure after PNG success retains the PNG and returns to Editing. |
 
-The previous integration sequence that treated Annotation as an optional post-capture branch and Clipboard as an automatic next state is superseded.
+The previous integration sequence that treated Annotation as an optional post-capture branch、Clipboard as an automatic next state or PNG rollback as unresolved is superseded.
