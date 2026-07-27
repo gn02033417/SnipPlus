@@ -58,12 +58,20 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 - 非互動測試 45/45 通過，0 失敗、0 略過；`ResidentLifecycleCoordinatorTests` 10/10、`WindowsPrintScreenTakeoverTests` 2/2 均包含於完整測試結果。
 - 本 Slice 7 個 C# 檔案的限定範圍 `dotnet format --verify-no-changes` 通過。
 - 全 Repository formatting baseline 仍有 4,704 項既有問題，不屬於本 Slice，未予修正。
-- Windows Runtime、真實 `RegisterHotKey`／`WM_HOTKEY`、跨程序設定還原及 MainWindow X 結束程序尚未執行驗證。
+- Windows Runtime、真實 `RegisterHotKey`／`WM_HOTKEY`、跨程序設定還原及 MainWindow X 結束程序尚未執行驗證；本次嘗試因 packaged artifact 與目前 HEAD 不一致而阻擋。
 - 本次未啟動 SnipPlus、Paint、Notepad 或其他外部 GUI，亦未執行 Interactive／Manual tests。
 
 ### Current Conformance Status
 
-- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build 與 deterministic non-interactive tests 已完成並通過；Windows Runtime verification 尚未執行，仍不宣稱完全 Conforms。
+- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build 與 deterministic non-interactive tests 已完成並通過；Windows Runtime verification 因 packaged artifact 與目前 HEAD 不一致而阻擋，仍不宣稱完全 Conforms。
+
+### Windows Runtime Verification — Blocked (2026-07-27)
+
+- Windows 11 x64、三個顯示器環境；只啟動已存在的 SnipPlus packaged runtime，未啟動外部 GUI。
+- 已存在的 packaged runtime 可以開啟單一 MainWindow、保持 `Ready` 且未自動開始 Capture；但畫面與 accessibility tree 都沒有本 Slice 必須存在的 PrintScreen takeover checkbox。
+- 唯讀 artifact 比對確認已安裝 package 與目前 HEAD `8b3ebe9` 的 Release build 不一致；直接啟動目前 build output 也未形成可觀察的 SnipPlus window。
+- 舊 packaged artifact 已透過 MainWindow `X` 關閉，之後沒有留下 `SnipPlus.App` process。
+- 因沒有可對應目前 HEAD 的 packaged runtime，B～H、真實 PrintScreen registration／release、跨程序設定還原與目前程式的 process-exit 行為均未執行，不能標示為通過。
 - Four-4K capacity policy and unsupported-limit outcomes：Missing。
 - Frozen Virtual Desktop and per-display frame ownership：Missing。
 - Cross-monitor Selection and transparent gap output：Missing。
