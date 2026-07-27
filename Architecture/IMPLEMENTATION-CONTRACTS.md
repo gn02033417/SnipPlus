@@ -6,7 +6,7 @@
 | --- | --- |
 | Document ID | `IMPLEMENTATION-CONTRACTS-001` |
 | Status | `Accepted` |
-| Version | `2.0` |
+| Version | `2.1` |
 | Product revision date | `2026-07-27` |
 | Scope | SnipPlus v1 resident PrintScreen、multi-display selection、editing、Clipboard and PNG output |
 | Normative references | Accepted PRD-0004 through PRD-0006 and SPEC-0003 through SPEC-0010 |
@@ -22,15 +22,19 @@
 7. Complete and Save are explicit, distinct commitments.
 8. Cleanup is idempotent and focus restoration is a workflow obligation.
 9. Stale asynchronous outcomes never advance a newer or cancelled session.
-10. Private desktop content is never persisted as repository evidence.
+10. MainWindow `X` exits SnipPlus、releases PrintScreen takeover and never hides the process to tray.
+11. Physical non-display gaps render as transparent output pixels.
+12. A successfully created PNG is retained if later Clipboard publication fails.
+13. Private desktop content is never persisted as repository evidence.
 
-## 2. Resident Entry Contract
+## 2. Resident Entry and Exit Contract
 
 ```text
 ResidentCaptureEntry
 - TakeoverEnabled: bool
 - TryAcceptPrintScreen(): CaptureEntryOutcome
 - DisableTakeover(): void
+- ExitApplication(): ExitOutcome
 ```
 
 Required semantics:
@@ -38,8 +42,11 @@ Required semantics:
 - SnipPlus is manually started before it can accept PrintScreen.
 - Enabled takeover accepts one request when workflow state allows it.
 - Disabled takeover does not intercept PrintScreen.
-- Process exit or disabling takeover releases interception.
 - An in-app entry can call the same request boundary but is secondary.
+- MainWindow `X` invokes `ExitApplication`; it is not a hide-to-tray command.
+- If a System Tray surface exists, its explicit Exit command invokes the same boundary.
+- Exit releases PrintScreen interception、cancels or invalidates owned work、cleans up resources and terminates the process.
+- No hidden resident process remains after Exit.
 
 ## 3. Capture Session Context
 
@@ -63,6 +70,7 @@ VirtualDesktopSnapshot
 - VirtualPhysicalBounds
 - VirtualOrigin
 - Displays[]
+- GapPolicy: Transparent
 ```
 
 ### Display Snapshot
@@ -78,7 +86,7 @@ DisplaySnapshot
 - FrozenFramePixelSize
 ```
 
-The contract supports negative origins and mixed-DPI displays. It does not require one giant bitmap.
+The contract supports negative origins、mixed-DPI displays and irregular arrangements. It does not require one giant bitmap.
 
 ## 4. Frozen Frame Ownership
 
@@ -88,6 +96,7 @@ The contract supports negative origins and mixed-DPI displays. It does not requi
 - Selection preview、annotation preview and final render reference these frames; they do not recapture desktop content.
 - Frame acquisition failure prevents entry into Selection.
 - Display-context mismatch returns a typed failure and never silently substitutes another frame.
+- No display frame exists for physical gaps; gap output is generated as transparent pixels by the render contract.
 
 ## 5. Selection Contract
 
@@ -112,7 +121,7 @@ Valid operations:
 
 Required semantics:
 
-- One rectangle may span multiple displays.
+- One rectangle may span multiple displays and physical gaps.
 - Zero-size or invalid bounds cannot lock.
 - Selection interior is presented without the dim mask; outside remains dimmed.
 - Locking selection creates no Clipboard or file output.
@@ -130,11 +139,12 @@ EditingSession
 - AnnotationDocument
 - CanUndo
 - CanRedo
+- RetainedOutputFiles[]
 ```
 
 The editing session begins after a valid selection lock and remains until Complete、successful Save、Cancel or terminal failure.
 
-The user can commit with an empty AnnotationDocument.
+The user can commit with an empty AnnotationDocument. `RetainedOutputFiles` records files already created by a Save attempt whose later Clipboard obligation failed.
 
 ## 7. Annotation Document Contract
 
@@ -155,7 +165,7 @@ Every object includes:
 - Z-order;
 - supported style properties;
 - object-specific content;
-- visibility／selection state that is not included in final output UI.
+- visibility／selection state excluded from final output UI.
 
 Required object kinds:
 
@@ -237,6 +247,7 @@ FinalRenderRequest
 - SelectionRevisionId
 - AnnotationRevisionId
 - SelectionBounds
+- VirtualDesktopSnapshot
 - FrozenFrames
 - AnnotationDocument
 ```
@@ -250,14 +261,13 @@ FinalRenderOutcome
 
 Required semantics:
 
-- Compose pixels from all displays intersecting the selection.
+- Compose pixels from every display intersecting the selection.
 - Use the same frozen frames shown during selection.
+- Fill selected physical non-display gaps with transparent pixels (`BGRA alpha = 0`).
 - Clip annotations to selection bounds.
 - Exclude dim masks、selection border、handles、pointer、function bar and normal SnipPlus windows.
-- Produce one immutable canonical ImageResult.
+- Produce one immutable canonical ImageResult with alpha preserved.
 - Rendering a stale revision cannot be committed.
-
-Representation of non-display gaps in irregular layouts remains unresolved and must be decided before that path is implemented.
 
 ## 10. Clipboard Contract
 
@@ -266,6 +276,8 @@ ClipboardCommitRequest
 - SessionId
 - ResultId
 - ImageResult
+- Origin: Complete | Save
+- RetainedFileReference: optional
 ```
 
 ```text
@@ -283,6 +295,7 @@ Required semantics:
 - History and roaming remain disabled by default.
 - Payload lifetime is preserved after success.
 - Failure returns control to Editing with selection and annotations preserved.
+- A Save-originated Clipboard failure never deletes or rolls back `RetainedFileReference`.
 - Platform success does not directly transition workflow state.
 
 ## 11. PNG Save Contract
@@ -291,6 +304,7 @@ Required semantics:
 SaveRequest
 - SessionId
 - ResultId
+- SuggestedFolder: Downloads
 - SuggestedFileName
 - Format: PNG
 - ImageResult
@@ -305,20 +319,23 @@ SaveOutcome
 
 Required semantics:
 
+- Suggested folder is the user’s Downloads folder.
 - Suggested filename is `SnipPlus_yyyy-MM-dd_HHmmss.png`.
 - Save As is shown each time.
+- The user may choose another folder or filename.
 - UserCancelled returns to Editing without Clipboard update.
 - Save failure returns to Editing without Clipboard update.
 - After Save success, the same ImageResult is submitted to Clipboard.
-- The overall Save workflow completes only after both operations succeed.
-- Rollback of an already-created file after Clipboard failure remains unresolved.
+- The created PNG is retained immediately after successful file creation.
+- If later Clipboard publication fails, retain the PNG、attach the FileReference to the recoverable outcome and return to Editing.
+- The overall Save workflow completes only after both PNG and Clipboard succeed.
 
 ## 12. Focus and Cleanup Contract
 
 ```text
 WorkflowCleanupRequest
 - SessionId
-- CompletionKind: Completed | Cancelled | Failed
+- CompletionKind: Completed | Cancelled | Failed | ApplicationExit
 - PreCaptureForegroundContext
 ```
 
@@ -329,10 +346,11 @@ Cleanup includes:
 - release pointer capture;
 - cancel or invalidate pending session work;
 - dispose frozen frames and temporary renders;
-- restore the pre-capture foreground application where permitted;
-- never automatically foreground the SnipPlus main window.
+- restore the pre-capture foreground application where permitted for capture-session completion;
+- never automatically foreground the SnipPlus main window;
+- release PrintScreen takeover and terminate the process for `ApplicationExit`.
 
-Cleanup is idempotent.
+Cleanup is idempotent. User-created retained PNG files are not temporary resources and are not deleted by cleanup.
 
 ## 13. Workflow Transitions
 
@@ -346,7 +364,10 @@ Editing → CommittingClipboard | Saving | Cancelled | Failed
 CommittingClipboard → Completed | Editing
 Saving → Completed | Editing
 Completed | Cancelled | Failed → ResidentReady
+ResidentReady → Exited
 ```
+
+A `Saving → Editing` transition may include a retained PNG FileReference.
 
 Only `COMP-001` applies transitions.
 
@@ -360,26 +381,29 @@ Every Failure includes:
 - operation boundary;
 - Session ID;
 - user-facing message key;
-- diagnostic details without private desktop content.
+- diagnostic details without private desktop content;
+- optional retained output FileReference.
 
-Recoverable output failure preserves Editing. Terminal capture-context failure cleans up and restores focus.
+Recoverable output failure preserves Editing. Clipboard failure after PNG success reports the retained file. Terminal capture-context failure cleans up and restores focus.
 
 ## 15. Verification Obligations
 
 Tests must cover at least:
 
 - takeover enabled／disabled behavior;
+- MainWindow `X` and explicit Exit release takeover and terminate rather than hide to tray;
 - all-display frame acquisition before Selection;
-- cross-display selection and negative coordinates;
+- cross-display selection、negative coordinates and transparent gap output;
 - mouse release without output;
 - selection move、resize and replacement;
 - annotation clipping and coordinate stability;
 - tool object creation and applicable editing;
 - annotation Undo／Redo boundaries;
 - Complete Clipboard-only flow;
-- Save As cancel、Save failure、Clipboard failure and success;
+- Save As initial Downloads folder、destination override、cancel and PNG failure;
+- Clipboard failure after PNG success retains the file and returns to Editing;
 - stale session／revision outcomes;
 - cleanup and focus-restoration requests;
 - no automatic external GUI fixture in non-interactive tests.
 
-The previous single-monitor、optional post-capture Annotation and automatic Clipboard contracts are superseded.
+The previous single-monitor、optional post-capture Annotation、automatic Clipboard、close-to-tray、opaque gap and rollback-undecided contracts are superseded.
