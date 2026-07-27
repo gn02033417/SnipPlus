@@ -1,45 +1,144 @@
 # Mermaid Architecture Diagram
 
-狀態：`Proposal`
+狀態：`Accepted`
 
-下圖是目前的邏輯架構基線。虛線節點代表尚未選定或尚未實作的邊界；它不描述現有 runtime。
+The diagram represents the accepted SnipPlus v1 responsibility and dependency baseline. It does not claim that every component is already implemented.
+
+## 1. Layer and capability diagram
 
 ```mermaid
-flowchart TD
+flowchart TB
     User[User]
-    UI[Presentation / UI\nWireframe proposal]
-    App[Application\nWorkflow orchestration\nTBD]
-    Domain[Domain\nProduct rules and state\nTBD]
-    Platform[Platform adapters\nOS and device capabilities\nTBD]
-    Storage[Storage boundary\nExplicit user data only\nTBD]
-    External[External integrations\nOptional / TBD]
-    Observe[Observability\nSafe diagnostics\nTBD]
-    PRD[(PRD\nProduct intent)]
-    Specs[(Specs\nObservable behavior)]
-    ADR[(ADR\nDurable decisions)]
+    App[SnipPlus.App
+WinUI composition and capture UI]
 
-    User --> UI
-    UI --> App
-    App --> Domain
-    App --> Platform
-    App --> Storage
-    App --> External
-    UI --> Observe
-    App --> Observe
-    Domain --> Observe
+    subgraph Workflow[Product Workflow and Feature Coordination]
+        State[COMP-001
+Workflow State Authority]
+        Session[COMP-002
+Session Lifecycle]
+        Flow[COMP-003
+Feature Flow Coordinator]
+        Recovery[COMP-011/012/013
+Completion, Recovery, Feedback]
+    end
 
-    PRD -. defines scope .-> Specs
-    Specs -. constrains behavior .-> App
-    Specs -. validates UI .-> UI
-    ADR -. explains durable choices .-> App
-    ADR -. explains boundaries .-> Domain
+    subgraph Domain[Domain Capabilities]
+        Freeze[COMP-004
+Capture Request and Freeze]
+        Selection[COMP-005
+Selection]
+        Render[COMP-006
+Final Render]
+        Editing[COMP-007
+Editing Session]
+        Annotation[COMP-008
+Annotation Document and History]
+        Clipboard[COMP-009
+Clipboard Handoff]
+        Output[COMP-010
+PNG Output]
+    end
+
+    subgraph Platform[Windows Platform Integration]
+        CaptureAdapter[COMP-014
+WGC Capture Adapter]
+        ClipboardAdapter[COMP-015
+WinRT Clipboard Adapter]
+        OutputAdapter[COMP-016
+Save As / PNG Adapter]
+        Input[COMP-017
+PrintScreen and Input]
+        Display[COMP-018
+Display, DPI and Foreground Context]
+    end
+
+    Contracts[(SnipPlus.Contracts
+Session, Selection, Annotation,
+Image, Delivery and Failure contracts)]
+
+    User --> App
+    App --> Flow
+    Input --> Flow
+    Flow --> State
+    Flow --> Session
+    Flow --> Freeze
+    Flow --> Selection
+    Flow --> Editing
+    Flow --> Clipboard
+    Flow --> Output
+    Flow --> Recovery
+
+    Freeze --> CaptureAdapter
+    Freeze --> Display
+    Selection --> Input
+    Selection --> Display
+    Editing --> Annotation
+    Render --> Annotation
+    Render --> CaptureAdapter
+    Clipboard --> ClipboardAdapter
+    Output --> OutputAdapter
+    Recovery --> Display
+
+    App -. uses .-> Contracts
+    Workflow -. uses .-> Contracts
+    Domain -. uses .-> Contracts
+    Platform -. implements .-> Contracts
 ```
 
-## Reading notes
+## 2. Accepted workflow diagram
 
-- `PRD` 決定做什麼與為什麼做。
-- `Specs` 定義使用者可觀察、可驗收的行為。
-- `UI` 只負責呈現與輸入，不承擔平台或保存細節。
-- `Application` 協調流程；`Domain` 保持產品規則的獨立性。
-- `Platform`、`Storage` 與 `External` 都是副作用邊界，是否存在取決於後續核准的需求。
-- `ADR` 記錄不能只靠圖看出的原因與取捨。
+```mermaid
+stateDiagram-v2
+    [*] --> ResidentReady
+    ResidentReady --> CaptureRequested: enabled PrintScreen
+    CaptureRequested --> Freezing
+    Freezing --> Selecting: all frames ready
+    Freezing --> Failed: capture/context failure
+    Selecting --> SelectionLocked: mouse released with valid rectangle
+    Selecting --> Cancelled: Esc / Cancel
+    SelectionLocked --> Selecting: reselection
+    SelectionLocked --> Editing
+    SelectionLocked --> Cancelled
+    Editing --> Editing: adjust selection / annotate / undo / redo
+    Editing --> CommittingClipboard: Complete
+    Editing --> Saving: Save
+    Editing --> Cancelled: Esc / Cancel
+    CommittingClipboard --> Completed: Clipboard success
+    CommittingClipboard --> Editing: recoverable failure
+    Saving --> Editing: Save As cancelled / recoverable failure
+    Saving --> Completed: PNG and Clipboard success
+    Completed --> ResidentReady: cleanup and focus restore
+    Cancelled --> ResidentReady: cleanup and focus restore
+    Failed --> ResidentReady: terminal cleanup and recovery
+```
+
+There is no legal transition from mouse release directly to Clipboard or file output.
+
+## 3. Project dependency diagram
+
+```mermaid
+flowchart LR
+    Contracts[SnipPlus.Contracts]
+    Core[SnipPlus.Core]
+    Windows[SnipPlus.Windows]
+    App[SnipPlus.App]
+
+    Core --> Contracts
+    Windows --> Contracts
+    App --> Contracts
+    App --> Core
+    App --> Windows
+```
+
+Rules:
+
+- `SnipPlus.Contracts` depends on no source project.
+- `SnipPlus.Core` contains product and domain rules without concrete Windows types.
+- `SnipPlus.Windows` provides platform adapters and does not mutate shared workflow state.
+- `SnipPlus.App` composes UI and adapters but does not own product semantics.
+- No circular project references.
+
+## 4. Current conformance note
+
+The current source implements only part of this diagram: one-display capture、same-frame crop、basic mask presentation、image／PNG foundations、Clipboard retry and an earlier state graph. Missing or obsolete areas are tracked in `PRD/PRD-TRACEABILITY-MATRIX.md`.
