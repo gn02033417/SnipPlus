@@ -2,81 +2,84 @@
 
 狀態：`Accepted`
 
-## Completed
+## Completed foundations
 
-- PRD v1.0：Freeze Approved。
-- Specification v1.0：Freeze Approved。
-- Architecture baseline：Freeze Approved。
-- ADR-0002 through ADR-0007：Accepted。
-- Implementation Contracts：Accepted。
-- Project Structure and Toolchain Baseline：Accepted。
-- Implementation Readiness Review：`Approved for first vertical slice implementation`。
-- Repeated prerequisite／readiness／authorization／closure document pattern：Stopped。
+- Accepted v1.1 PRD and current Specification baseline.
+- Accepted Architecture principles、layers、modules、components and interactions.
+- ADR-0002 through ADR-0007.
+- Implementation Contracts v2.0.
+- Project Structure and toolchain baseline.
+- Solution、four source projects and three test projects.
+- Reusable one-display WGC、same-frame crop、BGRA8 image、PNG encoder、Win2D presentation and Clipboard retry foundations.
+- Requirements-to-code conformance audit.
+- Repetitive prerequisite／readiness／authorization／closure document pattern stopped.
 
-## Current phase — First vertical slice implementation
+## Current phase — v1 workflow conformance correction
 
-狀態：`Verified`
+狀態：`Active when explicitly authorized`
 
-Required scope：
+The current technical prototype does not conform to the accepted v1 product workflow. Implementation must proceed in this order:
 
-1. Create the approved solution、configuration and project skeleton.
-2. Restore and build the empty x64 baseline.
-3. Implement Core contracts、state、cancel and failure handling with tests.
-4. Implement WinUI 3 host and region selection.
-5. Implement one-shot Windows.Graphics.Capture monitor acquisition and crop.
-6. Produce the canonical SoftwareBitmap result.
-7. Display through the Composition／Win2D adapter.
-8. Publish through the DataPackage Clipboard adapter.
-9. Run non-interactive tests and explicitly authorized Windows platform verification.
-10. Record build、test、runtime and cleanup evidence.
+1. Resident lifecycle and user-controlled PrintScreen takeover setting.
+2. PrintScreen entry integrated with `COMP-001`.
+3. Frozen Virtual Desktop session context and per-display frame ownership.
+4. All-display frozen presentation、crosshair and cross-monitor initial selection.
+5. Locked selection、move、edge／corner resize and reselection.
+6. Accepted state graph including `ResidentReady`、`Freezing`、`Selecting`、`SelectionLocked`、`Editing`、`CommittingClipboard` and `Saving`.
+7. Function bar、Complete／Save／Cancel commitments and foreground-context restoration.
+8. Annotation document、required tools and object editing.
+9. Annotation-only Undo／Redo、Virtual Desktop anchoring and selection clipping.
+10. Complete final render plus Clipboard.
+11. Windows Save As、PNG file delivery plus the same Clipboard result.
+12. Recoverable failure preservation、stale-session／revision protection and accessibility.
+13. Explicitly authorized multi-display runtime verification.
 
-Verified results：
+### Phase rules
 
-- `SnipPlus.sln`、4 個 source projects 與 3 個 test projects 已建立。
-- Locked restore、Release x64 build 與 packaged WinUI 3 publish 已完成。
-- 非互動測試 24 passed；Rendering filter 6 passed。
-- Packaged runtime 已以 SnipPlus 內部 synthetic checkerboard fixture 完成可見 Frozen Frame region selection、同一 frame crop、render、PNG 與 Clipboard publication；本次未啟動 Paint 或其他外部 GUI。
-- Windows platform filter 可單獨執行；support check 與實際 primary display frame 尺寸驗證均 passed。未保存真實桌面 screenshot 或 Clipboard payload。
-- 未改變 Frozen behavior、Architecture ownership 或明確 non-goal。
+- Do not continue from the obsolete mouse-release-to-Clipboard sequence.
+- Reuse technical foundations only after their row in the conformance matrix is reviewed.
+- Each completed slice updates code、tests、CHANGELOG and `PRD-TRACEABILITY-MATRIX-001`.
+- Passing build or test counts do not prove user-visible conformance.
+- Do not begin a later step while an earlier prerequisite remains `Missing` or `Incorrect`.
 
-Exit criteria：
+## Required v1 capabilities
 
-- Solution restores and builds reproducibly.
-- Required Unit、Contract and deterministic Rendering tests pass.
-- Approved Windows platform verification produces reviewable evidence.
-- Cancel、failure、retry and cleanup paths are verified.
-- No Frozen behavior or Architecture ownership is changed by implementation.
-- CHANGELOG and implementation evidence reflect actual results.
+- Manual startup and background residency.
+- User-controlled PrintScreen takeover.
+- All-display Frozen Virtual Desktop.
+- Cross-monitor rectangular selection.
+- Selection movement、edge／corner resize and reselection.
+- Mandatory editing／confirmation function bar.
+- Rectangle、Arrow／Line、Highlighter、Text、Mosaic／Blur and Numbered Marker.
+- Annotation selection、movement、resize、style changes、delete、Undo and Redo.
+- Complete to Clipboard.
+- Save to PNG and Clipboard.
+- Cancel、recoverable failure preservation、cleanup and focus restoration.
 
-## Explicit first-slice non-goals
+## Explicitly deferred capabilities
 
-- Global hotkey／Print Screen interception.
-- Multi-monitor stitched capture.
-- Window-capture product mode.
-- Annotation mutation tools.
-- File Output UI.
-- HDR/wide-color preservation.
-- DXGI/GDI fallback.
-- Telemetry、cloud、OCR、plugins、updates or release publication.
+- Opaque freehand pen.
+- Ellipse annotation.
+- Pin image to desktop.
+- OCR.
+- Capture history.
+- Delayed capture.
+- Additional save formats beyond PNG.
+- Font-family selection、italic、underline and text background.
+- HDR preservation.
+- ARM64 and broader public support matrix.
+- Cloud、sharing、plugins、telemetry、updates and release publication.
 
-## Next phase — Product hardening（paused）
+## Later phase — release and compatibility hardening
 
-狀態：`Paused after core capture-flow correction`
+Begins only after accepted v1 workflow conformance is demonstrated. It may cover:
 
-目前先停止 Clipboard hardening、Packaging 與其他功能擴充；本次只完成核心 capture flow correction：Selection 顯示 Capture 開始時凍結的 frame，並從同一張 frame Crop。
-
-下一個 bounded slice 尚未選定；不得因目前測試全綠而擴張至明確 non-goal。
-
-Begins only after the first slice is verified. It may address：
-
-- Additional capture modes.
-- Annotation tools.
-- Output UI.
-- Compatibility and performance.
-- Logging/configuration.
-- Packaging、signing、distribution and updates.
-- ARM64 and wider Windows support.
+- Performance measurement and limits.
+- Broader Windows／display／DPI compatibility.
+- Logging and configuration selected from actual operational needs.
+- Packaging、signing、distribution and update strategy.
+- Additional deferred product capabilities through explicit product decisions.
 
 ## Documentation policy
 
-No more pre-coding paperwork is planned. New documentation requires a concrete implementation finding、scope change or superseding decision. Normal next changes are code、tests、CHANGELOG and evidence records.
+No new prerequisite、readiness、authorization or closure document family is planned. Product changes update existing PRD／Specs. Durable technology changes use a targeted ADR. Normal implementation progress updates source、tests、CHANGELOG and the existing conformance matrix.
