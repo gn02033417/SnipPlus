@@ -2,9 +2,9 @@
 
 狀態：`Accepted`
 
-The diagram represents the accepted SnipPlus v1 responsibility and dependency baseline. It does not claim that every component is already implemented.
+The diagram represents the accepted SnipPlus v1 responsibility and dependency baseline. It does not claim that every component is implemented.
 
-## 1. Layer and capability diagram
+## 1. Layer and Capability Diagram
 
 ```mermaid
 flowchart TB
@@ -20,24 +20,24 @@ Session Lifecycle]
         Flow[COMP-003
 Feature Flow Coordinator]
         Recovery[COMP-011/012/013
-Completion, Recovery, Feedback]
+Completion, Recovery, Progress, Feedback]
     end
 
     subgraph Domain[Domain Capabilities]
         Freeze[COMP-004
-Capture Request and Freeze]
+Capacity, Capture Request and Freeze]
         Selection[COMP-005
-Selection]
+Pointer Selection]
         Render[COMP-006
-Final Render]
+Capacity-aware Final Render]
         Editing[COMP-007
 Editing Session]
         Annotation[COMP-008
-Annotation Document and History]
+Pointer Annotation Document and History]
         Clipboard[COMP-009
 Clipboard Handoff]
         Output[COMP-010
-PNG Output]
+PNG Output and Retained File]
     end
 
     subgraph Platform[Windows Platform Integration]
@@ -48,13 +48,13 @@ WinRT Clipboard Adapter]
         OutputAdapter[COMP-016
 Save As / PNG Adapter]
         Input[COMP-017
-PrintScreen and Input]
+PrintScreen, Pointer and Esc]
         Display[COMP-018
 Display, DPI and Foreground Context]
     end
 
     Contracts[(SnipPlus.Contracts
-Session, Selection, Annotation,
+Session, Capacity, Selection, Annotation,
 Image, Delivery and Failure contracts)]
 
     User --> App
@@ -86,36 +86,46 @@ Image, Delivery and Failure contracts)]
     Platform -. implements .-> Contracts
 ```
 
-## 2. Accepted workflow diagram
+## 2. Accepted Workflow Diagram
 
 ```mermaid
 stateDiagram-v2
     [*] --> ResidentReady
     ResidentReady --> CaptureRequested: enabled PrintScreen
-    CaptureRequested --> Freezing
+    CaptureRequested --> Freezing: four-4K topology supported
+    CaptureRequested --> Failed: unsupported capacity
     Freezing --> Selecting: all frames ready
     Freezing --> Failed: capture/context failure
-    Selecting --> SelectionLocked: mouse released with valid rectangle
+    Selecting --> SelectionLocked: pointer released with valid supported rectangle
     Selecting --> Cancelled: Esc / Cancel
-    SelectionLocked --> Selecting: reselection
+    SelectionLocked --> Selecting: pointer reselection
     SelectionLocked --> Editing
-    SelectionLocked --> Cancelled
-    Editing --> Editing: adjust selection / annotate / undo / redo
+    SelectionLocked --> Cancelled: Esc / Cancel
+    Editing --> Editing: pointer adjust / annotate / function-bar undo-redo
     Editing --> CommittingClipboard: Complete
     Editing --> Saving: Save
     Editing --> Cancelled: Esc / Cancel
     CommittingClipboard --> Completed: Clipboard success
     CommittingClipboard --> Editing: recoverable failure
-    Saving --> Editing: Save As cancelled / recoverable failure
+    Saving --> Editing: Save As cancelled / recoverable failure / retained PNG + Clipboard failure
     Saving --> Completed: PNG and Clipboard success
     Completed --> ResidentReady: cleanup and focus restore
     Cancelled --> ResidentReady: cleanup and focus restore
     Failed --> ResidentReady: terminal cleanup and recovery
 ```
 
-There is no legal transition from mouse release directly to Clipboard or file output.
+There is no legal transition from mouse release directly to Clipboard or file output. Unsupported capacity never becomes partial Selection.
 
-## 3. Project dependency diagram
+## 3. Quality and Scope Notes
+
+- Supported source topology: up to four logical displays、each no larger than `3840 × 2160`.
+- Owner Reference runtime profile: primary `2560 × 1440`、lower `1920 × 1080` at `150%` scaling、left `2560 × 1440`.
+- Non-display gaps render transparently.
+- Commit work still running after `300 ms` exposes non-blocking progress.
+- V1 Selection adjustment and Annotation are pointer-driven.
+- PrintScreen and Esc are required; keyboard-only Annotation and non-PrintScreen shortcuts are deferred.
+
+## 4. Project Dependency Diagram
 
 ```mermaid
 flowchart LR
@@ -139,6 +149,6 @@ Rules:
 - `SnipPlus.App` composes UI and adapters but does not own product semantics.
 - No circular project references.
 
-## 4. Current conformance note
+## 5. Current Conformance Note
 
-The current source implements only part of this diagram: one-display capture、same-frame crop、basic mask presentation、image／PNG foundations、Clipboard retry and an earlier state graph. Missing or obsolete areas are tracked in `PRD/PRD-TRACEABILITY-MATRIX.md`.
+Current source implements only one-display capture、same-frame crop、basic mask presentation、image／PNG foundations、Clipboard retry and an earlier state graph. Missing or obsolete areas are tracked in `PRD/PRD-TRACEABILITY-MATRIX.md`. Keyboard-only Annotation is deferred and is not a missing v1 item.
