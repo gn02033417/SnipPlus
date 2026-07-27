@@ -1,61 +1,126 @@
 # System Overview
 
-狀態：`Draft`
+狀態：`Accepted`
 
-## 1. Architecture intent
+## 1. Product architecture intent
 
-在產品需求尚未核准前，先固定責任邊界與追溯關係，避免未來把 UI、產品規則、平台能力與檔案 I/O 混成不可維護的單一模組。
+SnipPlus v1 is a resident Windows screenshot application. When the user enables PrintScreen takeover, one explicit PrintScreen action starts an all-display frozen capture session. The user selects a cross-monitor rectangle、enters a mandatory editing／confirmation stage and explicitly chooses Complete、Save or Cancel.
 
-## 2. Planned logical boundaries
+The architecture separates product workflow from WinUI and Windows side effects so that session、selection、annotation、commitment and failure rules remain deterministic and testable.
 
-| Boundary | Responsibility | Current status |
+## 2. Runtime responsibilities
+
+| Boundary | Responsibility | Current project mapping |
 | --- | --- | --- |
-| Presentation | 顯示狀態、接收使用者輸入、呈現錯誤與結果 | Wireframe only |
-| Application | 協調一個完整的使用者操作流程 | TBD |
-| Domain | 定義產品規則、狀態轉移與驗證 | TBD |
-| Platform adapters | 封裝 OS、螢幕、快捷鍵、剪貼簿等能力 | TBD |
-| Storage | 保存或刪除使用者明確要求的資料 | TBD |
-| External services | 外部整合；若需要才建立 | TBD |
-| Observability | 安全、可定位的診斷資訊 | TBD |
+| App composition | WinUI host、window／overlay composition、function-bar presentation and adapter wiring | `SnipPlus.App` |
+| Product workflow | Shared-state authority、session progression、commitment routing and cancellation | `SnipPlus.Core` |
+| Domain capabilities | Virtual Desktop、selection、annotation、render intent、Clipboard／Output semantics and failure classification | `SnipPlus.Core` plus shared contracts |
+| Contracts | Platform-neutral Session、Selection、Annotation、Image、Delivery、Failure and Outcome types | `SnipPlus.Contracts` |
+| Windows integration | PrintScreen、display／DPI／focus、WGC、Win2D、Clipboard、Save As and PNG side effects | `SnipPlus.Windows` and App platform composition |
 
-目前只有第一層有 Wireframe 草稿，其餘邊界是為未來實作預留的責任位置，不表示已有對應程式碼。
+Current source projects already exist. The accepted v1 responsibilities are broader than the current single-display prototype and require conformance correction.
 
-## 3. Dependency direction
-
-預期依賴方向如下：
+## 3. Accepted runtime flow
 
 ```text
-Presentation -> Application -> Domain
-Platform adapters --------^ 
-Storage ------------------^
-External services --------^
-Observability ------------^
+ResidentReady
+→ PrintScreen takeover accepts explicit request
+→ Record foreground context and display topology
+→ Freeze one frame for every connected display
+→ Present one logical Frozen Virtual Desktop
+→ Cross-monitor Selection
+→ SelectionLocked
+→ Editing／confirmation function bar
+→ optional Annotation actions
+→ Complete OR Save OR Cancel
 ```
 
-Presentation 不應直接依賴具體平台或儲存；Application 負責協調，Domain 保持可測試且不依賴 UI；外部副作用由 adapter 邊界隔離。這些規則在技術棧確定後需要用實際模組驗證。
+### Complete
 
-## 4. Data and privacy baseline
+```text
+Freeze current revisions
+→ render selected and annotated image
+→ publish Clipboard
+→ cleanup
+→ restore previous work context
+→ ResidentReady
+```
 
-- 螢幕內容、剪貼簿內容與產出結果一律視為可能敏感資料。
-- 未經產品決策，不保存、不同步、不寫入診斷 log。
-- 保存、刪除、暫存與失敗清理必須有明確生命週期。
-- 錯誤訊息可以提供診斷上下文，但不得洩漏使用者內容或秘密。
+### Save
 
-## 5. Failure and cancellation baseline
+```text
+Freeze current revisions
+→ render selected and annotated image
+→ Windows Save As
+→ write PNG
+→ publish the same image to Clipboard
+→ cleanup
+→ restore previous work context
+→ ResidentReady
+```
 
-未來每個長時間或可取消操作都必須定義：開始、進行中、成功、取消、失敗、可重試與不可重試狀態。具體狀態名稱與轉移等 PRD/Spec 核准後再固定。
+### Cancel
 
-## 6. Deployment and operations
+```text
+No output
+→ invalidate pending outcomes
+→ cleanup all capture UI and frames
+→ restore previous work context
+→ ResidentReady
+```
 
-目前沒有部署目標、版本策略、更新機制、telemetry 或 rollback 設計。這些項目在平台與產品範圍確定後補入 Architecture 與相應 ADR，不預先創造假設。
+## 4. Core invariants
 
-## 7. Architecture quality attributes
+- `COMP-001` is the only shared Workflow State Authority.
+- All display frames、selection、annotations and outputs belong to one Session ID and coordinate version.
+- Selection and annotations use Frozen Virtual Desktop physical coordinates; mixed-DPI input is mapped deterministically.
+- Mouse release never commits output.
+- Editing／confirmation is mandatory; creating annotations is optional.
+- Complete creates no file.
+- Save uses PNG and also writes Clipboard.
+- Recoverable output failure preserves Editing state.
+- Terminal failure and Cancel perform idempotent cleanup.
+- SnipPlus normal windows are excluded from frozen source content.
+- Successful completion is silent and restores the previous application.
 
-後續至少需要針對以下品質屬性建立可驗證目標：
+## 5. Data and privacy
 
-- 可維護性：模組責任與變更影響清楚。
-- 可測試性：核心規則不依賴 UI 或真實平台才能驗證。
-- 隱私：使用者內容的保存與 log 可追蹤、可控制。
-- 可用性：取消、失敗與恢復行為一致。
-- 相容性：平台、顯示器與縮放行為有明確支援範圍。
-- 效能：主要任務的延遲與資源使用有測量方式。
+- Frozen display frames and annotation state are session-local and disposable.
+- The final image leaves memory only through explicit Clipboard or user-directed PNG Save.
+- No cloud、sync、sharing or external processing is part of v1.
+- Real screenshots、window titles and Clipboard payloads are not committed as repository evidence.
+- Normal product operation and non-interactive verification do not launch external GUI fixtures.
+
+## 6. Current implementation relationship
+
+Reusable today:
+
+- one-display WGC acquisition;
+- one immutable frame and same-frame crop;
+- one-display mask presentation;
+- canonical SoftwareBitmap image pipeline;
+- PNG encoding;
+- Clipboard delivery with bounded retry;
+- low-level state、coordinate、image and adapter tests.
+
+Not yet conforming:
+
+- resident lifecycle and PrintScreen takeover;
+- all-display topology and frame ownership;
+- cross-monitor Selection;
+- SelectionLocked and Editing states;
+- selection adjustment;
+- function bar and Annotation;
+- Save As and file delivery;
+- revision／stale-outcome protection;
+- foreground-context restoration.
+
+Detailed status is maintained in `PRD/PRD-TRACEABILITY-MATRIX.md`.
+
+## 7. Open decisions
+
+- Representation of gaps between irregularly arranged displays.
+- Exact System Tray and MainWindow close-button behavior.
+- PNG retention when Clipboard fails after file creation.
+- Final keyboard-only Annotation acceptance standard.
+- Quantitative performance targets after measurement.
