@@ -2,44 +2,69 @@
 
 狀態：`Accepted`
 
-## 先理解文件來源
+## 先理解現行來源
 
-開始變更前，先讀：
+開始變更前，依序讀取：
 
 1. [README](README.md)
-2. [文件入口](docs/index.md)
-3. [AGENTS.md](AGENTS.md)
-4. 與變更直接相關的 PRD、Spec 或 Architecture 文件
+2. [AGENTS.md](AGENTS.md)
+3. [Requirements-to-Code Conformance Matrix](PRD/PRD-TRACEABILITY-MATRIX.md)
+4. 與變更直接相關的 PRD、Spec、Architecture／Contract
+5. 最小必要的 current code and tests
+
+Historical Research、Analysis、Decision and prior baseline reviews are background only and do not override accepted v1 sources.
 
 ## 變更流程
 
-1. 說明變更目的與來源。
-2. 判斷變更屬於 PRD、Spec、Architecture、ADR、Guide 或 project tracking。
-3. 做最小範圍的修改，保留未確認內容的狀態標記。
-4. 同步更新 index、`CHANGELOG.md`、`TODO.md` 或相關交叉連結。
-5. 做 Markdown、連結、命名、狀態與 diff 的靜態檢查。
-6. 在 PR 描述中清楚區分文件變更與 runtime 驗證；沒有執行就不要宣稱通過。
+1. 說明變更目的、對應 requirement／acceptance criterion and current conformance status.
+2. 判斷現有程式是 reusable、partial、incorrect or obsolete.
+3. 做最小完整 behavioral slice，不跳過 earlier missing prerequisites.
+4. 同步新增或修改 relevant Unit／Contract／platform tests.
+5. Only run restore、build、test or runtime commands explicitly authorized by the current task.
+6. Update `CHANGELOG.md` with actual results.
+7. Update the existing conformance-matrix rows only after code、tests and applicable evidence exist.
+8. Stop before the next correction step、deferred capability or unresolved product decision.
 
 ## 文件要求
 
 - 使用台灣繁體中文描述產品與流程；保留 API、path、code 與正式技術名稱。
-- 每份文件有唯一 H1，並在未定案時標示 `Draft` 或 `Proposal`。
-- 使用 [Markdown naming rules](docs/standards/markdown-naming.md)。
-- 需求寫行為與結果，不先寫不必要的 implementation detail。
-- 新增 ADR 前確認這是需要長期保存的決策，而不是一般偏好。
+- 每份文件使用唯一 H1 and an explicit status.
+- 使用 [Markdown naming rules](docs/standards/markdown-naming.md).
+- Product behavior belongs in existing PRD／Specs; do not hide product decisions in code or Architecture prose.
+- New ADRs require a durable technology or responsibility decision, not ordinary missing implementation.
+- Do not create repeated readiness、authorization、reassessment or closure documents.
 
-## 目前階段的禁止事項
+## Implementation rules
 
-- 未經明確授權，不新增截圖功能或其他應用程式碼。
-- 不新增未經需求支持的 dependency、平台支援或外部服務。
-- 不把候選 Wireframe、PRD 或 Architecture 草稿當成已發布功能。
+- `COMP-001` remains the sole shared Workflow State Authority.
+- Platform adapters return typed outcomes and do not declare product completion.
+- Mouse release locks Selection and never commits output.
+- Editing／confirmation is mandatory; annotation actions may be skipped.
+- Complete and Save are explicit commitments.
+- Save coordinates separate PNG and Clipboard capabilities and succeeds only after both obligations succeed.
+- Real desktop screenshots and Clipboard payloads are not committed as evidence.
+- Normal development and non-interactive tests do not launch external GUI fixtures.
 
-## Commit 與 Pull Request
+## Current implementation boundary
 
-目前未強制特定 commit tool。Commit message 應簡短、使用動詞並描述單一目的，例如：
+The current source is a reusable single-display capture／crop／Clipboard technical prototype. The next work follows `PRD-TRACEABILITY-MATRIX-001`, starting with resident lifecycle and user-controlled PrintScreen takeover.
+
+Do not begin with Annotation、Clipboard hardening、Packaging or unrelated scope expansion.
+
+## Commit and Pull Request
+
+Commit messages should be short、imperative and limited to one purpose, for example:
 
 ```text
-docs: establish product and architecture baseline
+core: add resident capture lifecycle
 ```
 
-Pull Request 至少說明：變更目的、影響文件、狀態變更、靜態檢查結果、尚未驗證項目，以及是否修改應用程式碼。
+A Pull Request should state:
+
+- requirement／Spec source;
+- current and target conformance status;
+- source and tests changed;
+- commands actually run;
+- runtime behavior verified or not verified;
+- privacy／interactive-verification considerations;
+- remaining gaps and stop conditions.
