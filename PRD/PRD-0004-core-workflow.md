@@ -7,7 +7,7 @@
 | Field | Value |
 | --- | --- |
 | Document ID | `PRD-0004` |
-| Version | `1.1` |
+| Version | `1.2` |
 | Status | `Accepted` |
 | Product authority | Repository owner through explicit product decisions |
 | Last reviewed | `2026-07-27` |
@@ -19,7 +19,7 @@ SnipPlus 的第一版核心流程固定為：
 
 ```text
 User manually starts SnipPlus
-→ SnipPlus remains resident in the background
+→ SnipPlus remains resident while the application is running
 → User enables PrintScreen takeover
 → User presses PrintScreen
 → Preserve the current foreground-work context
@@ -37,6 +37,7 @@ User manually starts SnipPlus
 
 ```text
 Render the current selection and annotations
+→ Represent non-display gaps as transparent pixels
 → Write the final image to Clipboard
 → Close all overlays and function bars
 → Restore the pre-capture foreground application and focus
@@ -47,7 +48,8 @@ Render the current selection and annotations
 
 ```text
 Render the current selection and annotations
-→ Open Windows Save As
+→ Represent non-display gaps as transparent pixels
+→ Open Windows Save As with Downloads as the initial folder
 → Save PNG
 → Write that same final image to Clipboard
 → Close all overlays and function bars
@@ -55,7 +57,7 @@ Render the current selection and annotations
 → End the session without a success notification
 ```
 
-If Save As is cancelled, return to the editing stage. If saving or Clipboard delivery fails, remain in the editing stage and show an actionable error; do not silently report completion.
+If Save As is cancelled, return to the editing stage. If PNG creation fails, remain in Editing and do not update Clipboard. If PNG creation succeeds but Clipboard delivery fails, retain the PNG at the user-selected destination, remain in Editing and show an actionable Clipboard error. The default Save As destination is the user’s Downloads folder, but the user may choose another folder.
 
 ### Cancel path
 
@@ -68,7 +70,7 @@ Discard the current capture session
 → Do not show the SnipPlus main window
 ```
 
-## 3. Entry and Residency
+## 3. Entry、Residency and Exit
 
 - The user manually starts SnipPlus.
 - After startup, SnipPlus remains resident so it can receive PrintScreen while the main window is not active.
@@ -76,7 +78,9 @@ Discard the current capture session
 - When takeover is disabled, SnipPlus must not intercept PrintScreen.
 - PrintScreen is the primary v1 capture entry when takeover is enabled.
 - An in-app Start Capture command may remain as a diagnostic or secondary entry, but it is not the primary product workflow.
-- Exact system-tray and application-exit interaction remains a separate UI decision; it must not be guessed during implementation.
+- Closing the MainWindow with `X` directly exits SnipPlus; it does not hide the application to the System Tray.
+- Application exit releases PrintScreen takeover immediately and leaves no hidden resident process.
+- If a System Tray surface is present, its explicit Exit action uses the same shutdown path. A separate close-to-tray behavior is not part of v1.
 
 ## 4. Capture and Selection Experience
 
@@ -93,6 +97,8 @@ When PrintScreen is accepted:
 9. Before Complete or Save, the user can move the selection、resize it from edges or corners、or drag elsewhere to create a new selection.
 
 The user-visible Virtual Desktop is one continuous coordinate space. Implementation may retain separate per-display frozen frames, but selection、annotations and final composition must behave as one session canvas.
+
+When a rectangular selection crosses a physical gap between irregularly arranged displays, the gap contains no captured desktop pixels. The corresponding final-image pixels are transparent (`alpha = 0`).
 
 ## 5. Editing and Confirmation Stage
 
@@ -182,15 +188,19 @@ One privacy tool switches between Mosaic and Blur. The user applies the effect w
 - Writes the final image to Clipboard.
 - Does not create a file.
 - Ends the workflow only after Clipboard delivery succeeds.
+- Non-display gaps inside the selected rectangle are transparent.
 
 ### Save
 
 - First-release format is PNG only.
 - Save As opens each time.
+- Save As initially opens the Downloads folder.
 - Default filename format is `SnipPlus_yyyy-MM-dd_HHmmss.png`.
+- The user may change the destination and filename.
 - A successful Save also writes the same final image to Clipboard.
 - Cancelling Save As returns to editing.
-- A Save or Clipboard failure does not close the editor.
+- A PNG save failure does not close the editor and does not update Clipboard.
+- If PNG succeeds but Clipboard fails, the file is retained, the editor remains open and the Clipboard failure is reported.
 
 ## 9. Cancellation and Focus Restoration
 
@@ -212,14 +222,16 @@ The following previous assumptions are superseded:
 - Mouse release does not complete capture.
 - Annotation is not merely an optional handoff after capture completion.
 - Clipboard is not written immediately after region selection.
+- Closing MainWindow does not hide SnipPlus to the System Tray.
+- Non-display gaps are not filled with arbitrary captured or opaque pixels.
+- An already-created PNG is not rolled back after a later Clipboard failure.
 
 ## 11. Remaining Product Questions
 
-The following details are intentionally unresolved and must not be guessed:
+The following details remain intentionally unresolved and must not be guessed:
 
-- Exact system-tray menu and main-window close behavior.
 - Visual styling beyond the fixed interaction behavior.
-- How non-display gaps inside an irregular Virtual Desktop rectangle are represented in final output.
-- File rollback behavior when PNG save succeeds but Clipboard delivery subsequently fails.
+- Quantitative latency targets.
+- Final keyboard-only annotation acceptance scope.
 
 These questions require explicit product decisions before their affected implementation slice begins.
