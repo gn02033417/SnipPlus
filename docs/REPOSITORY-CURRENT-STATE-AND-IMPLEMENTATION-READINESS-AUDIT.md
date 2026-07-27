@@ -4,84 +4,112 @@
 
 | Field | Value |
 | --- | --- |
-| Document ID | REPOSITORY-READINESS-AUDIT-001 |
-| Status | Accepted / Closed |
-| Initial audit date | 2026-07-26 |
-| Closure date | 2026-07-26 |
-| Implementation readiness | Approved through IMPLEMENTATION-READINESS-REVIEW-001 |
+| Document ID | `REPOSITORY-READINESS-AUDIT-001` |
+| Status | `Accepted — current state amended` |
+| Initial audit date | `2026-07-26` |
+| Current-state amendment | `2026-07-27` |
+| Current implementation readiness | Explicit tasks may perform only the ordered v1 conformance correction |
 
-## 1. Final Conclusion
+## 1. Current Conclusion
 
-The initial audit identified documentation drift and excessive prerequisite/closure layering. Those defects are resolved.
+The original audit correctly stopped repetitive prerequisite／readiness／authorization／closure document creation, but its statement that the old single-display first vertical slice was the product scope is superseded.
 
-SnipPlus now has sufficient Product、Specification、Architecture、technology decision、contract、toolchain and Project Structure documentation to begin the approved first vertical slice.
+The repository now has:
 
-No further pre-coding documentation is required.
+- accepted v1.1 PRD;
+- accepted current Specifications;
+- accepted Architecture and Implementation Contracts v2.0;
+- Accepted ADR-0002 through ADR-0007;
+- an existing solution、source projects、tests and historical runtime evidence;
+- a static requirements-to-code conformance matrix.
+
+No additional pre-coding document family is required. However, the current source is only a reusable single-display technical prototype and does not conform to the accepted v1 product workflow.
 
 ## 2. Current State
 
 | Area | State |
 | --- | --- |
-| PRD v1.0 | Freeze Approved |
-| Specification v1.0 | Freeze Approved |
-| Architecture baseline | Freeze Approved |
-| ADR-0002 UI Framework | Accepted |
-| ADR-0003 Rendering | Accepted |
-| ADR-0004 Capture Backend | Accepted |
-| ADR-0005 Image Representation | Accepted |
-| ADR-0006 Clipboard | Accepted |
-| ADR-0007 Testing | Accepted |
-| Implementation Contracts | Accepted |
-| Project Structure / Toolchain | Accepted |
-| Implementation Readiness | Approved |
-| Source code | Not started |
-| Restore/build/test/runtime evidence | Not performed |
+| PRD | Accepted v1.1 |
+| Specifications | Accepted current baseline |
+| Architecture | Accepted current baseline |
+| ADR-0002 through ADR-0007 | Accepted |
+| Implementation Contracts | Accepted v2.0 |
+| Project Structure／Toolchain | Present and previously build-verified |
+| Source code | Present |
+| Low-level tests | Present |
+| Historical runtime evidence | Present for superseded one-display flow |
+| Accepted v1 conformance | Correction required |
+| Requirements-to-code audit | Completed |
+| Release | Not released |
 
-The missing evidence is expected output of implementation, not a reason to create more planning documents.
+## 3. Effective Sources
 
-## 3. Resolved Audit Findings
+1. `AGENTS.md`
+2. Accepted `PRD-0004`–`PRD-0006`
+3. Accepted `SPEC-0003`–`SPEC-0010`
+4. Accepted `ARCH-0001`–`ARCH-0005`
+5. `Architecture/IMPLEMENTATION-CONTRACTS.md`
+6. `Architecture/PROJECT-STRUCTURE.md`
+7. `PRD/PRD-TRACEABILITY-MATRIX.md`
+8. `docs/IMPLEMENTATION-READINESS-REVIEW.md`
+9. Accepted ADRs
+10. Code、tests and actual runtime evidence
 
-- Repository entry/status documents synchronized.
-- PRD-0001 no longer presented as the sole frozen baseline.
-- Technology Research index covers all research lines.
-- ADR index contains all effective decisions.
-- P0 technology candidates were consolidated directly into ADRs.
-- Shared Result、Capture、Rendering、Clipboard、Output、Failure、Retry and lifecycle contracts were defined.
-- Component-to-project mapping and toolchain versions were fixed.
-- One Implementation Readiness Review replaced repeated readiness chains.
-- Clipboard D1 039→052 chain was closed and cannot extend automatically.
+Historical Research and earlier reviews are non-normative when conflicting with these sources.
 
-## 4. Effective Implementation Sources
+## 4. Reusable Implementation Assets
 
-1. [Implementation Readiness Review](IMPLEMENTATION-READINESS-REVIEW.md)
-2. [Implementation Contracts](../Architecture/IMPLEMENTATION-CONTRACTS.md)
-3. [Project Structure](../Architecture/PROJECT-STRUCTURE.md)
-4. [ADR index](../Architecture/adr/README.md)
-5. Frozen PRD／Specs／Architecture baselines
+Subject to row-level conformance review:
 
-Historical Research remains evidence and does not override these sources.
+- one-display Windows.Graphics.Capture acquisition;
+- frozen-frame ownership and same-frame crop;
+- one-display clear-inside／dim-outside mask;
+- single-display coordinate conversion;
+- BGRA8 premultiplied SoftwareBitmap image pipeline;
+- PNG encoder;
+- Win2D／WinUI image presentation;
+- WinRT Clipboard publication with bounded cancellable retry;
+- shared state authority and low-level deterministic tests.
 
-## 5. Approved Next Action
+## 5. Blocking Product Gaps
 
-Issue an explicit first vertical slice implementation task that：
+- Resident lifecycle and PrintScreen takeover.
+- All-display Frozen Virtual Desktop context and frame ownership.
+- Cross-monitor selection.
+- SelectionLocked、move、resize and reselection.
+- Accepted Editing state and function bar.
+- Required Annotation tools、object model and Undo／Redo.
+- Explicit Complete and Save commitment boundaries.
+- Windows Save As and PNG file delivery.
+- Recoverable Editing preservation and stale-revision protection.
+- Foreground-context restoration.
 
-- Creates the approved solution/projects.
-- Restores/builds the pinned baseline.
-- Implements the bounded WGC → ImageResult → Rendering → Clipboard workflow.
-- Adds required tests.
-- Produces actual build/runtime evidence.
+## 6. Approved Next Action
 
-## 6. Audit Reopening Conditions
+The next explicit implementation task begins with:
 
-Reopen this audit only if：
+```text
+Resident lifecycle
+→ user-controlled PrintScreen takeover
+→ release interception when disabled or exiting
+```
 
-- The user changes product scope.
-- A verified implementation finding contradicts an Accepted decision.
-- Frozen Architecture ownership must change.
-- Official platform/package compatibility materially changes.
+Then continue in the exact order recorded by `PRD-TRACEABILITY-MATRIX-001`.
 
-Normal restore/build/test failures are implementation findings and should be resolved directly or through one targeted corrective decision—not a renewed paperwork chain.
+Do not begin with Annotation、Clipboard hardening、Packaging or unrelated feature expansion.
 
-## 7. Final Outcome
+## 7. Audit Reopening Conditions
 
-`Documentation governance and implementation preparation complete; first vertical slice ready to code.`
+Reassess the accepted baseline only when:
+
+- the Repository owner changes product-visible scope;
+- a verified implementation finding contradicts an Accepted architecture or technology decision;
+- a responsibility boundary must materially change;
+- official platform／package compatibility requires a durable decision;
+- implementation reaches an explicitly unresolved product decision.
+
+Normal coding and test failures update source、tests、CHANGELOG and the existing conformance matrix rather than creating another audit or closure chain.
+
+## 8. Final Outcome
+
+`Repository documentation is aligned; implementation remains paused except for explicitly authorized v1 conformance correction tasks.`
