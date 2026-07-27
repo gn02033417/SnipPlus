@@ -7,7 +7,7 @@
 | Field | Value |
 | --- | --- |
 | Document ID | `PRD-0005` |
-| Version | `1.2` |
+| Version | `1.3` |
 | Status | `Accepted` |
 | Product authority | Repository owner through explicit product decisions |
 | Last reviewed | `2026-07-27` |
@@ -29,7 +29,7 @@
 | `FR-003` | When takeover is enabled and SnipPlus is resident, pressing PrintScreen starts one capture session. | `Must` |
 | `FR-004` | When takeover is disabled or SnipPlus exits, SnipPlus does not intercept PrintScreen. | `Must` |
 | `FR-005` | An in-app capture command may exist as a secondary or diagnostic entry but is not the primary v1 entry. | `Must` |
-| `FR-046` | Closing MainWindow with `X` directly exits SnipPlus, releases PrintScreen takeover and does not hide the application to the System Tray. | `Must` |
+| `FR-046` | Closing MainWindow with `X` directly exits SnipPlus、releases PrintScreen takeover and does not hide the application to the System Tray. | `Must` |
 | `FR-047` | If a System Tray surface exists, its explicit Exit action uses the same application-exit and PrintScreen-release path. | `Must` |
 
 ## 4. Multi-display Freeze and Selection
@@ -58,14 +58,14 @@
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| `FR-017` | The user can create、select、move、resize、restyle and delete rectangle annotations. | `Must` |
+| `FR-017` | The user can create、select、move、resize、restyle and delete rectangle annotations with pointer input. | `Must` |
 | `FR-018` | The user can create an arrow and switch it to a no-arrow straight-line mode. | `Must` |
 | `FR-019` | The user can create semi-transparent freehand highlighter strokes. | `Must` |
 | `FR-020` | The user can create、move and edit text using Microsoft JhengHei by default, with color、font size and bold controls. | `Must` |
 | `FR-021` | The user can apply rectangular Mosaic or Blur regions using one tool with a mode switch. | `Must` |
-| `FR-022` | The user can place numbered markers that increment sequentially, preserve gaps after deletion, allow a new starting number and support color／size changes. | `Must` |
+| `FR-022` | The user can place numbered markers that increment sequentially、preserve gaps after deletion、allow a new starting number and support color／size changes. | `Must` |
 | `FR-023` | The user can choose annotation color and line thickness where applicable. | `Must` |
-| `FR-024` | The user can Undo and Redo annotation creation、deletion、movement、resize、content and style changes. | `Must` |
+| `FR-024` | The user can use function-bar Undo and Redo controls for annotation creation、deletion、movement、resize、content and style changes. | `Must` |
 | `FR-025` | Selection movement、selection resize and reselection are not part of annotation Undo／Redo history. | `Must` |
 
 ## 7. Annotation Coordinate and Clipping Rules
@@ -82,7 +82,7 @@
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | `FR-030` | Complete renders the current selection and annotations、writes the final image to Clipboard and ends only after Clipboard delivery succeeds. | `Must` |
-| `FR-031` | Save opens Windows Save As、supports PNG only in v1、initially proposes the Downloads folder and proposes `SnipPlus_yyyy-MM-dd_HHmmss.png`. | `Must` |
+| `FR-031` | Save opens Windows Save As、supports PNG only in v1、initially proposes Downloads and proposes `SnipPlus_yyyy-MM-dd_HHmmss.png`. | `Must` |
 | `FR-032` | A successful Save writes the same final image to both the selected PNG file and Clipboard, then ends the session. | `Must` |
 | `FR-033` | Cancelling Save As returns to the editing stage without cancelling the capture session. | `Must` |
 | `FR-034` | Save or Clipboard failure leaves the editing stage open and provides an actionable error. | `Must` |
@@ -103,6 +103,8 @@
 | `FR-042` | SnipPlus does not automatically show its main window after the session ends. | `Must` |
 | `FR-043` | SnipPlus normal windows are excluded from the frozen capture source. | `Must` |
 
+Esc remains a core capture-cancellation control. It is not part of the deferred keyboard-only Annotation shortcut feature.
+
 ## 10. Error Feedback
 
 | ID | Requirement | Priority |
@@ -122,6 +124,7 @@
 | `FR-D06` | Delayed capture | `Deferred` |
 | `FR-D07` | Additional save formats beyond PNG | `Deferred` |
 | `FR-D08` | Font family selection、italic、underline and text background | `Deferred` |
+| `FR-D09` | Keyboard-only Annotation workflow and non-PrintScreen tool／action shortcuts, including F6／Tab zone navigation、single-letter tool shortcuts、Ctrl-based editing／output shortcuts、Delete and Arrow-key object manipulation | `Deferred` |
 
 ## 12. Traceability Summary
 
@@ -130,11 +133,11 @@
 | Entry／residency／exit | `FR-001` – `FR-005`、`FR-046` – `FR-047` |
 | Multi-display selection／gap output | `FR-006` – `FR-012`、`FR-048` |
 | Editing confirmation | `FR-013` – `FR-016` |
-| Annotation tools | `FR-017` – `FR-025` |
+| Pointer-driven Annotation tools | `FR-017` – `FR-025` |
 | Coordinates／clipping | `FR-026` – `FR-029` |
 | Clipboard／file output | `FR-030` – `FR-035`、`FR-049` – `FR-050` |
 | Cancel／focus | `FR-036` – `FR-043` |
 | Error feedback | `FR-044` – `FR-045` |
-| Deferred | `FR-D01` – `FR-D08` |
+| Deferred | `FR-D01` – `FR-D09` |
 
-The previous `FR-001`–`FR-045` v1.1 wording remains valid except where superseded or extended by `FR-046`–`FR-050` in this accepted v1.2 requirement set.
+This v1.3 requirement set supersedes the previously accepted keyboard-only Annotation and non-PrintScreen shortcut scope. PrintScreen entry and Esc cancellation remain required.
