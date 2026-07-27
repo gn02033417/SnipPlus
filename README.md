@@ -1,10 +1,10 @@
 # SnipPlus
 
-SnipPlus is a Windows desktop screenshot product. The accepted v1 product baseline requires resident PrintScreen capture、all-display frozen Virtual Desktop selection、a mandatory editing／confirmation stage、first-release annotation tools、Clipboard completion and PNG Save.
+SnipPlus is a Windows desktop screenshot product. The accepted v1.2 baseline requires resident PrintScreen capture、all-display Frozen Virtual Desktop selection、mandatory Editing／confirmation、first-release Annotation tools、Clipboard completion and PNG Save.
 
 The repository already contains a working single-display capture／crop／Clipboard technical prototype. That prototype is **not** the accepted v1 product workflow and is being corrected through the requirements-to-code conformance plan.
 
-## Start here
+## Start Here
 
 Read these sources in order:
 
@@ -21,45 +21,47 @@ Read these sources in order:
 
 Historical Research、Analysis、Decision and earlier baseline reviews do not override these accepted sources.
 
-## Accepted v1 workflow
+## Accepted v1 Workflow
 
 ```text
 User manually starts SnipPlus
-→ SnipPlus remains resident
+→ SnipPlus remains resident while running
 → User enables PrintScreen takeover
 → PrintScreen freezes all connected displays
 → Present one masked Frozen Virtual Desktop
 → User creates a cross-monitor rectangular selection
 → Mouse release locks the selection
-→ Show editing／confirmation function bar
+→ Show Editing／confirmation function bar
 → User may adjust the selection and optionally annotate
 → Complete OR Save OR Cancel
 ```
 
-- **Complete** renders the current selection and annotations、writes Clipboard and ends only after Clipboard succeeds.
-- **Save** opens Windows Save As、writes PNG、publishes the same result to Clipboard and ends only after both succeed.
+- **Complete** renders the current selection and annotations、uses transparent pixels for physical display gaps、writes Clipboard and ends only after Clipboard succeeds.
+- **Save** opens Windows Save As in Downloads by default、proposes `SnipPlus_yyyy-MM-dd_HHmmss.png`、writes PNG、publishes the same result to Clipboard and ends only after both succeed.
+- If Clipboard fails after PNG creation, the PNG remains at the selected destination and the workflow returns to Editing.
 - **Cancel** creates no output、closes capture UI and restores the pre-capture work context.
+- MainWindow `X` directly exits SnipPlus、releases PrintScreen takeover and does not hide to the System Tray.
 
-## Current status
+## Current Status
 
 | Area | Status |
 | --- | --- |
-| Product requirements | Accepted v1.1 |
+| Product requirements | Accepted v1.2 |
 | Behavioral specifications | Accepted current baseline |
 | Architecture principles／layers／modules／components | Accepted current baseline |
 | Technology ADRs | ADR-0002 through ADR-0007 Accepted |
-| Implementation contracts | Accepted v2.0 |
+| Implementation contracts | Accepted v2.1 |
 | Solution and projects | Present |
 | Technical capture prototype | Implemented and previously verified |
 | Accepted v1 workflow conformance | Correction required |
-| Current coding authorization | Only through an explicit task following the conformance correction order |
+| First focused coding slice | Product decisions resolved; requires explicit user authorization |
 | Release status | Not released |
 
-The current code provides reusable one-display WGC、same-frame crop、image、PNG encoding and Clipboard foundations. It does not yet provide resident PrintScreen takeover、Frozen Virtual Desktop、cross-monitor selection、locked-selection editing、required annotation tools、Save As workflow or focus restoration.
+The current code provides reusable one-display WGC、same-frame crop、image、PNG encoding and Clipboard foundations. It does not yet provide resident PrintScreen takeover、direct-exit registration cleanup、Frozen Virtual Desktop、cross-monitor selection、transparent gap composition、locked-selection Editing、required Annotation tools、Save As workflow or focus restoration.
 
-## Current implementation order
+## Current Implementation Order
 
-1. Resident lifecycle and takeover setting.
+1. Resident lifecycle、MainWindow direct exit and takeover setting.
 2. PrintScreen entry through `COMP-001`.
 3. Frozen Virtual Desktop session and per-display frame ownership.
 4. Cross-monitor presentation and initial selection.
@@ -68,14 +70,14 @@ The current code provides reusable one-display WGC、same-frame crop、image、P
 7. Function bar、Complete／Save／Cancel and focus restoration.
 8. Annotation document and required tools.
 9. Annotation Undo／Redo、Virtual Desktop anchoring and clipping.
-10. Complete final render plus Clipboard.
-11. Save As、PNG plus the same Clipboard result.
+10. Complete final render、transparent gaps and Clipboard.
+11. Save As、Downloads default、PNG、same-result Clipboard and retained-file partial outcome.
 12. Failure preservation、stale-revision protection and accessibility.
 13. Explicitly authorized multi-display runtime verification.
 
-Each completed implementation slice must update [PRD-TRACEABILITY-MATRIX-001](PRD/PRD-TRACEABILITY-MATRIX.md) using actual code、tests and applicable runtime evidence.
+Each completed slice must update [PRD-TRACEABILITY-MATRIX-001](PRD/PRD-TRACEABILITY-MATRIX.md) using actual code、tests and applicable runtime evidence.
 
-## Accepted technology baseline
+## Accepted Technology Baseline
 
 - C# 14 / .NET SDK 10.0.302.
 - Windows 11 24H2 x64 implementation baseline.
@@ -86,6 +88,6 @@ Each completed implementation slice must update [PRD-TRACEABILITY-MATRIX-001](PR
 - WinRT DataPackage Clipboard.
 - MSTest.Sdk 4.1.0 with Microsoft.Testing.Platform.
 
-## Documentation boundary
+## Documentation Boundary
 
 Do not create more prerequisite、authorization、readiness or closure chains. Product-visible changes update existing PRD／Specs first. Implementation work updates code、tests、CHANGELOG and the existing conformance matrix. A new ADR is required only for a durable technology or architecture decision that cannot be handled by the accepted baseline.
