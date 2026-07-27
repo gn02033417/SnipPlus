@@ -1,56 +1,120 @@
 # Coding Standard
 
-狀態：`Draft`
+狀態：`Accepted`
 
-SnipPlus 目前沒有應用程式碼與技術棧。本文件先定義跨語言的工程原則；語言或 framework 確定後，再在不違反本文件的前提下加入具體規則。
+## 1. Scope
 
-## 核心原則
+This standard applies to Repository-owned C# 14／.NET 10 source and tests. It supplements `.editorconfig`、`Directory.Build.props`、Accepted Architecture、Implementation Contracts and Project Structure.
 
-- 以可讀性、可測試性與可維護性優先。
-- 讓每個模組有清楚責任，避免跨層直接存取內部細節。
-- 偏好小而明確的函式、資料結構與介面。
-- 不用抽象層掩蓋尚未理解的需求。
-- 先修正根因，再處理表面症狀。
+Generated WinUI code and third-party source are governed by their toolchain, but Repository-owned integration code must still preserve the accepted boundaries.
 
-## 命名
+## 2. Core principles
 
-- 名稱使用領域語言，不使用只有作者看得懂的縮寫。
-- Boolean 名稱應能讀成判斷句。
-- 函式名稱描述動作與對象；資料型別名稱描述其責任。
-- 同一概念在程式碼與文件使用同一個名稱。
-- 避免用 `Manager`、`Helper`、`Util` 作為沒有清楚責任的容器名稱。
+- Prefer correctness、readability、testability and maintainability over cleverness.
+- Keep product behavior in Core rather than WinUI code-behind or platform adapters.
+- Fix the root workflow／state／ownership defect rather than layering a visual workaround over it.
+- Reuse current technical foundations only after conformance review.
+- Do not add abstractions、projects or dependencies without a demonstrated responsibility need.
+- Do not implement deferred product scope without explicit direction.
 
-## 結構與依賴
+## 3. Language and type rules
 
-- UI、application、domain、infrastructure 的依賴方向必須在 Architecture 中可解釋。
-- Domain 規則不可偷偷依賴 UI 或外部服務。
-- I/O、網路、檔案與時間等副作用集中在可替換的邊界。
-- 不以 global state 傳遞隱藏依賴。
-- 新增模組前先確認既有模組是否已能承擔該責任。
+- Use nullable reference types.
+- Prefer immutable records or readonly value types for intents、snapshots、revisions and outcomes.
+- Use required members when absence would violate a contract.
+- Validate public contract inputs at the owning boundary.
+- Use `CancellationToken` for cancellable asynchronous work.
+- Implement `IDisposable` or explicit lease ownership for image、frame、stream and platform resources.
+- Cleanup must be idempotent where the workflow can invoke it through more than one path.
+- Avoid `async void` except UI event handlers; event handlers should delegate to testable asynchronous methods.
+- Do not block asynchronous platform calls with `.Result`、`.Wait()` or synchronous polling.
 
-## 錯誤處理與 logging
+## 4. Naming
 
-- 不吞掉例外、不留空的 catch，也不只回傳通用失敗訊息。
-- 錯誤訊息要包含可定位的操作、狀態與安全的識別資訊。
-- 不把密碼、token、個人資料或完整敏感 payload 寫入 log。
-- 預期中的失敗使用可判斷的結果；真正的例外保留原因與上下文。
-- retry 必須有上限、退避策略與取消條件。
+- Use accepted domain terms: `CaptureSession`、`FrozenVirtualDesktop`、`DisplaySnapshot`、`SelectionRevision`、`AnnotationRevision`、`FinalRender`、`ClipboardDelivery` and `OutputDelivery`.
+- Boolean names read as conditions, such as `IsTakeoverEnabled` or `CleanupCompleted`.
+- Method names describe action and result boundary.
+- Avoid vague containers such as `Manager`、`Helper` or `Util` unless the responsibility is genuinely narrow and explicit.
+- Use the same concept name across PRD、Specs、contracts、source and tests.
 
-## 測試
+## 5. Project and dependency rules
 
-- 需求中的可驗收行為應對應測試或可重現的驗證步驟。
-- 單元測試聚焦規則；整合測試聚焦模組邊界；端對端測試聚焦重要使用者流程。
-- 測試名稱描述情境與預期結果。
-- 不用大量 mock 讓測試只驗證 mock 本身。
-- 修 bug 時先補能重現問題的測試，再修正實作。
+- `SnipPlus.Contracts` depends on no source project.
+- `SnipPlus.Core` depends only on Contracts.
+- `SnipPlus.Windows` depends on Contracts and accepted platform packages, not Core.
+- `SnipPlus.App` is the composition root and may reference Contracts、Core and Windows.
+- No circular references.
+- Concrete WinUI、WGC、Win2D、DataPackage、picker、window-handle or filesystem implementation types do not leak into Core contracts.
+- `COMP-001` remains the sole shared Workflow State Authority.
+- Platform adapters return typed outcomes and never mutate shared state.
 
-## 效能與安全
+## 6. Workflow rules
 
-- 先以可測量資料確認瓶頸，再做最佳化。
-- 明確處理大檔案、長時間操作、取消、timeout 與資源釋放。
-- 使用 allowlist、輸入驗證與最小權限原則。
-- 任何本機檔案、剪貼簿、螢幕資料或使用者內容都視為可能敏感資料；保存與 log 行為必須有明確需求。
+Code must preserve these invariants:
 
-## Code review
+- one Session ID owns all display frames、selection、annotations and output requests;
+- mouse release locks Selection and never publishes Clipboard or a file;
+- Editing／confirmation is mandatory while Annotation actions are optional;
+- Selection changes do not scale or move Annotation geometry;
+- Complete creates no file and ends only after Clipboard success;
+- Save coordinates PNG and Clipboard and ends only after both succeed;
+- recoverable output failure preserves Editing state;
+- stale session／revision outcomes cannot advance state;
+- Cancel creates no output and invalidates pending completion;
+- successful、cancelled and terminal sessions perform capture-UI cleanup and focus restoration.
 
-Review 至少確認：需求是否有來源、責任是否清楚、錯誤路徑是否可見、測試是否覆蓋主要行為、文件與 Changelog 是否同步，以及是否引入不必要的依賴或範圍。
+## 7. Error handling
+
+- Do not swallow exceptions or leave empty `catch` blocks.
+- Expected platform and workflow failures use typed outcomes and stable failure codes.
+- Error messages identify the failed operation without exposing screen pixels、Clipboard content or private window titles.
+- Retry must be bounded、cancellable and owned by the correct capability.
+- A partial success must not be reported as full success.
+- Terminal resource loss and recoverable output contention must remain distinct.
+
+## 8. Resource ownership
+
+- Every acquired display frame has one session owner and is disposed exactly once.
+- Final image results remain alive for the complete delivery lifetime.
+- Leases must not outlive the owning result contract.
+- Cancellation and exception paths release capture sessions、frame pools、streams、bitmaps、pointer capture and transient windows.
+- Cleanup methods tolerate repeated calls without double-disposal failure.
+
+## 9. Testing
+
+- Test names describe scenario and expected outcome.
+- Unit tests cover platform-neutral state、geometry、history、commitment and failure rules.
+- Contract tests cover identity、defaults、immutability、disposal and invalid input.
+- Windows tests cover image、PNG、Clipboard and platform adapters.
+- Interactive PrintScreen、multi-display、window and focus tests are categorized and excluded from default test runs.
+- Use synthetic or public images; do not commit real desktop screenshots or Clipboard payloads.
+- Bug fixes should add a deterministic failing test when the defect is testable below the interactive UI layer.
+- Passing build or test counts do not by themselves prove product conformance.
+
+## 10. UI and accessibility
+
+- WinUI code-behind translates UI events into intents; it does not own workflow semantics.
+- Required controls expose understandable accessible names and current state.
+- Color is not the only indicator of tool selection、selection boundary or failure.
+- Function-bar placement and visibility follow accepted Specs.
+- Exact styling may evolve without changing product behavior.
+
+## 11. Privacy and external processes
+
+- Screen、Clipboard and saved image data are sensitive.
+- Do not log pixel data、full window titles or unredacted local paths.
+- Normal product operation、restore、build、unit tests and static checks do not launch Paint、Notepad or other external GUI fixtures.
+- Interactive external windows require explicit authorization in the current task.
+
+## 12. Code review checklist
+
+Review at least:
+
+- requirement and acceptance source;
+- correct project／component ownership;
+- legal state and revision behavior;
+- cancellation、failure and cleanup paths;
+- tests for changed behavior;
+- privacy and interactive-verification boundary;
+- absence of deferred scope or unnecessary dependency;
+- `CHANGELOG.md` and conformance-matrix updates when evidence exists.
