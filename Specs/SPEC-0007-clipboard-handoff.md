@@ -8,7 +8,7 @@
 | --- | --- |
 | Document ID | `SPEC-0007` |
 | Feature ID | `FEAT-003` |
-| Version | `1.0` |
+| Version | `1.1` |
 | Status | `Accepted` |
 | Last reviewed | `2026-07-27` |
 | Normative sources | `PRD-0004`、`PRD-0005`、`PRD-0006`、`SPEC-0003`、`SPEC-0009` |
@@ -18,7 +18,7 @@
 Clipboard is written only after an explicit user commitment:
 
 - Complete; or
-- successful Save path after PNG creation has completed.
+- successful PNG creation in the Save path.
 
 The following never write Clipboard:
 
@@ -37,6 +37,7 @@ Clipboard receives one final rendered image representing:
 
 - the current selection bounds;
 - source pixels from the current frozen capture session;
+- transparent pixels for physical non-display gaps inside the selection;
 - all visible annotation content clipped to the current selection;
 - the same rendered result used by PNG Save when Save is chosen.
 
@@ -77,6 +78,7 @@ Save owns file creation; Clipboard Handoff owns Clipboard publication.
 User chooses Save
 → Save As succeeds
 → PNG creation succeeds
+→ Retain the PNG at the selected destination
 → Publish the exact same rendered image to Clipboard
 → Only after both succeed may the session complete
 ```
@@ -88,9 +90,10 @@ If PNG creation fails, Clipboard is not updated.
 If Clipboard publication fails after file creation:
 
 - do not report the complete Save workflow as successful;
+- retain the PNG file at the selected destination;
 - retain the editing state;
-- disclose the Clipboard failure;
-- the exact rollback policy for the already-created PNG remains an explicit unresolved product decision and must not be guessed.
+- disclose that the PNG was saved and Clipboard delivery failed;
+- allow retry or Cancel without deleting the file.
 
 ## 6. Retry and Privacy
 
@@ -103,8 +106,9 @@ If Clipboard publication fails after file creation:
 ## 7. Session and State Rules
 
 - Clipboard requests include the current Session ID and final Result ID.
+- Save-originated Clipboard requests may also carry the retained File Reference.
 - Only `COMP-001` may transition shared workflow state.
-- Platform Clipboard adapters return an outcome; they do not declare the product session complete.
+- Platform Clipboard adapters return an outcome; they do not declare the product session complete or delete an output file.
 - A success outcome applies only to the exact request and result supplied.
 - Cancellation or a new capture session invalidates stale Clipboard completion callbacks.
 
@@ -119,5 +123,7 @@ If Clipboard publication fails after file creation:
 | `SPEC-0007-AC-005` | Clipboard failure retains selection and annotations and does not close the workflow. |
 | `SPEC-0007-AC-006` | Stale or mismatched session callbacks cannot complete a newer session. |
 | `SPEC-0007-AC-007` | History／roaming remain disabled and retry remains bounded and cancellable. |
+| `SPEC-0007-AC-008` | Clipboard failure after PNG success retains the created PNG and reports that only Clipboard delivery failed. |
+| `SPEC-0007-AC-009` | Non-display gap pixels remain transparent in the Clipboard image. |
 
-The previous automatic Clipboard handoff immediately after capture completion is superseded.
+The previous automatic Clipboard handoff and unresolved PNG rollback behavior are superseded.
