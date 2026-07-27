@@ -76,7 +76,19 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 - Release x64 build 成功，0 warnings、0 errors。
 - 非互動測試 50/50 通過，0 失敗、0 略過；包含新的 request／state／composition tests，以及 `ResidentLifecycleCoordinatorTests` 與 `WindowsPrintScreenTakeoverTests`。
 - 本 slice 10 個 C# 檔案的限定範圍 `dotnet format --verify-no-changes` 通過。
-- 本次沒有啟動 SnipPlus、Paint、Notepad、Snipping Tool 或其他外部 GUI，也沒有執行 Interactive／Manual tests；Windows Runtime Verification 尚未執行。
+- 本節的非互動驗證沒有啟動 SnipPlus、Paint、Notepad、Snipping Tool 或其他外部 GUI，也沒有執行 Interactive／Manual tests；current-HEAD packaged runtime evidence 另見下節。
+
+### Verified — Current-HEAD Packaged Request Boundary Runtime (2026-07-28)
+
+- 以 current HEAD `a94f8fd` 建立並部署 x64 Development MSIX；package Identity 為 `SnipPlus.App`、Version `1.0.0.0`，重裝後 installed `SnipPlus.App.dll` 與 Release x64 build 的 SHA-256 一致。
+- Windows 11 x64 build `26200`、3 個 physical displays、單一可觀察的 SnipPlus MainWindow；啟動後沒有自動進入 Capture，設定與狀態文字一致。沒有啟動 Paint、Notepad 或其他外部 GUI fixture。
+- A：啟用 takeover、關閉並重新啟動後，PrintScreen 顯示 request accepted；再次按鍵顯示 active request rejected／Busy，沒有進入 `Freezing`、`BeginCaptureAsync`、Capture Overlay、Selection、PNG 或 Clipboard。
+- B：重新啟動後先按 Start Capture 顯示同一個 request accepted boundary；接著按 PrintScreen 顯示 Busy，沒有取代 active request。
+- C：PrintScreen first 後再按 Start Capture 顯示 Busy，第一個 request 保持 active。
+- D：停用 takeover 後 PrintScreen 沒有更新 SnipPlus 狀態；Start Capture 仍可進入同一個 `ResidentReady → CaptureRequested` boundary。停用後 Windows 自身曾顯示 `SnippingTool` overlay，並已在驗證後清理；該 overlay 不是 SnipPlus 啟動的 test fixture。
+- E：在 `CaptureRequested` 狀態以 MainWindow `X` 關閉後，`SnipPlus.App` process 完全結束；重新啟動後設定仍為 disabled、狀態回到 resident ready，PrintScreen 沒有進入 SnipPlus boundary。
+- 已核對沒有 hidden SnipPlus resident process；由停用 PrintScreen 產生的 Windows `SnippingTool` process 也已清理。未保存真實桌面截圖或 Clipboard payload。
+- 部署期間發現同 Identity／Version 的舊 installed package 未被直接覆蓋；移除後重新安裝 current-HEAD package 並以 installed DLL hash 重新確認。未建立新 signing certificate；只使用既有本機開發憑證完成本機信任設定。
 
 ### Windows Runtime Verification — Blocked (2026-07-27)
 
