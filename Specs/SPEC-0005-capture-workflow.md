@@ -8,14 +8,14 @@
 | --- | --- |
 | Document ID | `SPEC-0005` |
 | Feature ID | `FEAT-001` |
-| Version | `1.0` |
+| Version | `1.1` |
 | Status | `Accepted` |
 | Last reviewed | `2026-07-27` |
 | Normative sources | `PRD-0004`、`PRD-0005`、`PRD-0006`、`SPEC-0003` |
 
 ## 2. Scope
 
-This Spec defines the first-release capture path from PrintScreen through a locked, editable, cross-monitor selection. It does not define annotation rendering details or output adapter internals.
+This Spec defines the first-release capture path from PrintScreen through a locked, editable, cross-monitor selection. It also fixes application exit and non-display-gap behavior. It does not define annotation rendering details or output adapter internals.
 
 ```text
 ResidentReady
@@ -28,14 +28,16 @@ ResidentReady
 → Enter Editing
 ```
 
-## 3. Preconditions
+## 3. Preconditions and Exit Boundary
 
 - SnipPlus was manually started and remains resident.
 - PrintScreen takeover is enabled.
 - No other SnipPlus capture session is active.
 - The application active before capture can be identified for later focus restoration.
+- Closing MainWindow with `X` exits SnipPlus、releases takeover and does not hide the process to the System Tray.
+- If a System Tray surface is present, its explicit Exit action uses the same shutdown path.
 
-When takeover is disabled, SnipPlus must not intercept PrintScreen.
+When takeover is disabled or the process exits, SnipPlus must not intercept PrintScreen.
 
 ## 4. Capture Start
 
@@ -58,6 +60,8 @@ An in-app capture button may invoke the same workflow as a secondary testable en
 - The pointer becomes a crosshair across the selectable area.
 - SnipPlus normal windows are not visible in the frozen source.
 - The implementation is not required to allocate one physically contiguous giant bitmap; separate frames are allowed if user-visible behavior remains one canvas.
+- Physical gaps between irregularly arranged displays contain no captured source pixels.
+- When a selection includes such a gap, the corresponding final-image pixels are transparent (`alpha = 0`).
 
 ## 6. Initial Selection
 
@@ -112,7 +116,7 @@ If display topology、DPI mapping or frame dimensions become inconsistent during
 
 | ID | Criterion |
 | --- | --- |
-| `SPEC-0005-AC-001` | Enabled PrintScreen starts one capture session while disabled takeover does not intercept it. |
+| `SPEC-0005-AC-001` | Enabled PrintScreen starts one capture session while disabled takeover and process exit do not intercept it. |
 | `SPEC-0005-AC-002` | All connected displays are frozen before selection becomes interactive. |
 | `SPEC-0005-AC-003` | One rectangular selection can cross display boundaries in Virtual Desktop coordinates. |
 | `SPEC-0005-AC-004` | The selection interior shows unmasked frozen content while the outside remains dimmed. |
@@ -122,13 +126,16 @@ If display topology、DPI mapping or frame dimensions become inconsistent during
 | `SPEC-0005-AC-008` | Esc at each capture stage cancels without output and restores the previous application. |
 | `SPEC-0005-AC-009` | SnipPlus normal windows are excluded from frozen source content. |
 | `SPEC-0005-AC-010` | Display-context mismatch never produces a silently incorrect crop. |
+| `SPEC-0005-AC-011` | Closing MainWindow exits SnipPlus rather than hiding it to tray and releases PrintScreen takeover. |
+| `SPEC-0005-AC-012` | Non-display gaps included by a cross-monitor selection render as transparent pixels. |
 
-## 12. Open Decisions
+## 12. Remaining Open Decisions
 
 Implementation must not guess:
 
-- final representation of non-display gaps in irregular monitor arrangements;
-- exact system-tray and main-window close behavior;
-- quantitative latency targets.
+- quantitative latency targets;
+- final keyboard-only annotation acceptance scope.
 
-The prior single-monitor and mouse-release-to-complete workflow is superseded.
+System Tray close behavior、display-gap output and PNG retention are no longer open decisions.
+
+The prior single-monitor、mouse-release-to-complete、close-to-tray and unresolved-gap workflow is superseded.
