@@ -1,4 +1,4 @@
-namespace SnipPlus.Contracts;
+﻿namespace SnipPlus.Contracts;
 
 public enum PrintScreenTakeoverFailureCode
 {
@@ -31,7 +31,12 @@ public sealed record PrintScreenTakeoverResult(
         new(false, isRegistered, false, failureCode, message);
 }
 
-public sealed record PrintScreenReceivedEventArgs(Guid RequestId, DateTimeOffset ReceivedAt) : EventArgs;
+public sealed class PrintScreenReceivedEventArgs(Guid requestId, DateTimeOffset receivedAt) : EventArgs
+{
+    public Guid RequestId { get; } = requestId;
+
+    public DateTimeOffset ReceivedAt { get; } = receivedAt;
+}
 
 public interface IPrintScreenTakeover : IDisposable
 {

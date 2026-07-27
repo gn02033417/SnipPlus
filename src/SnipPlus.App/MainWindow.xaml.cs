@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Graphics.Canvas;
 using Microsoft.UI;
@@ -174,10 +174,10 @@ public partial class MainWindow : Window, IDisposable
         try
         {
             await Task.Delay(100, cancellationToken);
-                var frameOutcome = await _workflowCoordinator.BeginSelectionAsync(
-                ((CoordinateMappingResult.Success)fullFrameIntentResult).Intent,
-                _captureService,
-                cancellationToken);
+            var frameOutcome = await _workflowCoordinator.BeginSelectionAsync(
+            ((CoordinateMappingResult.Success)fullFrameIntentResult).Intent,
+            _captureService,
+            cancellationToken);
             switch (frameOutcome)
             {
                 case CaptureFrameOutcome.Succeeded succeeded:

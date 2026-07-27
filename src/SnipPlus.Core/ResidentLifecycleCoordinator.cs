@@ -1,4 +1,4 @@
-using SnipPlus.Contracts;
+﻿using SnipPlus.Contracts;
 
 namespace SnipPlus.Core;
 

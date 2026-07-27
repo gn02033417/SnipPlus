@@ -40,7 +40,7 @@
 - 新增平台中立 `IPrintScreenTakeover`、`IPrintScreenTakeoverSettingsStore` 與 `ResidentLifecycleCoordinator`，集中處理 persisted takeover state、冪等註冊／解除、PrintScreen event boundary 與 application-exit cleanup。
 - `SnipPlus.Windows` 新增 Windows `RegisterHotKey`／`UnregisterHotKey` implementation 與 `ApplicationData.Current.LocalSettings` persistence；註冊失敗時不保留 enabled state。
 - MainWindow 新增 PrintScreen takeover checkbox；X 關閉時先釋放 takeover，再以 `Environment.Exit(0)` 結束 SnipPlus process。PrintScreen event 本次只到 application boundary，不啟動 `BeginCaptureAsync`。
-- 新增 deterministic resident lifecycle tests，覆蓋設定載入、單次註冊／解除、失敗回復、event boundary 與 application-exit／Dispose idempotence。依本次任務限制，尚未執行測試。
+- 新增 deterministic resident lifecycle tests，覆蓋設定載入、單次註冊／解除、失敗回復、event boundary 與 application-exit／Dispose idempotence；本次非互動測試已全部通過。
 
 ### Verified — Historical Technical Foundation
 
@@ -51,9 +51,19 @@
 
 Historical evidence只適用於上述技術基礎，不證明 resident PrintScreen、four-4K capacity、cross-monitor Selection、pointer Annotation、quantitative performance、Save As 或 focus restoration conforming。
 
+### Verified — Resident Lifecycle Conformance Slice (2026-07-27)
+
+- Locked restore 成功。
+- Release x64 build 成功，0 warnings、0 errors。
+- 非互動測試 45/45 通過，0 失敗、0 略過；`ResidentLifecycleCoordinatorTests` 10/10、`WindowsPrintScreenTakeoverTests` 2/2 均包含於完整測試結果。
+- 本 Slice 7 個 C# 檔案的限定範圍 `dotnet format --verify-no-changes` 通過。
+- 全 Repository formatting baseline 仍有 4,704 項既有問題，不屬於本 Slice，未予修正。
+- Windows Runtime、真實 `RegisterHotKey`／`WM_HOTKEY`、跨程序設定還原及 MainWindow X 結束程序尚未執行驗證。
+- 本次未啟動 SnipPlus、Paint、Notepad 或其他外部 GUI，亦未執行 Interactive／Manual tests。
+
 ### Current Conformance Status
 
-- Resident lifecycle、direct application exit and PrintScreen takeover：已加入 static implementation 與 deterministic tests；本次未執行 build／test／runtime，尚不宣稱已通過驗證。
+- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build 與 deterministic non-interactive tests 已完成並通過；Windows Runtime verification 尚未執行，仍不宣稱完全 Conforms。
 - Four-4K capacity policy and unsupported-limit outcomes：Missing。
 - Frozen Virtual Desktop and per-display frame ownership：Missing。
 - Cross-monitor Selection and transparent gap output：Missing。

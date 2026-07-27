@@ -1,4 +1,4 @@
-using SnipPlus.Contracts;
+﻿using SnipPlus.Contracts;
 using Windows.Storage;
 
 namespace SnipPlus.Windows;

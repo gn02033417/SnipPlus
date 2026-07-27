@@ -1,6 +1,6 @@
 # SnipPlus v1 Requirements-to-Code Conformance Matrix
 
-狀態：`Reviewed — resident lifecycle correction implemented; verification pending`
+狀態：`Reviewed — resident lifecycle correction implemented; non-interactive verification passed; Windows runtime pending`
 
 ## 1. Document Control
 
@@ -56,7 +56,7 @@ Major implementation gaps:
 - Complete／Save commitment boundaries and progress state;
 - Downloads-default Save As and retained-file outcome;
 - quantitative timing、memory and repeated-session evidence;
-- execution evidence for the resident lifecycle correction (build、test and runtime were not authorized in this task);
+- Windows Runtime evidence for the resident lifecycle correction (locked restore、Release x64 build and non-interactive tests are recorded; packaged runtime and real PrintScreen registration remain pending);
 - focus restoration and retained Editing after recoverable failure.
 
 Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not be classified as missing v1 work.
@@ -65,10 +65,10 @@ Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not
 
 | Requirement | Accepted behavior | Current result | Status | Required action |
 | --- | --- | --- | --- | --- |
-| `FR-001` | Manual startup keeps SnipPlus resident while running. | `ResidentLifecycleCoordinator` is wired from MainWindow construction and owns resident takeover state; build／runtime not executed in this task. | `Partial` | Execute the added lifecycle tests and authorized runtime verification later. |
-| `FR-002`–`FR-004` | User controls PrintScreen takeover; disabled or exited app does not intercept. | `IPrintScreenTakeover`、persisted settings store and Windows `RegisterHotKey`／`UnregisterHotKey` implementation added; test／runtime not executed in this task. | `Partial` | Execute the added lifecycle tests and authorized Windows verification later. |
+| `FR-001` | Manual startup keeps SnipPlus resident while running. | `ResidentLifecycleCoordinator` is wired from MainWindow construction and owns resident takeover state; locked restore、Release x64 build and non-interactive tests passed. Packaged runtime was not executed. | `Partial` | Execute authorized packaged runtime verification later. |
+| `FR-002`–`FR-004` | User controls PrintScreen takeover; disabled or exited app does not intercept. | `IPrintScreenTakeover`、persisted settings store and Windows `RegisterHotKey`／`UnregisterHotKey` implementation added; deterministic tests cover settings、idempotent registration／release and failure state. Real Windows registration and runtime behavior remain unverified. | `Partial` | Execute authorized Windows verification later. |
 | `FR-005` | In-app capture is secondary. | It is currently the only entry. | `Incorrect` | Retain only as secondary after PrintScreen exists. |
-| `FR-046`–`FR-047` | MainWindow `X` and explicit Exit terminate、release takeover and do not hide to tray. | MainWindow `Closed` calls the resident exit boundary before `Environment.Exit(0)`; no tray surface exists; tests not executed. | `Partial` | Execute the application-exit lifecycle tests and authorized runtime verification later. |
+| `FR-046`–`FR-047` | MainWindow `X` and explicit Exit terminate、release takeover and do not hide to tray. | MainWindow `Closed` calls the resident exit boundary before `Environment.Exit(0)`; no tray surface exists; deterministic exit／Dispose tests passed. Actual process termination and runtime release were not executed. | `Partial` | Execute authorized packaged runtime verification later. |
 | `FR-006`–`FR-010` | Freeze and present all supported displays、crosshair、cross-monitor Selection and mask. | One display only; mask foundation exists. | `Missing／Partial` | Add capacity-aware Virtual Desktop and per-display frames. |
 | `FR-011` | Mouse release locks Selection and creates no output. | Release invokes crop／Clipboard. | `Incorrect` | Replace with `SelectionLocked → Editing`. |
 | `FR-012` | Locked Selection supports pointer move、edge／corner resize and reselection. | Not present. | `Missing` | Implement Selection revisions and pointer handles. |
@@ -98,7 +98,7 @@ Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not
 | `NFR-004`–`NFR-008` | Stable Session and output integrity. | One-frame ownership foundation exists; accepted Session obligations do not. | `Partial／Incorrect` | Generalize ownership and completion contracts. |
 | `NFR-009`–`NFR-013` | Cross-display correctness、four-4K capacity and typed over-limit failure. | One-display tests only; no capacity policy. | `Missing／Partial` | Add envelope model、mixed-DPI、gap-alpha and boundary tests. |
 | `NFR-014`–`NFR-019` | Familiar interaction、silent success、progress and retained-error feedback. | One-display mask exists; immediate output and visible success conflict. | `Partial／Incorrect` | Implement Editing、300 ms progress and feedback. |
-| `NFR-020`–`NFR-023` | Focus and exit behavior. | Direct exit and takeover release path are statically implemented; focus restoration belongs to a later slice; tests／runtime not executed. | `Partial` | Preserve the exit boundary and verify it before the next slice. |
+| `NFR-020`–`NFR-023` | Focus and exit behavior. | Direct exit and takeover release path are statically implemented; deterministic lifecycle tests passed. Focus restoration belongs to a later slice; actual process exit and Windows runtime release remain unverified. | `Partial` | Preserve the exit boundary and execute authorized runtime verification later. |
 | `NFR-024`–`NFR-028` | Privacy and verification boundaries. | Local-only and synthetic-evidence boundaries exist. | `Conforms` | Preserve. |
 | `NFR-029`–`NFR-031` | Accessible names、Esc cancellation and non-color-only state. | Accepted controls do not exist. | `Missing／Partial` | Implement only accepted baseline accessibility; do not add deferred shortcut workflow. |
 | `NFR-032`–`NFR-036` | Maintainability and traceability. | Canonical documents and state authority exist. | `Conforms／Partial` | Trace every corrected slice. |
@@ -118,12 +118,12 @@ Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not
 | Clipboard retry adapter | `Conforms` technical foundation | Preserve bounded retry and privacy defaults. |
 | `PngEncoder` | `Partial` reusable foundation | Use in Save As and verify alpha／size tiers. |
 | Current workflow tests | `Partial` historical foundation | Supersede release-to-Clipboard assertions and add v1 quality tests. |
-| `ResidentLifecycleCoordinator` and PrintScreen contracts | `Partial` new conformance foundation | Added setting、registration、event-boundary and exit cleanup ownership; verification is pending. |
-| `WindowsPrintScreenTakeover` | `Partial` platform foundation | Added Win32 registration／release and HWND message boundary; platform verification is pending. |
+| `ResidentLifecycleCoordinator` and PrintScreen contracts | `Partial` new conformance foundation | Added setting、registration、event-boundary and exit cleanup ownership; deterministic non-interactive evidence passed, runtime remains pending. |
+| `WindowsPrintScreenTakeover` | `Partial` platform foundation | Added Win32 registration／release and HWND message boundary; deterministic adapter tests passed, real platform verification remains pending. |
 
 ## 7. Required Correction Order
 
-1. Resident lifecycle、direct MainWindow exit and takeover setting — static implementation added in this correction; tests／runtime verification pending.
+1. Resident lifecycle、direct MainWindow exit and takeover setting — static implementation added; deterministic non-interactive tests passed, Windows runtime verification pending.
 2. PrintScreen entry integrated with `COMP-001`.
 3. Four-4K capacity policy、Frozen Virtual Desktop context and per-display frame ownership.
 4. All-display presentation、crosshair and cross-monitor initial Selection.
@@ -156,4 +156,4 @@ No current v1 behavior is `Blocked by product decision`.
 
 ## 9. Final Conclusion
 
-The first resident lifecycle／PrintScreen takeover coding slice now has a static implementation、contract tests and traceability updates. Build、test and runtime verification were explicitly not executed in this task and must not be inferred as passed. The remaining v1 conformance order is unchanged.
+The first resident lifecycle／PrintScreen takeover coding slice now has a static implementation、contract tests、locked restore、Release x64 build and passing non-interactive verification. The limited Slice formatting verification also passed; the full repository retains 4,704 pre-existing formatting diagnostics that were not modified. Windows Runtime、real PrintScreen registration、cross-process setting restoration and MainWindow process-exit behavior remain pending and must not be inferred as passed. The remaining v1 conformance order is unchanged.
