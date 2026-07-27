@@ -1,104 +1,143 @@
 # PRD-0003 Product Vision
 
-狀態：`Draft`
+狀態：`Accepted`
 
-## 1. Product Statement
+## 1. Document Control
 
-SnipPlus 是一套以 Windows 原生操作習慣為核心，協助使用者快速完成螢幕影像擷取與後續交付的 desktop product。
+| Field | Value |
+| --- | --- |
+| Document ID | `PRD-0003` |
+| Version | `1.1` |
+| Status | `Accepted` |
+| Product authority | Repository owner through explicit product decisions |
+| Last reviewed | `2026-07-27` |
+| Scope | SnipPlus v1 product vision |
 
-SnipPlus 的定位是延續使用者熟悉的工作方式，降低從「想要擷取」到「可以繼續使用結果」之間的摩擦，而不是重新發明一套截圖語言。
+## 2. Product Statement
 
-## 2. Product Goals
+SnipPlus is a Windows desktop screenshot product that preserves familiar PrintScreen behavior while adding a controlled post-selection editing and delivery workflow.
 
-- 降低日常螢幕影像擷取與後續交付的操作成本。
-- 保持 Windows 使用者對基本截圖操作的熟悉感與連續性。
-- 讓基本工作流程直接可理解，不依賴教學才能完成。
-- 讓進階能力維持 optional，不阻擋主要擷取工作。
-- 讓使用者能在短而清楚的流程中取得可繼續使用的結果。
-- 以 Windows desktop experience 作為第一優先，維持平台內的一致性。
+The product reduces friction between “I need this part of the screen” and “I can paste or save the result,” without forcing the user to learn a different screenshot language or enter a heavyweight editor.
 
-## 3. Product Scope
+## 3. Product Goals
 
-### In Scope
-
-目前產品願景涵蓋以下高階範圍：
-
-- Windows Desktop 使用情境。
-- Static image screenshot workflow。
-- 從 capture entry 到 capture result 的核心工作流程。
-- Capture result 的基本交付脈絡，例如 clipboard handoff。
-- 可選的 post-capture workflow；具體編輯能力尚未定義。
-- 以既有 Windows 操作習慣為基礎的產品體驗。
-
-以上是產品方向與範圍邊界，不是功能需求清單。每一項具體行為仍須在後續 PRD 與 Specs 中另行定義。
-
-### Out of Scope for the current product definition
-
-以下目前不納入產品定義：
-
-- Cloud sync。
-- Team collaboration。
-- Cloud storage。
-- AI 功能。
-- Cross-platform product strategy。
-- Video capture。
-- 任何尚未經 Research、Analysis、Decision 與 PRD review 的新增能力。
-
-`Out of Scope` 表示目前產品範圍外，不代表永久否決未來重新研究的可能性。
+- Let a user manually start SnipPlus and keep it available in the background.
+- Let the user explicitly choose whether SnipPlus takes over PrintScreen.
+- Freeze and present all connected displays as one coherent Virtual Desktop capture session.
+- Allow one rectangular selection to span multiple displays.
+- Preserve a clear、familiar drag-selection experience.
+- Keep the selected region adjustable until explicit commitment.
+- Always offer a lightweight editing／confirmation stage while allowing zero Annotation actions.
+- Provide a practical first-release Annotation tool set for communication and privacy.
+- Deliver the final image to Clipboard through Complete.
+- Deliver the same final image to PNG and Clipboard through Save.
+- Protect the user’s previous foreground work context and keep success silent.
+- Keep screen content local and under explicit user control.
 
 ## 4. Target Users
 
-本文件只描述使用者類型，不建立 Persona：
+- General Windows users who regularly copy screenshots into chat、email or documents.
+- Software engineers who capture UI、errors、logs and implementation behavior for communication.
+- Technical writers who need annotated screenshots for documentation.
+- Customer support and QA users who need clear issue evidence.
+- Business users who need to hide sensitive details、mark steps or save a local PNG.
 
-- 一般 Windows 使用者：需要快速完成日常螢幕影像擷取。
-- 軟體工程師：需要擷取畫面以進行開發溝通、問題回報或文件整理。
-- 技術文件撰寫者：需要取得畫面結果並交付到文件或其他工作脈絡。
-- 客服與測試人員：需要以短流程取得可供說明、驗證或回報的畫面結果。
+The first release does not require separate persona-specific workflows.
 
-各類使用者的優先順序、頻率、環境與詳細需求仍為 `TBD`。
+## 5. First-release Product Scope
 
-## 5. Product Principles
+### In scope
 
-UX 原則統一引用 [PRD-0002 User Experience Principles](PRD-0002-user-experience-principles.md)，本文件不重寫其內容。
+- Windows desktop application.
+- Manual startup and background residency.
+- User-controlled PrintScreen takeover.
+- Static image screenshot workflow.
+- All-display frozen capture session.
+- One cross-monitor rectangular selection.
+- Semi-transparent exterior mask and clear selected interior.
+- Selection lock、move、edge／corner resize and reselection.
+- Mandatory editing／confirmation function bar.
+- Rectangle、Arrow／Line、Highlighter、Text、Mosaic／Blur and Numbered Marker.
+- Annotation object selection、movement、resize、restyle、delete and Undo／Redo.
+- Complete to Clipboard.
+- Windows Save As to PNG and Clipboard.
+- Cancel、recoverable failure preservation、cleanup and foreground-context restoration.
 
-後續所有 Product Vision、Core Workflow、Functional Requirements 與 Non-functional Requirements 都必須檢查是否違反 PRD-0002 的原則。
+### Explicitly deferred
 
-## 6. Success Criteria
+- Opaque freehand pen.
+- Ellipse Annotation.
+- Pin image to desktop.
+- OCR.
+- Capture history.
+- Delayed capture.
+- Additional image formats.
+- Font-family selection、italic、underline and text background.
+- Video capture.
+- Cloud sync、cloud storage、sharing、team collaboration and AI features.
+- Cross-platform product strategy.
+- Telemetry、plugins、updates and release distribution infrastructure.
 
-本階段只定義成功方向，不設定 KPI 或數值：
+Deferred does not mean permanently rejected. It means the capability must not be included in v1 without a later explicit product decision.
 
-- 使用者不需要重新學習基本 Windows 截圖操作。
-- 大部分日常擷取工作可以沿著清楚而短的流程完成。
-- 基本擷取不會被進階能力、設定或額外內容阻擋。
-- Capture result 能順利進入使用者下一個工作脈絡。
-- 使用者可以不依賴教學理解主要工作流程。
-- 產品在 Windows desktop 上呈現一致、熟悉且不造成額外負擔的體驗。
+## 6. Product Experience
 
-具體的可量化成功指標、可觀察事件與驗證方法將在後續 PRD 階段定義。
+The expected common path is:
 
-## 7. Assumptions
+```text
+User starts SnipPlus once
+→ enables PrintScreen takeover
+→ presses PrintScreen when needed
+→ selects a region across the desktop
+→ optionally adjusts or annotates
+→ presses Complete
+→ pastes with Ctrl+V
+```
 
-- SnipPlus 的第一個產品目標是 Windows desktop，而不是跨平台產品。
-- 使用者已具有部分 Windows 截圖操作經驗，產品應尊重而非破壞這些習慣。
-- 後續 runtime research 可能修正部分 Research、Analysis 或 Decision 的內容。
-- Windows 行為可能隨作業系統或工具版本更新而改變，來源與版本需要持續追蹤。
-- Product Vision 不足以直接建立可執行的功能 Spec。
-- 技術棧、部署方式、資料保存、隱私策略與支援版本目前仍為 `TBD`。
+The Save path differs only at commitment:
 
-## 8. Deferred decisions
+```text
+Select and optionally annotate
+→ Save
+→ choose PNG destination
+→ PNG and Clipboard receive the same final image
+```
 
-本文件刻意不決定：
+The product should remain lightweight in perception even though the Editing stage is always available.
 
-- Core Workflow 的完整步驟與所有例外狀態。
-- Screenshot、annotation、editor、OCR、share 或其他能力的詳細需求。
-- UI、Overlay、Toolbar、Arrow、interaction state 與 visual design。
-- 效能、可靠性、相容性與可觀測性的數值門檻。
-- 技術架構、API、儲存、同步、權限與發布方式。
+## 7. Success Direction
 
-以上內容必須依照固定順序，在後續 PRD 文件中逐步定義；未經核准前不得直接進入 Specs 或 Coding。
+A successful v1 product demonstrates that:
 
-## 9. Review status
+- enabled PrintScreen reliably starts SnipPlus capture without requiring the main window to be foreground;
+- all displays appear frozen and selection remains spatially correct across monitors and DPI contexts;
+- mouse release is clearly a Selection lock rather than accidental final output;
+- the function bar is discoverable and does not obstruct the selection unnecessarily;
+- the user can complete without creating an Annotation;
+- required Annotation tools produce predictable editable results;
+- Complete places the expected image on Clipboard;
+- Save produces the same image in PNG and Clipboard;
+- recoverable failures do not destroy the user’s current work;
+- successful and cancelled sessions return to the previous application without unnecessary notification.
 
-- Product owner review：`TBD`
-- Review date：`TBD`
-- Next PRD document：`PRD-0004-core-workflow.md`
+Quantitative KPIs are not invented before measurement.
+
+## 8. Product Assumptions
+
+- Windows 11 24H2 x64 is the current implementation and verification baseline, not necessarily the final public minimum.
+- WinUI、WGC、Win2D、SoftwareBitmap and WinRT Clipboard decisions are owned by Accepted ADRs and may be superseded only through verified architecture decisions.
+- One interactive capture session owns capture overlays at a time.
+- Screen content remains local by default.
+- Existing source is a technical prototype and does not define product scope.
+
+## 9. Open Product Decisions
+
+The accepted vision does not yet decide:
+
+- exact System Tray commands and MainWindow close-button behavior;
+- representation of non-display gaps in irregular monitor layouts;
+- PNG retention／rollback after later Clipboard failure;
+- final keyboard-only Annotation acceptance standard;
+- quantitative performance targets.
+
+Implementation must not silently invent these behaviors when it reaches them.
