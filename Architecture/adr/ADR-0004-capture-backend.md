@@ -8,7 +8,7 @@
 | Title | Capture Backend |
 | Status | `Accepted` |
 | Decision category | Platform Integration |
-| Version | `1.1` |
+| Version | `1.2` |
 | Owner | Repository owner |
 | Date accepted | `2026-07-26` |
 | Last reviewed | `2026-07-27` |
@@ -30,7 +30,9 @@ The capture backend must support:
 - same-session preview and final output without post-selection recapture;
 - classified permission、source、device、size and timing failures.
 
-Cross-monitor Selection is a product requirement. The backend does not need to allocate one giant Virtual Desktop bitmap; it must provide frames and metadata that allow the product to present and compose one logical canvas.
+Cross-monitor Selection is a product requirement. The backend does not need to allocate one giant Virtual Desktop bitmap; it provides per-display frames and topology metadata that allow the product to present and compose one logical canvas.
+
+Physical gaps between irregularly arranged displays contain no capture source. The accepted product decision is to represent those regions as transparent pixels in the final image.
 
 ## Options considered
 
@@ -61,14 +63,15 @@ Use **Windows.Graphics.Capture (WGC)** as the sole v1 capture backend.
 5. Each frame records Session ID、Display ID、physical bounds in Virtual Desktop coordinates、pixel size、DPI context、capture timestamp and frame identity.
 6. Selection preview uses the frozen per-display frames; it does not recapture desktop content while the user drags、moves、resizes、reselects or annotates.
 7. Final rendering intersects the current Virtual Desktop selection with each display’s frozen bounds and composes the corresponding source regions into one output image.
-8. The selected output uses the same frozen session that the user saw during Selection.
-9. Capture resources are one-shot and short-lived unless a later accepted requirement needs continuous acquisition.
-10. Cursor capture is disabled by default for screenshot output.
-11. SnipPlus normal windows are excluded through platform capture exclusion and coordinated window visibility. Exclusion mechanisms are defense in depth, not permission to capture before UI cleanup is ready.
-12. Protected content、secure desktop、permission denial、closed source、frame timeout、device loss、display topology change and frame-size mismatch return typed failures; they never become blank successful output.
-13. DXGI Desktop Duplication and GDI are not speculative fallbacks. A verified WGC blocker requires a targeted superseding or extension ADR.
+8. Output regions inside Selection but outside every physical display are transparent (`alpha = 0`). They are not capture failures and are not fabricated desktop pixels.
+9. The selected output uses the same frozen session that the user saw during Selection.
+10. Capture resources are one-shot and short-lived unless a later accepted requirement needs continuous acquisition.
+11. Cursor capture is disabled by default for screenshot output.
+12. SnipPlus normal windows are excluded through platform capture exclusion and coordinated window visibility. Exclusion mechanisms are defense in depth, not permission to capture before UI cleanup is ready.
+13. Protected content、secure desktop、permission denial、closed source、frame timeout、device loss、display topology change and frame-size mismatch return typed failures; they never become blank successful output.
+14. DXGI Desktop Duplication and GDI are not speculative fallbacks. A verified WGC blocker requires a targeted superseding or extension ADR.
 
-## Multi-display composition boundary
+## Multi-display Composition Boundary
 
 WGC owns per-display acquisition, not the product’s unified canvas semantics.
 
@@ -78,11 +81,12 @@ The accepted model permits:
 - one shared Virtual Desktop origin and coordinate version;
 - cross-display intersection and composition by accepted capture／render boundaries;
 - display-specific DPI and orientation metadata;
-- non-contiguous display layouts.
+- non-contiguous display layouts;
+- transparent output pixels for topology gaps.
 
-The visual representation of physical gaps between irregularly arranged displays remains an explicit product decision. The backend must preserve enough topology information for that decision; it must not invent gap pixels as captured desktop content.
+The backend preserves topology gaps as absence of source coverage. Rendering owns creation of transparent output pixels for those gaps.
 
-## Ownership boundary
+## Ownership Boundary
 
 | Concern | Owner |
 | --- | --- |
@@ -92,12 +96,13 @@ The visual representation of physical gaps between irregularly arranged displays
 | Frozen frame collection and session ownership | Capture Session／Capture capability |
 | Virtual Desktop Selection geometry | Selection capability |
 | Cross-display source intersection | Capture／render contract |
+| Transparent gap composition | Final Render boundary using topology metadata |
 | Final selected-and-annotated raster | Final Render boundary |
 | Clipboard and PNG delivery | Separate delivery capabilities |
 
 The WGC adapter does not mutate shared state、own Selection、render Annotation UI、publish Clipboard or write files.
 
-## Deferred capture capabilities
+## Deferred Capture Capabilities
 
 - Window capture as a user-selectable product mode.
 - Scrolling capture.
@@ -107,27 +112,28 @@ The WGC adapter does not mutate shared state、own Selection、render Annotation
 - Secure desktop or protected-content access.
 - DXGI or GDI fallback.
 
-**Multi-display capture and cross-monitor Selection are not deferred.**
+**Multi-display capture、cross-monitor Selection and transparent gap output are not deferred.**
 
-## Verification requirements
+## Verification Requirements
 
 - Enumerate all displays and verify stable physical bounds／origin.
 - Acquire exactly one usable frame per required display before Selection.
 - Verify same-session preview and output without recapture.
 - Verify negative-origin and mixed-DPI mappings.
 - Verify a Selection crossing two or more displays.
+- Verify transparent output for a Selection covering an irregular-layout gap.
 - Verify display topology／DPI change produces classified failure rather than stale output.
 - Verify window exclusion、cancellation and exact-once resource cleanup.
 - Verify failures do not expose private screen content in evidence.
 
 Interactive display and focus verification requires explicit authorization in the current task.
 
-## Current implementation state
+## Current Implementation State
 
 - One-display WGC acquisition、bounded frame wait、frame validation、same-frame crop and categorized platform tests exist.
-- All-display enumeration、per-display session ownership、cross-monitor composition and topology-change handling are missing.
+- All-display enumeration、per-display session ownership、cross-monitor composition、transparent gap output and topology-change handling are missing.
 - The WGC decision remains accepted; the current adapter is a partial reusable foundation.
 
-## Reconsideration conditions
+## Reconsideration Conditions
 
 Revisit only after verified evidence shows WGC cannot satisfy an accepted display、permission、fidelity、performance or lifecycle requirement on the supported Windows baseline.
