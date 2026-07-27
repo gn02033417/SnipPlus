@@ -4,322 +4,130 @@
 
 | Field | Value |
 | --- | --- |
-| Document ID | ADR-0004 |
+| Document ID | `ADR-0004` |
 | Title | Capture Backend |
-| Status | Accepted |
-| Decision Category | Platform Integration |
-| Version | 1.0 |
+| Status | `Accepted` |
+| Decision category | Platform Integration |
+| Version | `1.1` |
 | Owner | Repository owner |
-| Date proposed | 2026-07-26 |
-| Date reviewed | 2026-07-26 |
-| Date accepted | 2026-07-26 |
+| Date accepted | `2026-07-26` |
+| Last reviewed | `2026-07-27` |
 | Supersedes | None |
 | Superseded by | None |
-| Normative References | ADR-0002、ADR-0003、PRD-0002、PRD-0003、PRD-0004、PRD-0006、SPEC-0005、SPEC-0006、SPEC-0010、ARCH-0002、ARCH-0003、ARCH-0004、ARCH-0005、ARCH-BASELINE-REVIEW、ADR-BASELINE |
-| Informative References | RESEARCH-TECH-CAPTURE-001 through RESEARCH-TECH-CAPTURE-009、official Microsoft Windows.Graphics.Capture and DXGI Desktop Duplication documentation |
+| Normative references | Accepted PRD／Specs、Architecture baseline、ADR-0002、ADR-0003、ADR-0005 |
 
 ## Context
 
-SnipPlus requires a Windows capture source that can provide a frame for a selected region while preserving the Frozen ownership boundaries:
+SnipPlus v1 requires one explicit PrintScreen request to establish a stable Frozen Virtual Desktop session containing every connected display before Selection becomes interactive.
 
-- Workflow and Selection own capture intent and selection state.
-- Platform Integration owns source acquisition and platform failures.
-- Rendering owns visual presentation and raster effects, not desktop acquisition.
-- Shared Result／Image Representation owns the result passed downstream.
-- Clipboard and Output are parallel consumers after capture completion.
+The capture backend must support:
 
-Capture Research 20–28 compared Windows Graphics Capture、DXGI Desktop Duplication、GDI-based capture、window-oriented mechanisms and hybrid strategies. The research did not run product capture code, but it established official API identities、coordinate risks、security boundaries and required verification.
+- per-display source identity and physical bounds;
+- negative Virtual Desktop origins and arbitrary display arrangement;
+- immutable one-shot frames for all participating displays;
+- exclusion of SnipPlus normal windows;
+- short-lived capture resources with deterministic cleanup;
+- same-session preview and final output without post-selection recapture;
+- classified permission、source、device、size and timing failures.
 
-ADR-0002 and ADR-0003 now provide the WinUI 3 host and rendering boundary needed to make a bounded capture decision.
+Cross-monitor Selection is a product requirement. The backend does not need to allocate one giant Virtual Desktop bitmap; it must provide frames and metadata that allow the product to present and compose one logical canvas.
 
-## Decision Drivers
+## Options considered
 
-| Driver | Priority | Source |
-| --- | --- | --- |
-| Official WinUI 3／Windows desktop support | High | ADR-0002、Microsoft screen-capture documentation |
-| Display or window frame acquisition | High | SPEC-0005、PRD-0004 |
-| Secure OS-defined capture boundary | High | PRD-0006、Capture Research |
-| Snapshot and short-lived frame acquisition | High | SPEC-0005、SPEC-0006 |
-| Explicit monitor/window source identity | High | ARCH-0004、Capture Research |
-| GPU-surface interoperability with rendering | High | ADR-0003 |
-| Failure、resize and device lifecycle | High | SPEC-0006、ARCH-0005 |
-| Avoid low-level native duplication complexity in the initial slice | Medium | ARCH-0001 |
-| Cross-platform capture | Low | Frozen PRD is Windows-first |
+### Windows.Graphics.Capture
 
-## Options Considered
+Official Windows desktop capture API with monitor／window capture items、Direct3D surfaces and documented Windows App SDK integration.
 
-### Option A — Windows.Graphics.Capture
+### DXGI Desktop Duplication
 
-Use `Windows.Graphics.Capture` with a `GraphicsCaptureItem` representing a monitor or window and a `Direct3D11CaptureFramePool` producing frames.
+Provides detailed per-output desktop surfaces but adds substantially more native interop、adapter matching and access-loss recovery complexity.
 
-**Advantages**
+### GDI BitBlt
 
-- Official Windows desktop capture API for display/window frames and snapshots.
-- Documented WinUI 3 considerations.
-- Integrates with Direct3D surfaces and the Accepted rendering boundary.
-- Supports monitor/window item creation through desktop interop.
-- Defines frame-pool recreation and session lifecycle behavior.
+Simple examples exist, but it is a weak fit for modern composition、DPI、color fidelity and future rendering requirements.
 
-**Disadvantages**
+### Immediate hybrid fallback
 
-- Region capture is not a first-class arbitrary rectangle source; SnipPlus must crop a monitor frame using an explicit coordinate contract.
-- Overlay exclusion、DPI mapping、HDR behavior and first-frame timing require runtime verification.
-- Protected and secure content may be unavailable or blank by platform design.
+Adding WGC plus DXGI or GDI fallback before a verified blocker would multiply capture、coordinate、failure and verification paths.
 
-### Option B — DXGI Desktop Duplication
+## Decision
 
-Use `IDXGIOutputDuplication` for each output and acquire desktop frames directly.
+Use **Windows.Graphics.Capture (WGC)** as the sole v1 capture backend.
 
-**Advantages**
+1. Platform display context enumerates every connected display participating in the current Virtual Desktop snapshot.
+2. One WGC capture item／adapter boundary is created for each required display source.
+3. Every required display produces one usable immutable frame before `Selecting` begins.
+4. Partial all-display freeze is not accepted as a successful session. Missing、inconsistent or invalid frames produce a classified failure.
+5. Each frame records Session ID、Display ID、physical bounds in Virtual Desktop coordinates、pixel size、DPI context、capture timestamp and frame identity.
+6. Selection preview uses the frozen per-display frames; it does not recapture desktop content while the user drags、moves、resizes、reselects or annotates.
+7. Final rendering intersects the current Virtual Desktop selection with each display’s frozen bounds and composes the corresponding source regions into one output image.
+8. The selected output uses the same frozen session that the user saw during Selection.
+9. Capture resources are one-shot and short-lived unless a later accepted requirement needs continuous acquisition.
+10. Cursor capture is disabled by default for screenshot output.
+11. SnipPlus normal windows are excluded through platform capture exclusion and coordinated window visibility. Exclusion mechanisms are defense in depth, not permission to capture before UI cleanup is ready.
+12. Protected content、secure desktop、permission denial、closed source、frame timeout、device loss、display topology change and frame-size mismatch return typed failures; they never become blank successful output.
+13. DXGI Desktop Duplication and GDI are not speculative fallbacks. A verified WGC blocker requires a targeted superseding or extension ADR.
 
-- Detailed per-output frame、dirty/move rectangle and cursor metadata.
-- Direct GPU desktop surface access.
-- Explicit output and rotation model.
+## Multi-display composition boundary
 
-**Disadvantages**
+WGC owns per-display acquisition, not the product’s unified canvas semantics.
 
-- Greater Direct3D／DXGI native interop and device-lifecycle complexity.
-- Per-output composition and multi-monitor stitching remain application responsibilities.
-- Access loss、mode change and adapter/output matching require substantial recovery logic.
-- Better aligned with continuous collaboration/streaming than the initial one-shot product path.
+The accepted model permits:
 
-### Option C — GDI BitBlt
+- separate immutable frame objects per display;
+- one shared Virtual Desktop origin and coordinate version;
+- cross-display intersection and composition by accepted capture／render boundaries;
+- display-specific DPI and orientation metadata;
+- non-contiguous display layouts.
 
-Use desktop/window device contexts and `BitBlt`.
+The visual representation of physical gaps between irregularly arranged displays remains an explicit product decision. The backend must preserve enough topology information for that decision; it must not invent gap pixels as captured desktop content.
 
-**Advantages**
-
-- Mature API and simple basic examples.
-- CPU-readable bitmap path.
-
-**Disadvantages**
-
-- Weak fit for modern GPU surfaces、HDR/color handling and future fidelity requirements.
-- Official documentation states `BitBlt` does not perform color management.
-- Layered windows、DPI and modern composition behavior add risk.
-- Not selected as a primary modern Windows capture path.
-
-### Option D — Hybrid primary/fallback
-
-Select WGC as primary with an immediately implemented DXGI or GDI fallback.
-
-**Advantages**
-
-- Potentially broadens environment coverage.
-
-**Disadvantages**
-
-- Multiplies capture、coordinate、failure、privacy and verification paths before a verified need exists.
-- Makes the first vertical slice significantly harder to reason about and test.
-
-## Accepted Decision
-
-Use **Windows.Graphics.Capture (WGC)** as the sole initial Capture Backend.
-
-1. The backend creates a `GraphicsCaptureItem` for an approved monitor or window source.
-2. The initial region-capture path uses a monitor item, acquires one usable frame, and crops the selected region using a separately defined physical-pixel coordinate contract.
-3. `GraphicsCapturePicker` may be used for user-selected window/monitor flows. Direct monitor/window creation through `IGraphicsCaptureItemInterop` may be used when the product workflow already owns an explicit approved source handle.
-4. The frame pool and capture session are short-lived for a one-shot capture unless a later accepted requirement needs continuous acquisition.
-5. Capture frame processing may occur away from the UI thread. Composition visual updates remain on the WinUI UI thread.
-6. Cursor capture is disabled by default for the initial screenshot result. A later explicit product setting may change this.
-7. Product overlay windows must be excluded from capture when supported and must also follow an explicit hide／settle／capture timing contract. `WDA_EXCLUDEFROMCAPTURE` is a defense-in-depth mechanism, not a security guarantee.
-8. Protected content、secure desktop、unsupported hardware、permission denial、closed source、frame-pool resize and device/session failures return classified failures; they never become blank successful results.
-9. DXGI Desktop Duplication is not implemented as an initial fallback. A verified WGC blocker may trigger a new ADR or an explicit extension of this decision.
-10. GDI capture is rejected as the primary and fallback path for the initial product baseline.
-
-## Initial Scope
-
-Included：
-
-- One monitor source.
-- One-shot frame acquisition.
-- Region crop from the monitor frame.
-- Explicit physical-pixel source bounds and crop bounds.
-- Cursor excluded.
-- Overlay exclusion／hide coordination.
-- Cancellation and classified failure.
-- Cleanup and frame/session disposal.
-
-Deferred：
-
-- Multi-monitor stitched capture.
-- Window capture as a product mode.
-- Scrolling capture.
-- Continuous recording.
-- Audio capture.
-- HDR-preserving output.
-- Secure desktop or protected-content access.
-- DXGI fallback.
-
-## Ownership Boundary
+## Ownership boundary
 
 | Concern | Owner |
 | --- | --- |
-| Capture command and workflow state | Feature Coordination |
-| Selection geometry in host DIPs | Selection capability |
-| Monitor/window source identity | Platform Integration／Capture adapter |
-| Source frame acquisition and lifecycle | WGC Capture Backend |
-| DIP-to-physical-pixel conversion | Shared coordinate contract using Platform Display Context |
-| Region crop | Capture／Image boundary according to the contract |
-| Display and annotation rendering | ADR-0003 rendering adapter |
-| Shared Result／Image Result | Image Representation contract |
-| Clipboard and Output delivery | Separate downstream capabilities |
+| PrintScreen acceptance and session state | Product Workflow／Feature Coordination |
+| Display enumeration、DPI and foreground context | Platform Display Context boundary |
+| Per-display WGC item and frame acquisition | Platform Capture Adapter |
+| Frozen frame collection and session ownership | Capture Session／Capture capability |
+| Virtual Desktop Selection geometry | Selection capability |
+| Cross-display source intersection | Capture／render contract |
+| Final selected-and-annotated raster | Final Render boundary |
+| Clipboard and PNG delivery | Separate delivery capabilities |
 
-The backend must not mutate Shared State directly、own selection state、render UI、publish Clipboard content or write output files.
+The WGC adapter does not mutate shared state、own Selection、render Annotation UI、publish Clipboard or write files.
 
-## Coordinate Contract Requirements
+## Deferred capture capabilities
 
-The implementation contract must record：
+- Window capture as a user-selectable product mode.
+- Scrolling capture.
+- Continuous recording or video.
+- Audio capture.
+- HDR-preserving output.
+- Secure desktop or protected-content access.
+- DXGI or GDI fallback.
 
-- Virtual desktop origin.
-- Selected `HMONITOR` identity and physical-pixel bounds.
-- Host DIP selection rectangle.
-- DPI scale used for conversion.
-- Physical-pixel crop rectangle relative to the captured monitor frame.
-- Inclusive／exclusive edge convention.
-- Rounding policy.
-- Source frame size and timestamp.
-- Topology/DPI version used by the conversion.
+**Multi-display capture and cross-monitor Selection are not deferred.**
 
-A stale or invalid mapping must return a failure and request a new selection/capture cycle.
+## Verification requirements
 
-## Failure Categories
+- Enumerate all displays and verify stable physical bounds／origin.
+- Acquire exactly one usable frame per required display before Selection.
+- Verify same-session preview and output without recapture.
+- Verify negative-origin and mixed-DPI mappings.
+- Verify a Selection crossing two or more displays.
+- Verify display topology／DPI change produces classified failure rather than stale output.
+- Verify window exclusion、cancellation and exact-once resource cleanup.
+- Verify failures do not expose private screen content in evidence.
 
-At minimum：
+Interactive display and focus verification requires explicit authorization in the current task.
 
-- `Unsupported`
-- `PermissionDenied`
-- `SourceUnavailable`
-- `SourceClosed`
-- `InvalidCoordinateMapping`
-- `FrameTimeout`
-- `FrameSizeChanged`
-- `DeviceLost`
-- `SessionChanged`
-- `ProtectedContentUnavailable`
-- `Cancelled`
-- `UnexpectedFailure`
+## Current implementation state
 
-Recoverable versus terminal behavior belongs in the consolidated failure contract.
+- One-display WGC acquisition、bounded frame wait、frame validation、same-frame crop and categorized platform tests exist.
+- All-display enumeration、per-display session ownership、cross-monitor composition and topology-change handling are missing.
+- The WGC decision remains accepted; the current adapter is a partial reusable foundation.
 
-## Trade-offs
+## Reconsideration conditions
 
-### Benefits accepted
-
-- Native Windows capture path aligned with WinUI 3.
-- Lower initial complexity than direct DXGI duplication.
-- Direct3D-surface boundary can integrate with the selected renderer and image contract.
-- Secure platform behavior and user-visible capture boundary remain intact.
-- One backend keeps the first vertical slice testable.
-
-### Costs accepted
-
-- Region capture requires monitor-frame crop and rigorous coordinate conversion.
-- Overlay timing and exclusion require verification.
-- WGC frame/device lifecycle must be handled explicitly.
-- Some sources and protected content may be unavailable.
-- A future verified limitation may require a DXGI fallback ADR.
-
-### Neutral consequences
-
-- Image Representation remains a separate decision.
-- The accepted backend does not select a D3D device wrapper、language or package version.
-- Window capture capability exists at the API level but is Deferred as a product mode.
-- Runtime success is not claimed by this document.
-
-## Verification Requirements
-
-The first authorized vertical slice must verify：
-
-- `GraphicsCaptureSession.IsSupported()` handling.
-- WinUI 3 host and source-item creation.
-- One-shot frame acquisition from a synthetic/public monitor scene.
-- Cursor exclusion.
-- Overlay exclusion and hide/capture timing.
-- DIP-to-physical-pixel conversion.
-- Negative virtual-screen coordinates where available.
-- Exact crop edges against a known synthetic pattern.
-- Frame-size change and source-closed handling.
-- Device/session cleanup.
-- No retained screenshot evidence outside the approved test boundary.
-
-## Traceability
-
-| Source | Relevance |
-| --- | --- |
-| ADR-0002 | Accepted WinUI 3 host |
-| ADR-0003 | Accepted rendering and Direct3D/Win2D boundary |
-| PRD-0004 | Core capture workflow |
-| PRD-0006 | Platform、privacy、DPI and reliability requirements |
-| SPEC-0005 | Capture trigger、selection、completion and cancellation |
-| SPEC-0006 | Failure、cancel and cleanup behavior |
-| ARCH-0003／0004／0005 | Capture module、component and interaction ownership |
-| RESEARCH-TECH-CAPTURE-001 through 009 | Candidate evidence、gaps and verification plan |
-| TD-003 | Roadmap item completed by this ADR |
-
-## External Evidence
-
-| Source | Evidence used |
-| --- | --- |
-| [Microsoft screen capture](https://learn.microsoft.com/en-us/windows/apps/develop/media-authoring-processing/screen-capture) | WGC acquires frames from a display or window for streams or snapshots; WinUI 3 integration and frame-pool recreation are documented. |
-| [IGraphicsCaptureItemInterop](https://learn.microsoft.com/en-us/windows/win32/api/windows.graphics.capture.interop/nn-windows-graphics-capture-interop-igraphicscaptureiteminterop) | Desktop interop creates capture items for monitor or window handles. |
-| [GraphicsCaptureSession.IsCursorCaptureEnabled](https://learn.microsoft.com/en-us/uwp/api/windows.graphics.capture.graphicscapturesession.iscursorcaptureenabled) | Capture session can include or exclude the cursor. |
-| [SetWindowDisplayAffinity](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowdisplayaffinity) | `WDA_EXCLUDEFROMCAPTURE` is supported on modern Windows but is not DRM or an absolute security guarantee. |
-| [Microsoft Desktop Duplication API](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api) | DXGI duplication remains a lower-level alternative with per-output GPU surfaces and metadata. |
-
-## Implementation and Verification State
-
-| Artifact | Status |
-| --- | --- |
-| Implementation reference | Not implemented |
-| Runtime verification | Not verified |
-| Coordinate fidelity evidence | Not verified |
-| Overlay exclusion evidence | Not verified |
-| Coding authorized | No |
-
-## Review Record
-
-| Field | Value |
-| --- | --- |
-| Reviewer | ChatGPT repository review |
-| Review date | 2026-07-26 |
-| Review result | Approved |
-| Review basis | Frozen PRD／Specs／Architecture、ADR-0002、ADR-0003、RESEARCH-TECH-CAPTURE-001 through 009 and current official Microsoft documentation |
-| Open comments | None blocking the bounded initial backend decision |
-| Resolution of comments | Selected one primary backend、deferred fallback and product modes、converted runtime unknowns into verification requirements |
-| Acceptance authority | Repository owner through explicit instruction to continue documentation convergence toward coding readiness |
-
-## Change and Supersession
-
-Revisit or supersede if：
-
-- WGC fails a required verified scenario.
-- A Frozen requirement adds continuous capture、recording or unsupported source types.
-- A DXGI fallback becomes necessary.
-- The minimum supported Windows version no longer supports the selected interop path.
-- Architecture changes capture ownership.
-
-## Acceptance Verification
-
-| Check | Result |
-| --- | --- |
-| Single major decision | PASS |
-| Accepted upstream ADRs | PASS |
-| Official API evidence | PASS |
-| Initial and deferred scope explicit | PASS |
-| Coordinate and failure boundaries explicit | PASS |
-| Security bypass prohibited | PASS |
-| Runtime limitations explicit | PASS |
-| Frozen ownership preserved | PASS |
-| Coding authorized | No |
-
-## Non-goals
-
-This ADR does not：
-
-- Create source code or a project.
-- Invoke capture APIs.
-- Capture or retain desktop pixels.
-- Select Image Representation、Clipboard、Output、Language、Runtime、SDK or package versions.
-- Restore、Build、Run or Test.
-- Modify Frozen PRD、Specs or Architecture ownership.
+Revisit only after verified evidence shows WGC cannot satisfy an accepted display、permission、fidelity、performance or lifecycle requirement on the supported Windows baseline.
