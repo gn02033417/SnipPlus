@@ -168,9 +168,15 @@ sequenceDiagram
 - Selection 在確認前可以更新。
 - 有效 Selection 可以進入 `Complete`。
 - 未完成或無效 Selection 不得被視為成功完成的 capture。
+- `Capture Request` 開始時必須先取得單一完整 monitor frame，並將該 frame 凍結為本次 Selection 的唯一來源。
+- Region Selection 期間必須顯示 Capture 開始時的桌面內容；不得以純色或沒有來源內容的畫面取代 Capture Source。
+- 選取範圍外可以變暗，但選取範圍內必須保持來源內容清晰可辨識。
+- Selection 顯示的 frame 與最終 Crop 使用的 frame 必須相同；Selection 完成後不得重新擷取不同時間點的 frame。
+- Frozen frame 必須有明確所有權，並在成功、取消與失敗流程中釋放；取消、Capture failure、零尺寸或越界 Selection 不得產生成功結果。
 - Selection 的取消會進入 `Cancel` boundary；確切使用者操作 `UNKNOWN`。
 - Window、Full screen、Rectangle、Freeform 等正式 mode 範圍由 PRD / future review 決定；本 Spec 不新增 mode。
-- Selection 的遮罩顏色、邊框粗細、resize handle、cursor、DPI coordinate algorithm 與 multi-monitor capture technique 不在本 Spec。
+- Selection 的遮罩顏色、邊框粗細、resize handle、cursor 與 multi-monitor capture technique 不在本 Spec；Crop 前仍必須使用同一個 Display Context Snapshot 完成 DIP／physical-pixel conversion，並限制 Crop Bounds 在 Frozen Frame 內。
+- 正常 Capture Workflow 與一般自動化測試不得啟動 Paint 或其他外部程式；需要外部 GUI fixture 的 Interactive Verification 必須先取得明確授權。
 
 ## 10. Completion and Handoff
 
@@ -195,7 +201,7 @@ sequenceDiagram
 | Capture Request 在已有 Session 時發生 | 是否接受、排隊或拒絕第二個 session：`TBD`。 | `UNKNOWN` |
 | Selection 尚未完成即取消 | 進入 `Cancel`，不產生完成結果。 | Trigger `UNKNOWN` |
 | Selection 無效或尺寸為零 | 不進入 `Complete`；具體回饋由 FEAT-005 負責。 | `UNKNOWN` |
-| 擷取目標在 Selection 期間改變 | Result 與 selection 的關係：`UNKNOWN`。 | `UNKNOWN` |
+| 擷取目標在 Selection 期間改變 | 本次 Selection 使用 Capture Request 開始時已凍結的 frame；後續桌面變化不改變本次 Selection Source。 | Core／Windows tests |
 | 顯示器配置在流程中改變 | Workflow 是否繼續：`UNKNOWN`。 | `UNKNOWN` |
 | 多螢幕 | Scope、座標與結果邊界：`UNKNOWN`。 | `UNKNOWN` |
 | DPI scaling | Selection 與 result 的關係：`UNKNOWN`。 | `UNKNOWN` |
@@ -221,6 +227,13 @@ Acceptance Criteria 使用本文件專屬的 `SPEC-0005-AC-NNN` namespace：
 | `SPEC-0005-AC-008` | Capture result 完成與 post-capture handoff boundary 有明確區分，沒有定義格式、API 或技術實作。 | `FR-003`、`FR-009`、`NFR-001` |
 | `SPEC-0005-AC-009` | Edge Cases 包含 multi-session、invalid selection、display change、multi-monitor、DPI、HDR、focus loss 與 handoff failure，未確認內容標示 `UNKNOWN` 或 `TBD`。 | `NFR-002`、`NFR-006`、`NFR-007` |
 | `SPEC-0005-AC-010` | 本文件所有 requirement、state、sequence 與 acceptance criteria 都能追溯至 FEAT-001、FR、SR、NFR 與 PRD source。 | `NFR-008`、`NFR-013` |
+| `SPEC-0005-AC-011` | Region Selection 顯示 Capture 開始時取得的完整 monitor frame；不得用純色或無來源內容的畫面取代 Capture Source。 | `FR-002`、`SR-002` |
+| `SPEC-0005-AC-012` | Selection 外部區域可以變暗，Selection 內部區域仍保持來源內容清晰可辨識。 | `FR-002`、`NFR-005` |
+| `SPEC-0005-AC-013` | 最終 Crop 使用與 Selection 顯示完全相同的 Frozen Frame；Selection 完成後不得觸發第二次 monitor capture。 | `FR-003`、`SR-002`、`NFR-002` |
+| `SPEC-0005-AC-014` | Frozen Frame 在成功、取消與失敗路徑都有明確 ownership／cleanup；Capture failure、取消、零尺寸或越界 Selection 不得產生成功結果。 | `FR-003`、`FR-010`、`NFR-002` |
+| `SPEC-0005-AC-015` | Crop 前以同一個 Display Context Snapshot 將 Selection DIP bounds 轉為 physical-pixel bounds，且 Crop bounds 不得超出 Frozen Frame。 | `SR-002`、`NFR-002`、`NFR-007` |
+| `SPEC-0005-AC-016` | Clipboard handoff 只接收本次 Frozen Frame 的裁切結果，不依賴或重新取得其他 frame。 | `FR-009`、`NFR-001` |
+| `SPEC-0005-AC-017` | 正常 Capture Workflow 與一般自動化測試不啟動 Paint 或其他外部程式；外部 GUI fixture 僅可在明確授權的 Interactive Verification 使用。 | `NFR-004`、`NFR-006` |
 
 ## 14. Open Questions
 

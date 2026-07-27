@@ -2,14 +2,13 @@
 
 ## Repository status
 
-SnipPlus has Frozen PRD、Specification and Architecture baselines, Accepted ADR-0002 through ADR-0007, Accepted Implementation Contracts, an Accepted Project Structure and an Approved Implementation Readiness Review.
-
-The repository does not yet contain application source code、build configuration、tests or runtime evidence.
+SnipPlus has Frozen PRD、Specification and Architecture baselines, Accepted ADR-0002 through ADR-0007, Accepted Implementation Contracts, an Accepted Project Structure and an Approved Implementation Readiness Review. The repository now contains the approved solution、application source code、build configuration、tests and implementation/runtime evidence.
 
 Current state：
 
 - Implementation preparation：Complete.
-- First vertical slice：Approved; not started.
+- First vertical slice：Implemented; the frozen-frame selection correction is verified.
+- Current implementation evidence：Locked restore、Release x64 build、non-interactive tests、Windows platform tests and packaged synthetic runtime verification are recorded in `CHANGELOG.md`.
 - Additional pre-coding paperwork：Not required.
 - Source-code creation：Allowed only when the current user task explicitly requests implementation.
 - Restore/build/test/runtime：Allowed only when explicitly included in that implementation/verification task.

@@ -42,6 +42,9 @@
 - 修正 `ResultReady → Cancelled` 狀態 transition，並補上 capture service、ResultReady presentation callback 與 Clipboard cancellation cleanup tests。
 - Windows platform test 改用 Windows App SDK 2.3 bootstrap 與 `DisplayArea.GetFromPoint` 取得實際 display id；未更換核准 package 版本。
 - Clipboard adapter 保留 production WinRT `SetContentWithOptions`／`Flush` default，新增 publisher／flush injection seam 以 deterministic 驗證 bounded retry 與 cancellation。
+- Capture workflow 改為在 Selection 開始前只取得一次完整 monitor frame，建立有明確 ownership 的 `FrozenCaptureFrame`；Selection surface 顯示同一張 frame，外部區域變暗，內部區域保留來源亮度，最終 Crop 只使用該 Frozen Frame。
+- `WindowsGraphicsCaptureAdapter` 不再於 Selection 完成後重新取得 monitor frame；Display Context Snapshot、Crop bounds validation 與 Frozen Frame cleanup 均在同一個 workflow lifecycle 內完成。
+- Packaged runtime verification 改用 SnipPlus 內部 synthetic checkerboard source。一般產品啟動不建立該 source；repository source／test 搜尋未發現 `mspaint`、`Process.Start` 或外部 GUI fixture 啟動程式碼。
 
 ### Verified
 
@@ -58,7 +61,11 @@
 - Packaged runtime cancellation verification 已完成；`Start Capture → Cancel` 回到主畫面並回報 `Capture cancelled.`。
 - 完整非互動測試更新為 31 passed、0 failed、0 skipped。
 - Windows platform test 已可用 `Platform`／`Capture`／`Interactive` filter 單獨執行；support check 與 in-memory monitor frame check 均 passed，0 failed、0 skipped。
-- Packaged runtime verification 已使用 public synthetic blank Paint fixture 完成 selection、monitor frame、crop、render、PNG encode、Clipboard publication 與成功狀態回報；未保存 desktop screenshot、Clipboard payload 或任何私人資料。
+- 先前以 public synthetic blank Paint fixture 執行的 packaged runtime verification 為歷史 evidence；本次核心流程修正未啟動 Paint 或其他外部 GUI，改以 SnipPlus 內部 synthetic checkerboard 完成 packaged runtime verification，未保存 desktop screenshot、Clipboard payload 或任何私人資料。
+- 最新 `dotnet restore SnipPlus.sln --locked-mode -r win-x64`：成功，未調整核准 SDK／package 版本。
+- 最新 `dotnet build SnipPlus.sln -c Release -p:Platform=x64 --no-restore`：成功，0 warnings、0 errors。
+- 最新非互動測試：33 passed、0 failed、0 skipped；Windows `Platform` filter：2 passed、0 failed、0 skipped。
+- 最新 packaged runtime verification：使用內部 synthetic checkerboard 顯示可辨識的凍結 frame，完成 selection、同一 frame crop、結果顯示與 Clipboard success status `Capture copied to Clipboard.`；未啟動 Paint，且測試後清除 Clipboard。
 - Application shell 已通過 packaged WinUI 3 Release x64 build；publish 僅有 `mspdbcmf.exe` 缺少造成的 symbol generation warning，未影響 package build 或 runtime verification。
 
 ### Not released

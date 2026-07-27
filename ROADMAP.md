@@ -35,8 +35,8 @@ Verified results：
 - `SnipPlus.sln`、4 個 source projects 與 3 個 test projects 已建立。
 - Locked restore、Release x64 build 與 packaged WinUI 3 publish 已完成。
 - 非互動測試 24 passed；Rendering filter 6 passed。
-- Packaged runtime 已以 public synthetic fixture 完成 region selection、Windows.Graphics.Capture、crop、render、PNG 與 Clipboard publication。
-- Windows platform filter 可單獨執行；support check passed。未封裝 MSTest runner 的 in-memory frame test 因缺少 Windows App Runtime package graph 會標記 `Inconclusive`，不影響 packaged runtime verification。
+- Packaged runtime 已以 SnipPlus 內部 synthetic checkerboard fixture 完成可見 Frozen Frame region selection、同一 frame crop、render、PNG 與 Clipboard publication；本次未啟動 Paint 或其他外部 GUI。
+- Windows platform filter 可單獨執行；support check 與實際 primary display frame 尺寸驗證均 passed。未保存真實桌面 screenshot 或 Clipboard payload。
 - 未改變 Frozen behavior、Architecture ownership 或明確 non-goal。
 
 Exit criteria：
@@ -59,13 +59,13 @@ Exit criteria：
 - DXGI/GDI fallback.
 - Telemetry、cloud、OCR、plugins、updates or release publication.
 
-## Next phase — Product hardening
+## Next phase — Product hardening（paused）
 
-狀態：`In progress`
+狀態：`Paused after core capture-flow correction`
 
-進入條件已滿足。目前已完成 hardening slices：cancellation transition／cleanup、packaged `Start Capture → Cancel` runtime verification、Windows platform frame verification，以及 Clipboard adapter bounded retry／cancellation tests。
+目前先停止 Clipboard hardening、Packaging 與其他功能擴充；本次只完成核心 capture flow correction：Selection 顯示 Capture 開始時凍結的 frame，並從同一張 frame Crop。
 
-Windows in-memory frame platform test 現已透過 Windows App SDK 2.3 bootstrap 建立 package graph，並以實際 primary display id 執行成功。下一個 bounded slice 尚未選定；不得因目前測試全綠而擴張至明確 non-goal。
+下一個 bounded slice 尚未選定；不得因目前測試全綠而擴張至明確 non-goal。
 
 Begins only after the first slice is verified. It may address：
 
