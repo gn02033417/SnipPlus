@@ -1,6 +1,6 @@
 # SnipPlus
 
-SnipPlus is a Windows desktop screenshot product. The accepted v1 baseline requires resident PrintScreen capture、capacity-aware all-display Frozen Virtual Desktop Selection、mandatory Editing／confirmation、first-release Annotation tools、complete keyboard-only Editing from `SelectionLocked`、Clipboard completion and PNG Save.
+SnipPlus is a Windows desktop screenshot product. The accepted v1 baseline requires resident PrintScreen capture、capacity-aware all-display Frozen Virtual Desktop Selection、mandatory Editing／confirmation、pointer-driven Annotation、Clipboard completion and PNG Save.
 
 The repository contains a working single-display capture／crop／Clipboard technical prototype. That prototype is **not** the accepted v1 product workflow and is being corrected through the requirements-to-code conformance plan.
 
@@ -27,13 +27,13 @@ Historical Research、Analysis、Decision and earlier reviews do not override th
 User manually starts SnipPlus
 → SnipPlus remains resident while running
 → User enables PrintScreen takeover
-→ validate supported display envelope
-→ PrintScreen freezes all connected displays
-→ Present one masked Frozen Virtual Desktop
-→ User creates a cross-monitor rectangular Selection
-→ Mouse release locks the Selection
-→ Show Editing／confirmation function bar
-→ User may adjust the Selection and optionally annotate by pointer or keyboard
+→ validate the four-4K support envelope
+→ PrintScreen freezes all connected supported displays
+→ present one masked Frozen Virtual Desktop
+→ user creates a cross-monitor rectangular Selection
+→ mouse release locks the Selection
+→ show Editing／confirmation function bar
+→ user may adjust the Selection and optionally annotate with pointer input
 → Complete OR Save OR Cancel
 ```
 
@@ -47,27 +47,48 @@ User manually starts SnipPlus
 
 ### Performance
 
-- PrintScreen accepted → interactive all-display Selection: p95 `≤ 500 ms` Standard、`≤ 1,000 ms` Maximum.
-- Selection／Annotation frame time p95 `≤ 33 ms`; discrete input response p95 `≤ 100 ms`.
+- PrintScreen accepted → interactive all-display Selection: p95 `≤ 500 ms` Owner Reference／Standard、`≤ 1,000 ms` Maximum.
+- Pointer-driven Selection／Annotation frame time p95 `≤ 33 ms`; visible response p95 `≤ 100 ms`.
 - Complete p95 tiers: `≤ 1.5 s`、`4 s`、`8 s`.
 - Save p95 tiers after Save As confirmation: `≤ 2 s`、`6 s`、`12 s`.
 - A commit still running after `300 ms` shows non-blocking progress.
 - Idle private working set `≤ 250 MB`; maximum-envelope peak `≤ 2.0 GB`; cleanup and repeated-session limits are defined in PRD-0006.
+- Measurement uses `3` warm-up runs and at least `30` measured runs with p50、p95 and maximum reporting.
 
-### Supported capacity
+### Supported Capacity
 
 - `1`–`4` active logical desktop display surfaces.
-- Each display `≤ 7,680 × 4,320` physical pixels.
-- Total source pixels `≤ 66,355,200`.
+- Each display `≤ 3840 × 2160` physical pixels.
+- Total source pixels `≤ 33,177,600`.
 - Virtual Desktop width and height each `≤ 16,384`.
 - Final Selection width and height each `≤ 16,384`; area `≤ 67,108,864` pixels.
 - Unsupported configurations fail before Selection without partial capture.
+- An 8K display is outside v1.
 
-### Keyboard-only Editing
+### Owner Reference Configuration
 
-- Scope begins at `SelectionLocked`; initial crosshair Selection remains pointer-driven in v1.
-- Every required tool and object operation、style、Undo／Redo、Save、Complete and Cancel works without pointer input.
-- F6／Tab navigation、tool shortcuts、keyboard object creation、`1`／`10` pixel movement／resize、Chinese IME、High Contrast、200% scaling、Narrator state and no keyboard trap are required.
+Mandatory real-world mixed-DPI verification includes:
+
+- primary `2560 × 1440`;
+- lower `1920 × 1080` at Windows scaling `150%`;
+- left `2560 × 1440`.
+
+### Keyboard Boundary
+
+Required:
+
+- PrintScreen capture entry;
+- Esc cancellation;
+- ordinary text editing and Chinese IME;
+- accessible names and non-color-only selected／error state.
+
+Deferred:
+
+- complete keyboard-only Annotation;
+- F6／Tab zone and object workflow;
+- tool、Ctrl、Delete and Arrow-key shortcuts;
+- keyboard-created Annotation objects;
+- pointer-unused acceptance after `SelectionLocked`.
 
 ## Current Status
 
@@ -76,8 +97,8 @@ User manually starts SnipPlus
 | Product and quality requirements | Accepted complete v1 baseline |
 | Behavioral specifications | Accepted complete v1 baseline |
 | Architecture and ADRs | Accepted current baseline |
-| Implementation contracts | Accepted v2.2 |
-| Conformance matrix | Reviewed v2.2 |
+| Implementation contracts | Accepted v2.3 |
+| Conformance matrix | Reviewed — implementation correction required |
 | Solution and projects | Present |
 | Technical capture prototype | Implemented and historically verified |
 | Accepted v1 workflow conformance | Correction required |
@@ -89,17 +110,17 @@ User manually starts SnipPlus
 
 1. Resident lifecycle、MainWindow direct exit and takeover setting.
 2. PrintScreen entry through `COMP-001`.
-3. Capacity policy、Frozen Virtual Desktop session and per-display frame ownership.
+3. Four-4K capacity policy、Frozen Virtual Desktop Session and per-display frame ownership.
 4. Cross-monitor presentation and initial Selection.
-5. Locked-Selection move、resize and reselection.
+5. Locked-Selection pointer move、resize and reselection.
 6. Accepted workflow state graph.
 7. Function bar、Complete／Save／Cancel、progress and focus restoration.
-8. Annotation document、required tools、keyboard focus model and object editing.
-9. Annotation Undo／Redo、Virtual Desktop anchoring、clipping and keyboard acceptance.
+8. Annotation document、required pointer-driven tools and object editing.
+9. Annotation Undo／Redo、Virtual Desktop anchoring and clipping.
 10. Complete final render、capacity validation、transparent gaps and Clipboard.
 11. Save As、Downloads default、PNG、same-result Clipboard and retained-file outcome.
-12. Failure preservation、performance／memory evidence and accessibility.
-13. Explicitly authorized Standard and Maximum multi-display runtime verification.
+12. Failure preservation、performance／memory evidence and required accessibility.
+13. Explicitly authorized Owner Reference、Standard and Maximum runtime verification.
 
 ## Accepted Technology Baseline
 
@@ -114,4 +135,4 @@ User manually starts SnipPlus
 
 ## Documentation Boundary
 
-Do not create more prerequisite、authorization、readiness or closure chains. Product-visible changes update existing PRD／Specs first. Implementation work updates code、tests、CHANGELOG and the existing conformance matrix. A new ADR is required only for a durable technology or Architecture decision that cannot be handled by the accepted baseline.
+Do not create more prerequisite、authorization、readiness or closure chains. Product-visible changes update existing PRD／Specs first. Implementation work updates code、tests、CHANGELOG and the existing conformance matrix.
