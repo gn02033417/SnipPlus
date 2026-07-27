@@ -13,6 +13,12 @@
             <TextBlock Text="First vertical slice" />
             <StackPanel Orientation="Horizontal" Spacing="12">
                 <Button x:Name="StartCaptureButton" Click="StartCaptureButton_Click" Content="Start Capture" />
+                <CheckBox
+                    x:Name="PrintScreenTakeoverCheckBox"
+                    AutomationProperties.Name="PrintScreen takeover"
+                    Click="PrintScreenTakeoverCheckBox_Click"
+                    Content="Take over PrintScreen"
+                    IsThreeState="False" />
                 <TextBlock x:Name="StatusText" VerticalAlignment="Center" Text="Ready" />
             </StackPanel>
         </StackPanel>

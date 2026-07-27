@@ -23,6 +23,7 @@ public partial class MainWindow : Window, IDisposable
 
     private readonly WorkflowStateAuthority _stateAuthority = new();
     private readonly CaptureWorkflowCoordinator _workflowCoordinator;
+    private readonly ResidentLifecycleCoordinator _residentLifecycle;
     private readonly ICaptureService? _injectedCaptureService;
     private CancellationTokenSource? _captureCancellation;
     private AppWindow? _appWindow;
@@ -34,14 +35,24 @@ public partial class MainWindow : Window, IDisposable
     private Point? _selectionStart;
     private double _selectionDpiScale = 1;
     private bool _isSelecting;
+    private bool _updatingTakeoverSetting;
+    private int _shutdownStarted;
 
-    public MainWindow(ICaptureService? captureService = null)
+    public MainWindow(
+        ICaptureService? captureService = null,
+        IPrintScreenTakeover? printScreenTakeover = null,
+        IPrintScreenTakeoverSettingsStore? settingsStore = null)
     {
         InitializeComponent();
         _workflowCoordinator = new CaptureWorkflowCoordinator(_stateAuthority);
         _injectedCaptureService = captureService;
+        _residentLifecycle = new ResidentLifecycleCoordinator(
+            printScreenTakeover ?? new WindowsPrintScreenTakeover(WindowNative.GetWindowHandle(this)),
+            settingsStore ?? new WindowsPrintScreenTakeoverSettingsStore());
+        _residentLifecycle.PrintScreenReceived += OnPrintScreenReceived;
         Activated += OnActivated;
         Closed += OnClosed;
+        ApplyTakeoverResult(_residentLifecycle.Initialize());
     }
 
     private void OnActivated(object sender, WindowActivatedEventArgs args)
@@ -88,6 +99,30 @@ public partial class MainWindow : Window, IDisposable
             DisposeCaptureSession();
             SetStatus($"Unable to start capture: {exception.GetType().Name}");
         }
+    }
+
+    private void PrintScreenTakeoverCheckBox_Click(object sender, RoutedEventArgs args)
+    {
+        if (_updatingTakeoverSetting)
+        {
+            return;
+        }
+
+        var requestedState = PrintScreenTakeoverCheckBox.IsChecked == true;
+        ApplyTakeoverResult(_residentLifecycle.SetTakeoverEnabled(requestedState));
+    }
+
+    private void OnPrintScreenReceived(object? sender, PrintScreenReceivedEventArgs args)
+    {
+        SetStatus("PrintScreen received. Capture workflow is not started in this slice.");
+    }
+
+    private void ApplyTakeoverResult(PrintScreenTakeoverResult result)
+    {
+        _updatingTakeoverSetting = true;
+        PrintScreenTakeoverCheckBox.IsChecked = _residentLifecycle.IsTakeoverEnabled;
+        _updatingTakeoverSetting = false;
+        SetStatus(result.UserMessage);
     }
 
     private async Task BeginCaptureAsync(CancellationToken cancellationToken)
@@ -455,7 +490,20 @@ public partial class MainWindow : Window, IDisposable
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
-        Dispose();
+        if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _residentLifecycle.ExitApplication();
+        }
+        finally
+        {
+            Dispose();
+            Environment.Exit(0);
+        }
     }
 
     public void Dispose()
@@ -468,6 +516,7 @@ public partial class MainWindow : Window, IDisposable
         _captureCancellation?.Dispose();
         _captureCancellation = null;
         DisposeCaptureSession();
+        _residentLifecycle.Dispose();
         GC.SuppressFinalize(this);
     }
 

@@ -37,6 +37,10 @@
 - 現行實作順序固定為 resident lifecycle／direct exit → PrintScreen → four-4K capacity／Frozen Virtual Desktop → cross-monitor Selection → pointer SelectionLocked adjustment → state graph → function bar／progress／focus → pointer Annotation → history／clipping → Complete → Save → failure／performance／accessibility → authorized Owner Reference／Standard／Maximum verification。
 - Capture technical prototype維持 Selection 前只取得一次 frame，Selection 與 Crop 使用相同 Frozen Frame。
 - 正常產品與 non-interactive tests 不啟動 Paint 或其他 external GUI fixture。
+- 新增平台中立 `IPrintScreenTakeover`、`IPrintScreenTakeoverSettingsStore` 與 `ResidentLifecycleCoordinator`，集中處理 persisted takeover state、冪等註冊／解除、PrintScreen event boundary 與 application-exit cleanup。
+- `SnipPlus.Windows` 新增 Windows `RegisterHotKey`／`UnregisterHotKey` implementation 與 `ApplicationData.Current.LocalSettings` persistence；註冊失敗時不保留 enabled state。
+- MainWindow 新增 PrintScreen takeover checkbox；X 關閉時先釋放 takeover，再以 `Environment.Exit(0)` 結束 SnipPlus process。PrintScreen event 本次只到 application boundary，不啟動 `BeginCaptureAsync`。
+- 新增 deterministic resident lifecycle tests，覆蓋設定載入、單次註冊／解除、失敗回復、event boundary 與 application-exit／Dispose idempotence。依本次任務限制，尚未執行測試。
 
 ### Verified — Historical Technical Foundation
 
@@ -49,7 +53,7 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 
 ### Current Conformance Status
 
-- Resident lifecycle、direct application exit and PrintScreen takeover：Missing／Partial foundation only。
+- Resident lifecycle、direct application exit and PrintScreen takeover：已加入 static implementation 與 deterministic tests；本次未執行 build／test／runtime，尚不宣稱已通過驗證。
 - Four-4K capacity policy and unsupported-limit outcomes：Missing。
 - Frozen Virtual Desktop and per-display frame ownership：Missing。
 - Cross-monitor Selection and transparent gap output：Missing。
