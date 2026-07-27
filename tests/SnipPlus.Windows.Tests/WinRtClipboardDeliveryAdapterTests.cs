@@ -1,0 +1,138 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SnipPlus.Contracts;
+using SnipPlus.Windows;
+using Windows.ApplicationModel.DataTransfer;
+
+namespace SnipPlus.Windows.Tests;
+
+[TestClass]
+public sealed class WinRtClipboardDeliveryAdapterTests
+{
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Clipboard")]
+    public async Task BusyClipboardRetriesAndFlushesAfterSuccess()
+    {
+        using var image = CreateImage();
+        var attempts = 0;
+        var flushes = 0;
+        var historyAllowed = true;
+        var roamingAllowed = true;
+        var adapter = new WinRtClipboardDeliveryAdapter(
+            (_, options) =>
+            {
+                attempts++;
+                historyAllowed = options.IsAllowedInHistory;
+                roamingAllowed = options.IsRoamable;
+                return attempts == 3;
+            },
+            () => flushes++);
+
+        var result = await adapter.DeliverAsync(
+            CreateRequest(image, maximumAttempts: 3, retryBudget: TimeSpan.FromSeconds(1)),
+            CancellationToken.None);
+
+        var delivered = result as ClipboardDeliveryResult.Delivered;
+        Assert.IsNotNull(delivered);
+        Assert.AreEqual(3, delivered.Attempts);
+        Assert.AreEqual(3, attempts);
+        Assert.AreEqual(1, flushes);
+        Assert.IsFalse(historyAllowed);
+        Assert.IsFalse(roamingAllowed);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Clipboard")]
+    public async Task BusyClipboardStopsAtRetryBudget()
+    {
+        using var image = CreateImage();
+        var attempts = 0;
+        var flushes = 0;
+        var adapter = new WinRtClipboardDeliveryAdapter(
+            (_, _) =>
+            {
+                attempts++;
+                return false;
+            },
+            () => flushes++);
+
+        var result = await adapter.DeliverAsync(
+            CreateRequest(image, maximumAttempts: 5, retryBudget: TimeSpan.FromMilliseconds(1)),
+            CancellationToken.None);
+
+        var retryable = result as ClipboardDeliveryResult.RetryableFailure;
+        Assert.IsNotNull(retryable);
+        Assert.AreEqual(FailureCode.ClipboardBusy, retryable.Failure.Code);
+        Assert.AreEqual(1, retryable.AttemptsUsed);
+        Assert.AreEqual(1, attempts);
+        Assert.AreEqual(0, flushes);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Clipboard")]
+    [TestCategory("Cancellation")]
+    public async Task CancellationDuringRetryReturnsCancelledWithoutFlush()
+    {
+        using var image = CreateImage();
+        using var cancellation = new CancellationTokenSource();
+        var attempts = 0;
+        var flushes = 0;
+        var adapter = new WinRtClipboardDeliveryAdapter(
+            (_, _) =>
+            {
+                attempts++;
+                cancellation.Cancel();
+                return false;
+            },
+            () => flushes++);
+
+        var result = await adapter.DeliverAsync(
+            CreateRequest(image, maximumAttempts: 5, retryBudget: TimeSpan.FromSeconds(1)),
+            cancellation.Token);
+
+        var cancelled = result as ClipboardDeliveryResult.Cancelled;
+        Assert.IsNotNull(cancelled);
+        Assert.AreEqual("CancellationToken", cancelled.CancellationOrigin);
+        Assert.AreEqual(1, attempts);
+        Assert.AreEqual(0, flushes);
+    }
+
+    private static ClipboardDeliveryRequest CreateRequest(
+        SoftwareBitmapImageResult image,
+        int maximumAttempts,
+        TimeSpan retryBudget) => new()
+        {
+            DeliveryId = Guid.NewGuid(),
+            SessionId = image.Metadata.SessionId,
+            ResultId = image.Metadata.ResultId,
+            ImageResult = image,
+            MaximumAttempts = maximumAttempts,
+            RetryBudget = retryBudget,
+            HistoryAllowed = false,
+            RoamingAllowed = false,
+            Cancellation = CancellationToken.None
+        };
+
+    private static SoftwareBitmapImageResult CreateImage() =>
+        SoftwareBitmapFactory.CreateFromPremultipliedBgra(
+            new byte[] { 1, 2, 3, 255 },
+            new ImageResultMetadata
+            {
+                ResultId = Guid.NewGuid(),
+                SessionId = Guid.NewGuid(),
+                PixelWidth = 1,
+                PixelHeight = 1,
+                PixelFormat = ImagePixelFormat.Bgra8,
+                AlphaMode = ImageAlphaMode.Premultiplied,
+                ColorSpace = ImageColorSpace.SrgbSdr,
+                DpiX = 96,
+                DpiY = 96,
+                RowStride = 4,
+                SourceKind = SourceKind.Monitor,
+                SourcePhysicalBounds = new PhysicalRect(0, 0, 1, 1),
+                CropPhysicalBounds = new PhysicalRect(0, 0, 1, 1),
+                CapturedAt = DateTimeOffset.UnixEpoch
+            });
+}

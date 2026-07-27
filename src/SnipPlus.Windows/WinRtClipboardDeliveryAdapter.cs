@@ -11,6 +11,16 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
     private const int ClipboardCannotOpen = unchecked((int)0x800401D0);
     private const int RpcCallRejected = unchecked((int)0x80010001);
     private const int RpcServerCallRetryLater = unchecked((int)0x8001010A);
+    private readonly Func<DataPackage, ClipboardContentOptions, bool> _setContent;
+    private readonly Action _flush;
+
+    public WinRtClipboardDeliveryAdapter(
+        Func<DataPackage, ClipboardContentOptions, bool>? setContent = null,
+        Action? flush = null)
+    {
+        _setContent = setContent ?? Clipboard.SetContentWithOptions;
+        _flush = flush ?? Clipboard.Flush;
+    }
 
     public async ValueTask<ClipboardDeliveryResult> DeliverAsync(
         ClipboardDeliveryRequest request,
@@ -79,13 +89,13 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
                         IsRoamable = request.RoamingAllowed
                     };
 
-                    if (!Clipboard.SetContentWithOptions(package, options))
+                    if (!_setContent(package, options))
                     {
                         lastContention = null;
                     }
                     else
                     {
-                        Clipboard.Flush();
+                        _flush();
                         return new ClipboardDeliveryResult.Delivered(
                             request.DeliveryId,
                             request.SessionId,
