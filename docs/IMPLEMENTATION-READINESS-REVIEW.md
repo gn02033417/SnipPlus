@@ -5,31 +5,39 @@
 | Field | Value |
 | --- | --- |
 | Document ID | IMPLEMENTATION-READINESS-REVIEW-001 |
-| Status | Accepted |
-| Review date | 2026-07-26 |
+| Status | Accepted — corrective amendment recorded |
+| Original review date | 2026-07-26 |
+| Corrective amendment date | 2026-07-27 |
 | Reviewer | ChatGPT repository review |
-| Acceptance authority | Repository owner through explicit instruction to converge documentation toward coding readiness |
+| Acceptance authority | Repository owner through explicit implementation and corrective instructions |
 | Review scope | First vertical slice only |
-| Readiness decision | Approved for first vertical slice implementation |
-| Source-code creation | Permitted only after an explicit implementation task |
-| Build／runtime verified | No; these are required outputs of the implementation task |
+| Original readiness decision | Approved for first vertical slice implementation |
+| Current corrective decision | The first vertical slice must correct Region Selection visibility and same-frame consistency before any scope expansion. |
+| Source-code creation | Already started and present in the repository |
+| Build／test／runtime evidence | Present for the initial vertical slice; evidence does not override the failed Region Selection product behavior. |
 
 ## 1. Executive Decision
 
-**SnipPlus documentation is sufficient to begin the first vertical slice.**
+The original documentation was sufficient to begin a bounded technical vertical slice, but it omitted one product-critical behavior contract:
 
-No additional prerequisite、readiness-reassessment、authorization-request、closure-review or technology-research document is required before coding.
+> The user must select a region while viewing the exact frozen source frame that will later be cropped.
 
-The next productive action is an explicit implementation task that creates the approved solution/projects、implements the bounded vertical slice、runs the defined checks and records actual build/runtime evidence.
+The initial implementation therefore satisfied the weak wording “show a single-monitor region-selection surface” while presenting an opaque gray surface and acquiring the actual desktop frame only after selection. That behavior is not acceptable for a screenshot product and does not satisfy the intent of PRD-0002 or PRD-0004.
 
-This approval is not a statement that the selected technologies already build or run in the repository. It authorizes implementation specifically to produce that evidence within the fixed boundaries below.
+The corrected decision is:
+
+- The existing capture、crop、render、Clipboard、cancellation and test foundations may be retained.
+- The current Region Selection sequence is a blocking first-slice defect.
+- The next implementation work must correct the sequence to `Capture one frame → present that frame → select → crop that same frame`.
+- No Clipboard hardening、Packaging、Output、Annotation or other feature expansion should continue before this correction is complete.
+- No new prerequisite、readiness、authorization or closure-document chain is required.
 
 ## 2. Reviewed Baselines
 
 | Area | Effective source | Result |
 | --- | --- | --- |
 | Product intent | PRD v1.0 Freeze Review | PASS |
-| Observable behavior | Specification v1.0 Baseline Review | PASS |
+| Observable behavior | Specification v1.0 Baseline Review plus corrected SPEC-0005 v0.2 | PASS after corrective clarification |
 | Abstract architecture | Architecture Baseline Review | PASS |
 | UI Framework | ADR-0002 — WinUI 3 | PASS |
 | Rendering | ADR-0003 — WinUI XAML／Composition + Win2D | PASS |
@@ -37,36 +45,45 @@ This approval is not a statement that the selected technologies already build or
 | Image Representation | ADR-0005 — BGRA8 premultiplied SoftwareBitmap | PASS |
 | Clipboard | ADR-0006 — WinRT DataPackage Clipboard | PASS |
 | Testing | ADR-0007 — MSTest.Sdk + Microsoft.Testing.Platform | PASS |
-| Information contracts | IMPLEMENTATION-CONTRACTS-001 | PASS |
+| Information contracts | IMPLEMENTATION-CONTRACTS-001 | PASS; frozen-frame ownership must be reflected by the correction |
 | Project/toolchain baseline | PROJECT-STRUCTURE-001 | PASS |
-| Repository governance | Repository Current State Audit、AGENTS、Development Guide | PASS |
+| Repository governance | Repository Current State Audit、AGENTS、Development Guide | PASS after current-state correction |
 
 ## 3. Readiness Criteria
 
 ### 3.1 Product and behavior
 
-- Primary workflow and success/cancel/failure boundaries are frozen.
+The first vertical slice must preserve all of the following:
+
+- Primary workflow and success／cancel／failure boundaries are frozen.
 - Clipboard and Output remain parallel downstream paths.
 - Annotation remains optional.
 - Privacy requires explicit user action before capture.
-- First-slice non-goals are explicit.
+- Region Selection must show the source content being selected.
+- A single immutable full-monitor source frame must be acquired before Region Selection begins.
+- Selection presentation and final Crop must use that exact same frame.
+- Selection completion must not trigger a second desktop capture for the result.
+- Selection outside area may be dimmed; the selected source content must remain clearly visible.
+- Normal product operation must not launch Paint or another external GUI fixture.
+- First-slice non-goals remain explicit.
 
-Result：`PASS`
+Result：`PASS after corrective clarification; implementation correction required`
 
 ### 3.2 Architecture and ownership
 
-- Layer、Module and Component ownership is frozen.
+- Layer、Module and Component ownership remains frozen.
 - COMP-001 remains the sole Workflow State Authority.
-- Domain and platform dependencies are separated.
-- Component-to-project mapping is defined and acyclic.
-- Rendering does not own Capture、Clipboard、Output or state.
+- Domain and platform dependencies remain separated.
+- Component-to-project mapping remains acyclic.
+- Rendering does not own Capture、Clipboard、Output or workflow state.
 - Platform adapters do not own product semantics.
+- Frozen source-frame ownership must have one explicit lifetime across acquisition、selection、crop、cancel、failure and cleanup.
 
 Result：`PASS`
 
 ### 3.3 Technology decisions
 
-All implementation-critical P0 decisions for the first vertical slice are Accepted：
+All implementation-critical P0 decisions for the first vertical slice remain Accepted：
 
 - UI Framework.
 - Rendering Technology.
@@ -75,13 +92,15 @@ All implementation-critical P0 decisions for the first vertical slice are Accept
 - Clipboard Integration.
 - Testing Strategy.
 
-Configuration、Logging、Packaging hardening、Update、Telemetry and Plugin decisions are not required to implement the bounded first slice and remain Deferred/P1/P2.
+The Region Selection defect does not require replacing WinUI 3、Windows.Graphics.Capture、SoftwareBitmap、Win2D or WinRT Clipboard. It requires correcting workflow order and presentation ownership.
+
+Configuration、Logging、Packaging hardening、Update、Telemetry and Plugin decisions remain Deferred／P1／P2.
 
 Result：`PASS`
 
 ### 3.4 Contracts
 
-The following boundaries are defined：
+The following boundaries remain valid：
 
 - Workflow state and legal transitions.
 - CaptureIntent and CaptureOutcome.
@@ -93,7 +112,14 @@ The following boundaries are defined：
 - Async/thread boundaries.
 - Ownership、disposal and cleanup.
 
-Result：`PASS`
+The correction must additionally guarantee：
+
+- One source-frame acquisition per completed selection session.
+- Region Selection receives a presentable view of that frame.
+- Crop consumes that same frame rather than requesting a later frame.
+- Cancellation and failure release the frame exactly once.
+
+Result：`PASS after corrective clarification`
 
 ### 3.5 Toolchain and project structure
 
@@ -114,134 +140,155 @@ Result：`PASS`
 
 ### 3.6 Verification plan
 
-Defined before implementation：
+Required verification for the corrective slice：
 
-- Unit、Contract、Rendering and Platform test layers.
-- Synthetic fixture/privacy boundary.
-- Build、format and test commands.
-- WGC、coordinate、crop、render、Clipboard and cleanup evidence requirements.
-- Failure of runtime evidence triggers correction/review, not silent ADR rewriting.
+- A deterministic fake or stub source proves that one workflow performs exactly one full-frame acquisition.
+- Region Selection is initialized only after a source frame exists.
+- Crop is performed against that same frame.
+- Zero-size、out-of-bounds and display-context mismatch selections cannot succeed.
+- Cancel and failure release the frozen frame and selection resources.
+- Clipboard receives only the cropped result.
+- Non-interactive tests do not start external GUI applications.
+- Interactive packaged verification occurs only with explicit user authorization.
+- Runtime verification must not persist private desktop screenshots or Clipboard payloads.
 
-Result：`PASS`
+Result：`PASS as corrected plan; corrected implementation evidence pending`
 
 ## 4. Non-blocking Unknowns and Deferred Decisions
 
-These do not block the first vertical slice：
+These remain outside the corrective slice：
 
 - Public release minimum OS matrix beyond the first-slice Windows 11 24H2 baseline.
 - ARM64.
 - Global Print Screen or system-wide hotkey interception.
 - Multi-monitor stitched capture.
 - Window capture as a product mode.
-- Advanced annotation tools and undo/redo.
+- Advanced annotation tools and undo／redo.
 - File Output UI and destination policy.
-- HDR/wide-color preservation.
+- HDR／wide-color preservation.
 - Logging framework and telemetry.
 - Final packaging、signing、installer、Store and update strategy.
 - Plugin architecture.
 - Cloud、OCR、sharing and cross-platform capabilities.
+- Exact overlay brand styling、opacity、border and resize affordance.
 
-They must not be pulled into the first implementation merely because they remain open.
+They must not be pulled into the correction merely because they remain open.
 
-## 5. Approved First Vertical Slice
+## 5. Corrected First Vertical Slice
 
 ### 5.1 Required scope
 
-1. Create the solution、configuration files and seven approved projects.
-2. Create a packaged x64 WinUI 3 application shell.
+1. Retain the existing solution、configuration and seven approved projects.
+2. Retain the packaged x64 WinUI 3 application shell.
 3. Provide an explicit in-app command to start one capture session.
-4. Show a single-monitor region-selection surface.
-5. Convert selection DIPs to physical-pixel bounds using an explicit display-context snapshot.
-6. Acquire one frame through Windows.Graphics.Capture.
-7. Crop to the selected region.
-8. Publish an immutable BGRA8 premultiplied SoftwareBitmap ImageResult.
-9. Display the result through the ADR-0003 rendering adapter.
-10. Copy the result through the ADR-0006 Clipboard adapter.
-11. Support cancellation、classified failure、bounded Clipboard retry and complete cleanup.
-12. Add Unit、Contract and deterministic Rendering tests.
-13. Add category-filtered Windows platform verification tests.
-14. Record actual restore、build、test and runtime findings.
+4. Resolve one single-monitor display-context snapshot.
+5. Acquire one immutable full-monitor source frame before Region Selection begins.
+6. Present that same frame as the Region Selection background.
+7. Permit the area outside the selection to be dimmed while keeping the source content inside the selection clearly visible.
+8. Accept pointer input in DIPs and convert it to physical-pixel bounds using the same display-context snapshot.
+9. Crop the final result from that exact frozen source frame; do not capture a second desktop frame after selection.
+10. Publish an immutable BGRA8 premultiplied SoftwareBitmap ImageResult.
+11. Display the result through the ADR-0003 rendering adapter.
+12. Copy the result through the ADR-0006 Clipboard adapter.
+13. Support cancellation、classified failure、bounded Clipboard retry and complete frozen-frame cleanup.
+14. Add or update Unit、Contract and deterministic tests for acquisition count、same-frame crop and cleanup.
+15. Run category-filtered Windows platform verification only when explicitly authorized.
+16. Record actual restore、build、test and runtime findings after the correction.
 
 ### 5.2 Explicit non-goals
 
 - No global hotkey or Print Screen interception.
-- No automatic/background capture.
+- No automatic／background capture.
 - No multi-monitor stitched result.
 - No window-capture product mode.
 - No annotation mutation tools.
+- No toolbar redesign beyond what is necessary to present and select the frozen frame.
 - No save dialog or file Output UI.
-- No Clipboard History/roaming opt-in.
+- No Clipboard History／roaming opt-in.
 - No HDR preservation.
 - No DXGI or GDI fallback.
 - No telemetry、cloud、OCR、plugin or update system.
 - No release publication.
 
-## 6. Required Implementation Sequence
+## 6. Corrective Implementation Sequence
 
-1. Create solution/configuration/project skeleton only.
-2. Restore and build the empty baseline.
-3. Correct only evidence-backed compatibility issues; record any version adjustment.
-4. Implement Contracts and Core state/cancellation/failure behavior with tests.
-5. Implement deterministic rendering conversion with synthetic tests.
-6. Implement WGC capture adapter and coordinate/crop path.
-7. Implement Clipboard adapter.
-8. Compose the WinUI app flow.
-9. Run non-interactive tests.
-10. Run explicitly authorized interactive Windows verification.
-11. Update CHANGELOG and implementation evidence/status documentation.
+1. Read corrected SPEC-0005、Implementation Contracts and the relevant App／Core／Windows code.
+2. Stop unrelated Clipboard hardening、Packaging and feature expansion.
+3. Introduce or expose one-shot full-frame acquisition before Region Selection.
+4. Establish explicit frozen-frame ownership and cleanup.
+5. Present the frozen frame in the WinUI Region Selection surface.
+6. Keep the source content visible while rendering the selection mask and rectangle.
+7. Convert Selection DIPs against the same display-context snapshot.
+8. Crop the same frame without a second capture call.
+9. Add deterministic tests for one acquisition、same-frame crop、invalid selection and cancellation cleanup.
+10. Run only authorized restore、build、non-interactive tests and interactive verification.
+11. Update CHANGELOG and actual evidence only after results exist.
+12. Stop and report before beginning another feature.
 
-A failed early restore/build is an implementation finding, not proof that more prerequisite documents were required.
-
-## 7. Stop Conditions During Implementation
+## 7. Stop Conditions During Correction
 
 Stop and report before expanding scope if：
 
-- Selected package versions cannot restore or build together.
-- WGC cannot provide the required monitor frame on the supported baseline.
-- Coordinate conversion produces unbounded or stale crop results.
-- Canonical BGRA8/premultiplied conversion is not deterministic.
-- Clipboard publication requires a materially different format/API strategy.
+- The corrected design requires replacing an Accepted P0 technology decision.
+- WGC cannot provide a usable pre-selection monitor frame on the supported baseline.
+- The Selection UI cannot present the frozen frame without transferring workflow ownership into the platform layer.
+- Coordinate conversion produces unbounded、stale or mismatched crop results.
+- The implementation performs a second desktop capture after Selection for the final result.
+- The selected region cannot remain visibly tied to the frozen source content.
+- Canonical BGRA8／premultiplied conversion is not deterministic.
+- Clipboard publication requires a materially different format／API strategy.
 - A dependency cycle would be required.
-- Frozen behavior or Architecture ownership would need to change.
-- Private desktop or Clipboard content would be persisted as test evidence.
+- Private desktop or Clipboard content would be persisted as evidence.
+- Interactive verification would launch Paint、Notepad or another external GUI without explicit user authorization.
 - The requested change enters an explicit non-goal.
 
-A stop condition may require a targeted corrective ADR/contract change, but it must not restart the old prerequisite/closure-document pattern.
+A stop condition may require a targeted corrective ADR or contract change, but it must not restart the old prerequisite／closure-document pattern.
 
-## 8. Documentation Freeze for Implementation Start
+## 8. Documentation Freeze and Corrective Exception
 
-The implementation-preparation documentation set is now frozen for the first vertical slice.
+The implementation-preparation documentation set remains frozen. This amendment is permitted because actual runtime behavior revealed that the original “region-selection surface” wording did not protect a product-critical requirement.
 
-Before coding, do not create or modify additional planning documents unless：
+No additional planning documents should be created unless：
 
-- A concrete restore/build/runtime failure reveals an incorrect assumption.
-- The user changes scope.
-- An official dependency/version change creates an actual compatibility issue.
+- A concrete restore／build／runtime failure reveals another incorrect assumption.
+- The user changes product scope.
+- An official dependency／version change creates an actual compatibility issue.
 - A Frozen source or Accepted ADR must be superseded.
 
-Normal implementation should update code、tests、CHANGELOG and evidence/status records—not create more readiness documents.
+Normal correction work should update existing Specs、code、tests、CHANGELOG and evidence／status records—not create more readiness documents.
 
 ## 9. Final Review Matrix
 
 | Review area | Result |
 | --- | --- |
 | Product baseline | PASS |
-| Specification baseline | PASS |
+| Specification baseline | PASS after SPEC-0005 corrective clarification |
 | Architecture baseline | PASS |
 | Required P0 ADRs | PASS |
-| Contracts | PASS |
+| Contracts | PASS; frozen-frame lifetime clarification required in implementation |
 | Project Structure | PASS |
 | Toolchain versions | PASS |
-| Test strategy | PASS |
-| First-slice scope | PASS |
+| Test strategy | PASS after corrective test additions |
+| First-slice technical foundation | PASS |
+| First-slice Region Selection UX | FAIL in current implementation; correction required |
+| Same-frame Selection／Crop contract | Defined by corrective amendment; implementation evidence pending |
 | Non-goals | PASS |
-| Privacy/evidence boundary | PASS |
-| Build/runtime already verified | No — required implementation output |
+| Privacy／evidence boundary | PASS |
 | Additional prerequisite documentation required | No |
-| Ready to begin coding | **Yes, after explicit implementation task** |
+| Ready to continue coding | **Yes, only for the bounded Region Selection correction** |
+| Ready for feature expansion | **No** |
 
 ## 10. Final Decision
 
-`Approved for first vertical slice implementation.`
+`Approved only for bounded correction of the first vertical slice Region Selection workflow.`
 
-The repository has reached the point where further pre-coding paperwork would provide less value than implementation and verification evidence.
+The immediate implementation target is:
+
+```text
+Capture one immutable source frame
+→ present that same frame for Region Selection
+→ crop that same frame
+→ deliver the result
+```
+
+Feature expansion remains blocked until the corrected runtime behavior is verified.
