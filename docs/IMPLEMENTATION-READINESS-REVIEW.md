@@ -9,6 +9,7 @@
 | Original review date | `2026-07-26` |
 | Product baseline revision | `2026-07-27` |
 | Conformance audit completed | `2026-07-27` |
+| Product-decision blockers updated | `2026-07-27` |
 | Authority | Repository owner through explicit product decisions |
 | Review scope | SnipPlus v1 first release |
 
@@ -20,16 +21,19 @@ The accepted v1 workflow requires:
 
 - manually started resident application;
 - user-controlled PrintScreen takeover;
+- MainWindow `X` directly exiting the application and releasing takeover;
 - all-display Frozen Virtual Desktop session;
 - one cross-monitor rectangular Selection;
+- transparent final-image pixels for physical non-display gaps;
 - Selection lock、move、edge／corner resize and reselection;
 - mandatory Editing／confirmation with optional Annotation actions;
 - required v1 Annotation tool set;
 - Complete to Clipboard;
-- Save to PNG and Clipboard;
+- Save As initially opening Downloads、PNG creation and Clipboard;
+- PNG retention when later Clipboard delivery fails;
 - explicit cancellation、failure preservation、cleanup and focus restoration.
 
-`PRD/PRD-TRACEABILITY-MATRIX.md` now records the completed static comparison between accepted requirements and current code／tests／runtime evidence.
+`PRD/PRD-TRACEABILITY-MATRIX.md` records the completed static comparison between accepted requirements and current code／tests／runtime evidence.
 
 Therefore:
 
@@ -46,9 +50,9 @@ Therefore:
 | 1 | Accepted `PRD-0002`–`PRD-0006` | Product intent and v1 scope |
 | 2 | Accepted `SPEC-0001`–`SPEC-0010` | Observable behavior and acceptance criteria |
 | 3 | Accepted `ARCH-0001`–`ARCH-0005` and ADRs | Ownership、dependencies and technology decisions |
-| 4 | `IMPLEMENTATION-CONTRACTS-001` v2.0 | Shared information、identity、lifecycle and failure contracts |
+| 4 | `IMPLEMENTATION-CONTRACTS-001` v2.1 | Shared information、identity、lifecycle and failure contracts |
 | 5 | `PROJECT-STRUCTURE-001` | Current projects、toolchain and dependency direction |
-| 6 | `PRD-TRACEABILITY-MATRIX-001` | Current implementation status and ordered corrections |
+| 6 | `PRD-TRACEABILITY-MATRIX-001` v2.1 | Current implementation status and ordered corrections |
 | 7 | Code、tests and runtime evidence | Implementation evidence only |
 | 8 | Historical Research and reviews | Non-normative background |
 
@@ -64,9 +68,12 @@ The following are invalid as current product behavior:
 - Clipboard publication immediately after region Selection;
 - PNG file output as deferred;
 - Annotation tools as unspecified future work;
-- returning to or foregrounding the SnipPlus main window after every session.
+- returning to or foregrounding the SnipPlus main window after every session;
+- hiding MainWindow to the System Tray when `X` is pressed;
+- treating irregular-layout gaps as opaque or unspecified output;
+- rolling back or deleting a PNG after later Clipboard failure.
 
-Existing code implementing these assumptions is classified as `Incorrect` or `Obsolete` by the conformance matrix.
+Existing code implementing these assumptions is `Incorrect` or `Obsolete` under the conformance matrix.
 
 ## 4. Reusable Technical Assets
 
@@ -83,28 +90,30 @@ Subject to the current contracts, these foundations may be reused:
 - shared state authority and typed failure infrastructure;
 - deterministic Contracts、Core and Windows tests.
 
-Reuse does not authorize their current workflow placement. Multi-display、revision、Editing and commitment contracts still apply.
+Reuse does not authorize their current workflow placement. Multi-display、revision、Editing、transparency and commitment contracts still apply.
 
 ## 5. Completed Conformance Audit Result
 
 The static audit concluded:
 
-- the current source is a tested single-display technical prototype;
+- current source is a tested single-display technical prototype;
 - resident lifecycle and PrintScreen takeover are missing;
+- exact direct-exit／takeover-release behavior is not implemented;
 - Frozen Virtual Desktop and per-display ownership are missing;
-- cross-monitor Selection is missing;
+- cross-monitor Selection and transparent gap output are missing;
 - mouse release still commits output and is incorrect;
 - locked-selection adjustment is missing;
 - the current shared-state graph is obsolete;
 - Editing、function bar and required Annotation tools are missing;
-- Save As and PNG delivery coordination are missing;
+- Save As、Downloads default and PNG delivery coordination are missing;
+- retained-file partial outcome is missing;
 - recoverable Editing preservation、stale-revision protection and focus restoration are missing.
 
-The matrix is now the authority for row-level `Conforms`、`Partial`、`Missing`、`Incorrect` and `Obsolete` status.
+The matrix is the authority for row-level status.
 
 ## 6. Mandatory Correction Order
 
-1. Resident lifecycle and user-controlled PrintScreen takeover setting.
+1. Resident lifecycle、direct application exit and user-controlled PrintScreen takeover setting.
 2. PrintScreen entry integrated with `COMP-001`.
 3. Frozen Virtual Desktop session and per-display frame ownership.
 4. All-display presentation、crosshair and cross-monitor initial Selection.
@@ -113,38 +122,43 @@ The matrix is now the authority for row-level `Conforms`、`Partial`、`Missing`
 7. Function bar、Complete／Save／Cancel and focus restoration.
 8. Annotation document、required tools and object editing.
 9. Annotation Undo／Redo、Virtual Desktop anchoring and Selection clipping.
-10. Complete final render plus Clipboard.
-11. Windows Save As、PNG and same-result Clipboard.
+10. Complete final render、transparent gap pixels and Clipboard.
+11. Windows Save As、Downloads default、PNG、same-result Clipboard and retained-file partial outcome.
 12. Recoverable failure preservation、stale-revision protection and accessibility.
 13. Explicitly authorized multi-display runtime verification.
 
 A later step must not begin while an earlier prerequisite remains unresolved.
 
-## 7. Focused Task Rules
+## 7. First Focused Task Boundary
 
-Each implementation task must:
+The first focused coding task is now product-decision-ready.
 
-- name the requirement／Spec slice being corrected;
-- inspect the smallest relevant source and tests;
-- preserve reusable foundations without retaining obsolete behavior;
-- add or update deterministic tests;
-- run only explicitly authorized commands;
-- update `CHANGELOG.md` and corresponding matrix rows after evidence exists;
-- stop before the next correction slice.
+It must implement only:
 
-The first focused coding task is resident lifecycle and the user-controlled PrintScreen takeover boundary. It must stop before silently deciding the exact System Tray menu or MainWindow close-button behavior.
+- manually started resident application lifecycle;
+- user-controlled PrintScreen takeover setting;
+- registration and release boundary;
+- MainWindow `X` as direct application exit;
+- no close-to-tray behavior;
+- exact release of takeover during exit;
+- deterministic tests for enabled、disabled and exit release behavior.
 
-## 8. Open Product Decisions
+It must stop before PrintScreen starts the full capture workflow unless that next slice is explicitly authorized.
+
+## 8. Remaining Open Product Decisions
 
 Coding must not guess:
 
-- exact System Tray menu and MainWindow close behavior;
-- representation of non-display gaps in irregular monitor layouts;
-- PNG rollback／retention after later Clipboard failure;
 - quantitative performance targets;
+- exact supported display-count and maximum Virtual Desktop dimensions;
 - final keyboard-only Annotation acceptance scope.
 
-These block only their affected user-visible decisions, not unrelated earlier corrections.
+The following no longer block implementation:
+
+- System Tray／MainWindow close behavior;
+- non-display gap representation;
+- Save As initial Downloads folder;
+- PNG retention after Clipboard failure.
 
 ## 9. Authorization State
 
@@ -152,6 +166,7 @@ These block only their affected user-visible decisions, not unrelated earlier co
 | --- | --- |
 | Canonical document alignment | Completed |
 | Requirements-to-code conformance review | Completed |
+| Product decisions for first coding slice | Completed |
 | Focused v1 conformance coding | Allowed only through an explicit user task and in the mandatory order |
 | Unrelated feature expansion | Paused |
 | Restore／build／test／runtime | Only when explicitly included in the current task |
@@ -160,6 +175,6 @@ These block only their affected user-visible decisions, not unrelated earlier co
 
 ## 10. Final Decision
 
-`Repository documentation and the static conformance audit are complete. The next explicit implementation task begins with resident lifecycle and user-controlled PrintScreen takeover, subject to the unresolved tray／close behavior boundary.`
+`Repository documentation、the static conformance audit and the product decisions required by the first coding slice are complete. The next explicit implementation task begins with resident lifecycle、direct application exit and user-controlled PrintScreen takeover.`
 
 No claim is made that the current implementation satisfies the accepted first-release scope.
