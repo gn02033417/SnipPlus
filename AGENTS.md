@@ -6,26 +6,28 @@ SnipPlus has an accepted revised v1 product baseline dated `2026-07-27`.
 
 Current state:
 
-- Canonical PRD、Specs and Implementation Contracts have been aligned to the repository owner’s explicit first-release decisions.
-- Existing code represents an earlier technical vertical slice and has not yet been proven conformant with the revised v1 scope.
-- New feature coding is paused.
-- The next activity is one requirements-to-code conformance matrix.
-- No additional readiness、closure、authorization-request or research-document chain is required.
+- Canonical PRD、Specs、Architecture、ADRs and Implementation Contracts are aligned with the Repository owner’s explicit first-release decisions.
+- Existing source is an earlier single-display technical prototype and is not conformant with the revised v1 workflow.
+- `PRD/PRD-TRACEABILITY-MATRIX.md` contains the completed static requirements-to-code conformance audit and ordered correction plan.
+- Coding may proceed only through an explicit user task and must begin with the first unresolved prerequisite in that matrix.
+- No additional readiness、closure、authorization-request or Research-document chain is required.
 
-Do not describe the current application as v1-complete based on build、test count or prior synthetic runtime evidence.
+Do not describe the current application as v1-complete based on build、test counts or prior synthetic runtime evidence.
 
 ## Effective Source of Truth
 
 Use sources in this order:
 
-1. Accepted `PRD-0004`、`PRD-0005` and `PRD-0006`, together with existing product principles and vision.
-2. Accepted `SPEC-0003` through `SPEC-0010`.
-3. Frozen Architecture and Accepted ADRs.
+1. Accepted `PRD-0002` through `PRD-0006` and current PRD Freeze Review.
+2. Accepted `SPEC-0001` through `SPEC-0010` and current Specification Baseline Review.
+3. Accepted `ARCH-0001` through `ARCH-0005` and Accepted ADRs.
 4. `Architecture/IMPLEMENTATION-CONTRACTS.md` version 2.0.
-5. Current code and tests as implementation evidence only.
-6. Research、historical readiness reviews and prior document chains as non-normative history.
+5. `Architecture/PROJECT-STRUCTURE.md`.
+6. `PRD/PRD-TRACEABILITY-MATRIX.md` for current code／test conformance status and correction order.
+7. Current code and tests as implementation evidence only.
+8. Research、historical reviews and prior document chains as non-normative history.
 
-When a lower-priority source conflicts with a higher-priority source, the higher-priority accepted source wins. Do not silently rewrite accepted product behavior to match existing code.
+When a lower-priority source conflicts with a higher-priority source, the higher-priority Accepted source wins. Do not silently rewrite accepted product behavior to match existing code.
 
 ## Accepted v1 Product Baseline
 
@@ -35,41 +37,41 @@ When a lower-priority source conflicts with a higher-priority source, the higher
 - SnipPlus remains resident in the background.
 - A user setting enables or disables PrintScreen takeover.
 - Enabled PrintScreen is the primary v1 capture entry.
-- Disabled takeover must not intercept PrintScreen.
+- Disabled takeover does not intercept PrintScreen.
 - An in-app capture command is secondary or diagnostic only.
 
 ### Capture and selection
 
-- Freeze all connected displays before selection becomes interactive.
+- Freeze all connected displays before Selection becomes interactive.
 - Present one logical Frozen Virtual Desktop canvas.
-- Support negative coordinates、mixed DPI and one rectangular selection crossing display boundaries.
-- Show a semi-transparent mask outside the selection and clear frozen content inside.
-- Mouse release locks selection and never writes Clipboard or a file.
-- Locked selection supports move、four-edge／four-corner resize and reselection.
+- Support negative coordinates、mixed DPI and one rectangular Selection crossing display boundaries.
+- Show a semi-transparent mask outside the Selection and clear frozen content inside.
+- Mouse release locks Selection and never writes Clipboard or a file.
+- Locked Selection supports move、four-edge／four-corner resize and reselection.
 
-### Editing and annotation
+### Editing and Annotation
 
-- The editing／confirmation stage always appears after a valid lock.
+- The Editing／confirmation stage always appears after a valid lock.
 - Annotation actions are optional; explicit Complete、Save or Cancel is mandatory.
 - Required v1 tools: Rectangle、Arrow／Line、Highlighter、Text、Mosaic／Blur、Numbered Marker、color、thickness、Undo and Redo.
 - Applicable objects support selection、move、resize、restyle and delete.
-- Annotation objects use Frozen Virtual Desktop coordinates and are clipped, not deleted, outside current selection.
+- Annotation objects use Frozen Virtual Desktop coordinates and are clipped, not deleted, outside the current Selection.
 
 ### Output
 
 - Complete writes Clipboard only.
 - Save opens Save As、supports PNG only、proposes `SnipPlus_yyyy-MM-dd_HHmmss.png` and also writes Clipboard.
 - Save As cancellation returns to Editing.
-- Recoverable render、save or Clipboard failure retains selection and annotations.
+- Recoverable render、save or Clipboard failure retains Selection and Annotation state.
 - Success is silent.
 
 ### Cancel and focus
 
-- Esc cancels before selection、during drag and during Editing.
-- Cancel writes neither Clipboard nor file.
+- Esc cancels before Selection、during drag and during Editing.
+- Cancel writes neither Clipboard nor a file.
 - Complete、successful Save、Cancel and terminal failure close capture UI and restore the application active before PrintScreen.
 - SnipPlus does not automatically show its main window after the session.
-- Normal SnipPlus windows must not appear in frozen source content.
+- Normal SnipPlus windows do not appear in frozen source content.
 
 ## Explicitly Deferred
 
@@ -82,59 +84,60 @@ Do not add without a later explicit product decision:
 - capture history;
 - delayed capture;
 - additional save formats;
-- cloud、sharing、plugins、telemetry、updates or release publication.
+- font-family selection、italic、underline or text background;
+- HDR preservation、ARM64、cloud、sharing、plugins、telemetry、updates or release publication.
 
-## Requirements-to-code Conformance Review
+## Conformance Correction Order
 
-Before selecting new coding work, update one existing traceability／conformance matrix.
+Follow this order. Do not begin a later item while an earlier prerequisite remains `Missing` or `Incorrect`:
 
-For every accepted requirement or acceptance criterion, record:
+1. Resident lifecycle and user-controlled PrintScreen takeover setting.
+2. PrintScreen entry integrated with `COMP-001`.
+3. Frozen Virtual Desktop session context and per-display frame ownership.
+4. All-display presentation、crosshair and cross-monitor initial Selection.
+5. Locked Selection、move、edge／corner resize and reselection.
+6. Accepted workflow state graph including `SelectionLocked` and `Editing`.
+7. Function bar、Complete／Save／Cancel commitments and focus restoration.
+8. Annotation document、required tools and object editing.
+9. Annotation-only Undo／Redo、Virtual Desktop anchoring and Selection clipping.
+10. Complete final render plus Clipboard.
+11. Save As、PNG file output plus the same Clipboard result.
+12. Recoverable failure preservation、stale-revision protection and accessibility.
+13. Explicitly authorized multi-display runtime verification.
 
-- expected product behavior;
-- owning Spec and contract;
-- current code reference or `Not implemented`;
-- current test reference or `No coverage`;
-- runtime evidence state;
-- status: `Conforms`、`Partial`、`Missing`、`Incorrect`、`Obsolete` or `Blocked by product decision`;
-- focused required action.
+For every focused correction:
 
-Review order:
-
-1. resident PrintScreen entry;
-2. multi-display freeze and Virtual Desktop coordinates;
-3. cross-monitor selection and mask;
-4. selection adjustment;
-5. function bar;
-6. annotation tools and object editing;
-7. annotation clipping and Undo／Redo;
-8. Complete Clipboard flow;
-9. Save PNG plus Clipboard flow;
-10. Cancel、errors、cleanup and focus restoration;
-11. privacy and test-fixture boundaries;
-12. deferred-feature exclusion.
-
-Do not begin implementation while producing the matrix. Stop after reporting findings and proposing one focused next coding slice.
+- read the owning requirement、Spec and contract;
+- inspect only relevant code and tests;
+- classify existing behavior as reusable、partial、incorrect or obsolete;
+- implement the smallest complete slice;
+- add or update relevant tests;
+- run only commands explicitly authorized by the current task;
+- update `CHANGELOG.md` and corresponding conformance rows after evidence exists;
+- stop before selecting the next slice.
 
 ## Open Product Decisions
 
-Do not guess these behaviors:
+Do not guess:
 
-- exact system-tray menu and main-window close behavior;
-- output representation for gaps between irregularly arranged displays;
+- exact System Tray menu and MainWindow close behavior;
+- output／presentation treatment for gaps between irregularly arranged displays;
 - rollback／retention after PNG succeeds but Clipboard fails;
 - quantitative performance targets;
-- final keyboard-only annotation acceptance scope.
+- final keyboard-only Annotation acceptance scope.
 
-Mark affected rows `Blocked by product decision`.
+Stop when the current implementation step reaches one of these decisions.
 
 ## Architecture Discipline
 
 - `COMP-001` remains the sole shared Workflow State Authority.
-- Platform adapters return outcomes and never mutate shared workflow state.
-- Keep platform types out of Core except explicitly accepted canonical image boundaries.
-- One session context owns frozen frames、selection、annotations、render and output revisions.
-- Stale async outcomes never advance a newer or cancelled session.
+- Platform adapters return typed outcomes and never mutate shared workflow state.
+- Keep concrete platform types out of Core and platform-neutral Contracts.
+- One Session context owns frozen frames、Selection、Annotation、render and output revisions.
+- Stale asynchronous outcomes never advance a newer or cancelled Session.
 - Cleanup is idempotent.
+- Mouse release cannot invoke Clipboard or file output.
+- Clipboard and PNG Output remain separate capabilities; Save coordination requires both to succeed.
 
 ## Tool and Execution Rules
 
@@ -147,9 +150,9 @@ Mark affected rows `Blocked by product decision`.
 
 ## Documentation Discipline
 
-- Prefer updating accepted canonical documents over creating another planning document.
+- Prefer updating Accepted canonical documents over creating another planning document.
 - Do not create prerequisite、readiness reassessment、authorization request、artifact-control or closure-review files to simulate progress.
 - Historical Clipboard D1 documents remain history and do not drive current implementation.
 - Do not modify documentation merely to match existing code.
-- Do not modify accepted product scope without explicit repository-owner direction.
+- Do not modify Accepted product scope without explicit Repository owner direction.
 - After each focused task, stop and report before choosing another slice.
