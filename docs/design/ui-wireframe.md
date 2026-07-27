@@ -39,9 +39,9 @@ All connected supported displays
 └──────────────────────────────┘ └──────────────────────────────┘
 ```
 
-- All-display Selection becomes interactive within p95 `500 ms` Standard or `1,000 ms` Maximum.
-- Configurations exceeding the accepted capacity envelope show an actionable error before this surface appears.
-- Partial display capture is not shown.
+- Owner Reference／Standard Selection becomes interactive within p95 `500 ms`; Maximum within p95 `1,000 ms`.
+- Configurations exceeding the accepted four-4K envelope show an actionable error before this surface appears.
+- Partial display capture is never shown.
 
 ## 3. Dragging a Cross-monitor Selection
 
@@ -81,40 +81,29 @@ Display A                         Display B
 
 - Prefer the function bar below Selection; move above when required.
 - Keep it inside an available display work area.
-- Pointer and keyboard interaction maintain p95 frame time `≤ 33 ms` and visible response p95 `≤ 100 ms`.
+- Selection adjustment、tool use and object editing are pointer-driven in v1.
+- Pointer interaction maintains p95 frame time `≤ 33 ms` and visible response p95 `≤ 100 ms`.
 
-## 5. Keyboard-only Editing Model
+## 5. Annotation Controls
 
-Scope begins after a valid `SelectionLocked`; initial crosshair Selection remains pointer-driven.
+| Tool | Pointer-driven v1 behavior |
+| --- | --- |
+| Selection | Move／resize capture region and select applicable Annotation objects. |
+| Rectangle | Drag an editable outline. |
+| Arrow／Line | Drag an editable arrow or no-arrow line. |
+| Highlighter | Draw a semi-transparent freehand stroke. |
+| Text | Click to enter text; support Microsoft JhengHei、color、size、bold and Chinese IME. |
+| Mosaic／Blur | Drag a rectangular privacy region and switch the object mode. |
+| Numbered Marker | Click to place the next numbered marker. |
+| Undo／Redo | Use visible function-bar controls for Annotation history. |
+| Color／Size | Modify compatible active or selected objects. |
 
-```text
-F6               switch Function Bar / Canvas zones
-Tab / Shift+Tab  navigate controls, Selection, objects and handles
-V R A H T M N    Selection / Rectangle / Arrow / Highlighter / Text / Mosaic / Number
-Ctrl+Z / Ctrl+Y  Undo / Redo
-Ctrl+S           Save
-Ctrl+Enter       Complete
-Delete           delete selected annotation
-Arrow            move or resize by 1 pixel
-Shift+Arrow      move or resize by 10 pixels
-```
-
-Keyboard tool activation creates and focuses a deterministic default object:
-
-- Rectangle and Mosaic／Blur: centered default rectangle.
-- Arrow／Line: centered horizontal segment.
-- Highlighter: short centered horizontal stroke.
-- Text: focused text box.
-- Numbered Marker: marker at Selection center.
-
-The first Esc closes transient picker、popover、text editor or uncommitted creation. Esc from stable Editing cancels the capture session.
-
-Visible focus、High Contrast、200% scaling、Narrator names／states、Chinese IME and no keyboard trap are required.
+Keyboard-only Annotation、keyboard-created objects and non-PrintScreen tool／action shortcuts are deferred.
 
 ## 6. Complete Path
 
 ```text
-[Complete] or Ctrl+Enter
+[Complete]
 → validate output dimensions
 → render source + annotations + transparent gap pixels
 → if still running after 300 ms, show non-blocking progress
@@ -129,7 +118,7 @@ Latency targets depend on output pixels: p95 `1.5 s`、`4 s` or `8 s`.
 ## 7. Save Path
 
 ```text
-[Save] or Ctrl+S
+[Save]
 → validate output dimensions
 → render final image
 → Windows Save As opens in Downloads by default
@@ -141,7 +130,7 @@ Latency targets depend on output pixels: p95 `1.5 s`、`4 s` or `8 s`.
 → on both successes close capture UI and restore focus
 ```
 
-- Save As cancellation returns to Editing and restores focus.
+- Save As cancellation returns to Editing.
 - PNG failure leaves Editing open and does not update Clipboard.
 - Clipboard failure after PNG creation leaves Editing open、retains PNG and reports the partial outcome.
 - Save latency after path confirmation uses p95 `2 s`、`6 s` or `12 s` tiers.
@@ -151,13 +140,15 @@ Latency targets depend on output pixels: p95 `1.5 s`、`4 s` or `8 s`.
 ### Capture Cancel
 
 ```text
-Esc from stable stage or [Cancel]
+Esc or [Cancel]
 → create no file
 → write no Clipboard
 → close capture UI
-→ dispose session resources
+→ dispose Session resources
 → restore pre-capture application
 ```
+
+Esc cancels before Selection、during drag and after Selection lock／during Editing. V1 does not require a transient first-Esc keyboard-editing hierarchy.
 
 ### Application Exit
 
@@ -174,14 +165,27 @@ MainWindow [X] or explicit Exit
 Accepted limits:
 
 - `1`–`4` logical displays;
-- each `≤ 7,680 × 4,320`;
-- total source pixels `≤ 66,355,200`;
+- each `≤ 3840 × 2160`;
+- total source pixels `≤ 33,177,600`;
 - Virtual Desktop width／height each `≤ 16,384`;
-- final Selection area `≤ 67,108,864` pixels with dimension caps.
+- final Selection width／height each `≤ 16,384`;
+- final Selection area `≤ 67,108,864` pixels;
+- 8K displays are outside v1.
 
-An over-limit message states the supported boundary、does not expose private display identifiers and returns SnipPlus to resident readiness after cleanup.
+The over-limit message states the supported boundary、does not expose private display identifiers and returns SnipPlus to resident readiness after cleanup.
 
-## 10. Deferred UI Capabilities
+## 10. Owner Reference Runtime Layout
+
+The release-verification layout includes:
+
+```text
+left 2560×1440       primary 2560×1440
+                      └─ lower 1920×1080 at 150% scaling
+```
+
+The exact physical alignment follows the Repository owner’s Windows display configuration during authorized verification.
+
+## 11. Deferred UI Capabilities
 
 - opaque freehand pen;
 - ellipse Annotation;
@@ -190,8 +194,12 @@ An over-limit message states the supported boundary、does not expose private di
 - capture history;
 - delayed capture;
 - additional save formats;
-- font-family selection、italic、underline or text background.
+- font-family selection、italic、underline or text background;
+- keyboard-only Annotation workflow;
+- F6／Tab zone and object traversal;
+- tool、Ctrl、Delete and Arrow-key shortcuts;
+- keyboard-created Annotation objects.
 
-## 11. Remaining Visual Design Freedom
+## 12. Remaining Visual Design Freedom
 
-Exact visual theme、icons、spacing、animation and progress-indicator styling remain implementation design choices. Product behavior、capacity、performance thresholds and keyboard operation are fixed and are not open design decisions.
+Exact visual theme、icons、spacing、animation and progress-indicator styling remain implementation design choices. Product behavior、four-4K capacity、performance thresholds and deferred keyboard scope are fixed.
