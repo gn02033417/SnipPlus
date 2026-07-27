@@ -63,7 +63,7 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 
 ### Current Conformance Status
 
-- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build 與 deterministic non-interactive tests 已完成並通過；Windows Runtime verification 因 packaged artifact 與目前 HEAD 不一致而阻擋，仍不宣稱完全 Conforms。
+- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build、deterministic non-interactive tests 與目前 HEAD 的 packaged Windows Runtime verification 已完成並通過；本 Slice 可標示為 Conforms。PrintScreen → `COMP-001` 與後續 Capture workflow 仍未整合。
 
 ### Windows Runtime Verification — Blocked (2026-07-27)
 
@@ -84,6 +84,19 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 - Keyboard-only Annotation and non-PrintScreen shortcuts：Deferred，not a missing v1 capability。
 
 Detailed status and required actions are maintained in `PRD/PRD-TRACEABILITY-MATRIX.md`.
+
+### Verified — Current-HEAD Packaged Windows Runtime (2026-07-27)
+
+- 以 current HEAD `ede6933` 建立 x64 Development MSIX；package generation 成功，`mspdbcmf.exe` symbols warning 1 項、0 errors。未修改 Package Identity 或 Version。
+- 既有開發憑證缺少 MSIX 所需的 Code Signing EKU；本次只在目前使用者／本機部署範圍建立 self-signed Code Signing development certificate，未建立或分享正式 signing certificate，未提交憑證檔。
+- 目前 HEAD package 已註冊並安裝；installed `SnipPlus.App.dll` 與 current Release x64 build 的 SHA-256 相同。Runtime 使用 Windows 11 x64 build `26200`、3 displays；只啟動 SnipPlus MainWindow。
+- A：啟動後只有 MainWindow、沒有自動 Capture，初始設定為 disabled，UI 狀態一致。
+- B：啟用後實際 PrintScreen 收到 application event boundary；狀態為 `PrintScreen received. Capture workflow is not started in this slice.`，未啟動 `BeginCaptureAsync`、Capture Overlay、Selection UI、PNG 或 Clipboard。
+- C：以停用後重新啟用 cycle 驗證 registration 可再次建立；直接重複 enable 的冪等性由 deterministic tests 覆蓋，UI 沒有獨立的第二個 Enable 命令。
+- D：停用後實際 PrintScreen 不再更新 SnipPlus 狀態。
+- E／F：disabled 與 enabled 設定在 MainWindow X、process 結束及重新啟動後分別正確還原；enabled restart 後實際 PrintScreen 再次收到一次 boundary event。
+- G／H：MainWindow X 後 `SnipPlus.App` process 消失，沒有 hidden resident process；停用後退出及重複 cleanup 沒有未處理例外。退出後未保留 SnipPlus 接收事件的 process。
+- Runtime verification 期間未啟動 Paint、Notepad、Snipping Tool 或其他外部 GUI fixture；未保存真實桌面截圖或 Clipboard payload。既存的 Windows overlay 曾短暫影響 UI hit-test，但未被啟動或操作。後續本機憑證 cleanup 曾意外開啟 certutil utility，已立即停止，未參與產品驗證。
 
 ### Not Released
 
