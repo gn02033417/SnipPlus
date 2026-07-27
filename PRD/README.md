@@ -1,44 +1,40 @@
 # PRD
 
-產品需求文件定義「為誰解決什麼問題、為什麼做、做到哪裡」。它不描述類別、函式、API 或資料表等實作細節。
+產品需求文件定義 SnipPlus 為誰解決什麼問題、第一版必須做到什麼，以及哪些能力明確延後。它不描述 class、API 或平台實作。
 
-## Formal PRD v1.0 baseline
+## Effective Product Baseline
 
-PRD v1.0 已完成 Freeze Review，正式 baseline 為：
+目前有效的產品基線為 `2026-07-27` 經 Repository owner 明確確認的修正版：
 
 - [PRD-0002 User Experience Principles](PRD-0002-user-experience-principles.md)
 - [PRD-0003 Product Vision](PRD-0003-product-vision.md)
-- [PRD-0004 Core Workflow](PRD-0004-core-workflow.md)
-- [PRD-0005 Functional Requirements](PRD-0005-functional-requirements.md)
-- [PRD-0006 Non-functional Requirements](PRD-0006-non-functional-requirements.md)
-- [PRD Baseline Review](PRD-BASELINE-REVIEW.md)
-- [PRD Traceability Matrix](PRD-TRACEABILITY-MATRIX.md)
-- [PRD Freeze Review](PRD-FREEZE-REVIEW.md)
+- [PRD-0004 Core Workflow](PRD-0004-core-workflow.md) — `Accepted v1.1`
+- [PRD-0005 Functional Requirements](PRD-0005-functional-requirements.md) — `Accepted v1.1`
+- [PRD-0006 Non-functional Requirements](PRD-0006-non-functional-requirements.md) — `Accepted v1.1`
 
-Freeze Decision：`Freeze Approved`。
+The earlier v1.0 Freeze Review、Traceability Matrix and Freeze artifacts remain historical review records. Where they conflict with accepted v1.1 documents, v1.1 is normative.
 
-Freeze Approved 表示上述集合可作為 Specification 的固定產品來源；它不表示 implementation、runtime verification 或 release 已完成。
+## Product Baseline Summary
 
-## Initial discovery artifact
+- Manual startup and background residency.
+- User-controlled PrintScreen takeover.
+- All-display frozen Virtual Desktop capture.
+- Cross-monitor rectangular selection.
+- Selection move、resize and reselection.
+- Mandatory editing／confirmation stage with optional annotation actions.
+- Required annotation tools defined by PRD-0005.
+- Complete to Clipboard.
+- Save to PNG and Clipboard.
+- Cancel、failure preservation、cleanup and focus restoration.
 
-- [PRD-0001 Product Foundation](PRD-0001-product-foundation.md) — 初始 Repository discovery 文件，狀態為 `Draft`。
+## Change Rules
 
-PRD-0001 保留早期脈絡，但不是正式 PRD v1.0 baseline，也不得再被稱為「目前唯一的產品基線」。其內容若與 Frozen PRD v1.0 不一致，以 Frozen baseline 為準。
+- New product-visible behavior requires explicit Repository owner direction.
+- Specs may clarify acceptance behavior but may not silently expand PRD scope.
+- Existing code does not override accepted PRD.
+- Unknown product decisions must remain explicit rather than being guessed.
 
-## PRD 狀態
+## Historical Documents
 
-- `Draft`：可討論，不能直接作為新開發承諾。
-- `Proposal`：候選範圍或方案，等待決策。
-- `Accepted`：單一文件已核准。
-- `Freeze Approved`：一組 PRD 文件形成固定版本 baseline。
-- `Superseded`：被後續 PRD 或 change decision 取代。
-
-## Change rule
-
-PRD v1.0 Freeze 後，新增需求、scope、priority 或產品行為必須走：
-
-```text
-Research → Analysis → Decision → PRD Change Request → Review → Approve
-```
-
-不得由 Specs、Architecture、ADR 或 Implementation 反向偷偷加入產品需求。
+- `PRD-0001 Product Foundation` remains an early discovery artifact.
+- `PRD-BASELINE-REVIEW.md`、`PRD-TRACEABILITY-MATRIX.md` and `PRD-FREEZE-REVIEW.md` are historical until the traceability matrix is updated against v1.1.
