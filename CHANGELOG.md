@@ -7,68 +7,59 @@
 ### Added
 
 - 建立 Repository 文件治理、Research／Analysis／Decision、PRD、Specs、Architecture、ADR governance、Development Guide、Coding Standard、ROADMAP 與 TODO。
-- PRD v1.0、Specification v1.0 與 Architecture baseline 完成 Freeze Review。
-- 建立 UI Framework Research 01–09、Rendering Research 10–18、Capture Backend Research 20–28 與 Clipboard Research 29–80；未執行其中規劃的 runtime spike。
-- 完成並停止 Clipboard D1 039→052 documentary chain。
-- 建立 Repository Current State and Implementation Readiness Audit，移除過度細分的文件延伸模式。
+- 建立第一階段 solution／project skeleton：`SnipPlus.sln`、4 個 source projects、3 個 test projects、中央套件管理與 committed lock files。
 - 新增 `ADR-0002`：WinUI 3 UI Framework。
 - 新增 `ADR-0003`：WinUI XAML／Microsoft.UI.Composition + Win2D rendering adapter。
 - 新增 `ADR-0004`：Windows.Graphics.Capture Capture Backend。
 - 新增 `ADR-0005`：BGRA8 premultiplied SoftwareBitmap canonical image representation。
-- 新增 `ADR-0006`：WinRT DataPackage Clipboard integration with history/roaming disabled by default。
+- 新增 `ADR-0006`：WinRT DataPackage Clipboard integration with history／roaming disabled by default。
 - 新增 `ADR-0007`：MSTest.Sdk + Microsoft.Testing.Platform testing strategy。
-- 新增 `Architecture/IMPLEMENTATION-CONTRACTS.md`，定義 workflow、capture、image、render、clipboard、output、failure、retry、thread 與 cleanup contracts。
-- 新增 `Architecture/PROJECT-STRUCTURE.md`，固定 C# 14、.NET 10.0.302、Windows App SDK 2.3.1、Win2D 1.4.0、MSTest.Sdk 4.1.0、x64 與 project mapping。
-- 新增 `docs/IMPLEMENTATION-READINESS-REVIEW.md`，結論為 `Approved for first vertical slice implementation`。
-- 建立第一階段 solution／project skeleton：`SnipPlus.sln`、4 個 source projects、3 個 test projects、中央套件管理與 committed lock files。
-- 新增 `SnipPlus.Contracts` 的 workflow、capture、coordinate、image、failure、Clipboard 與 Output semantic contracts。
-- 新增 `SnipPlus.Core` 的 `COMP-001` workflow state authority、DIP-to-physical coordinate mapping 與 capture/Clipboard outcome coordination。
-- 新增 Core／Contracts tests，覆蓋 legal／illegal transition、cancellation、failure classification、coordinate bounds／rounding、canonical image metadata 與 Clipboard defaults。
+- 新增 `Architecture/IMPLEMENTATION-CONTRACTS.md` 與 `Architecture/PROJECT-STRUCTURE.md`。
+- 新增 `SnipPlus.Contracts` workflow、capture、coordinate、image、failure、Clipboard 與 Output contracts。
+- 新增 `SnipPlus.Core` workflow state authority、coordinate mapping 與 capture／Clipboard coordination foundation。
 - 新增 canonical BGRA8 premultiplied `SoftwareBitmap` image pipeline、PNG encoding、crop 與 Win2D rendering adapter。
-- 新增以 `Windows.Graphics.Capture` 為後端的 monitor capture adapter，含 bounded frame wait、content-size validation、cleanup 與 platform category test。
-- 新增 WinRT `DataPackage` PNG Clipboard delivery，預設關閉 history／roaming、成功後 `Flush()`，並加入 bounded cancellable contention retry。
-- 新增 packaged WinUI 3 application shell、明確 `Start Capture` command、單螢幕 selection surface、DIP／physical-pixel context 建立與結果 presentation。
+- 新增 Windows.Graphics.Capture monitor adapter、WinRT Clipboard adapter、packaged WinUI shell 與 deterministic test foundations。
+- 新增 `PRD-TRACEABILITY-MATRIX-001`，逐項比對 accepted v1 requirements、current code、tests and runtime evidence。
 
 ### Changed
 
-- README、ROADMAP、TODO、Architecture／ADR index、Technology Decision Roadmap、Development Guide、Research index 與 Repository audit 對齊實際狀態。
-- Technology Decision Roadmap 的 implementation-critical P0 decisions 全部改為 Accepted。
-- ROADMAP Current Phase 改為 `First vertical slice implementation — Ready; not started`。
-- TODO 移除前置文件 backlog，改為 solution、source、test 與 evidence 工作。
-- 明確凍結第一個 vertical slice 的前置文件；沒有實作發現或 scope change 時不再新增 pre-coding paperwork。
-- `global.json` 加入 .NET 10 的 `Microsoft.Testing.Platform` test runner opt-in，讓 `dotnet test` 使用 MTP 而非已不支援的 VSTest target。
-- 為 packaged `win-x64` restore graph 加入共用 `RuntimeIdentifiers`，並以 locked restore 驗證 framework-dependent MSIX publish；未更換核准的 SDK 或 package 版本。
-- Package manifest 改用 AppX 接受的 PNG logo assets，補上 `BackgroundColor` 與 `runFullTrust`，以符合 packaged WinUI 3 build validation。
-- 修正 `ResultReady → Cancelled` 狀態 transition，並補上 capture service、ResultReady presentation callback 與 Clipboard cancellation cleanup tests。
-- Windows platform test 改用 Windows App SDK 2.3 bootstrap 與 `DisplayArea.GetFromPoint` 取得實際 display id；未更換核准 package 版本。
-- Clipboard adapter 保留 production WinRT `SetContentWithOptions`／`Flush` default，新增 publisher／flush injection seam 以 deterministic 驗證 bounded retry 與 cancellation。
-- Capture workflow 改為在 Selection 開始前只取得一次完整 monitor frame，建立有明確 ownership 的 `FrozenCaptureFrame`；Selection surface 顯示同一張 frame，外部區域變暗，內部區域保留來源亮度，最終 Crop 只使用該 Frozen Frame。
-- `WindowsGraphicsCaptureAdapter` 不再於 Selection 完成後重新取得 monitor frame；Display Context Snapshot、Crop bounds validation 與 Frozen Frame cleanup 均在同一個 workflow lifecycle 內完成。
-- Packaged runtime verification 改用 SnipPlus 內部 synthetic checkerboard source。一般產品啟動不建立該 source；repository source／test 搜尋未發現 `mspaint`、`Process.Start` 或外部 GUI fixture 啟動程式碼。
+- 產品基線更新為 Accepted v1.1：手動啟動並常駐、使用者控制 PrintScreen 接管、凍結所有螢幕、跨螢幕矩形選區、SelectionLocked、mandatory Editing／confirmation、required Annotation tools、Complete-to-Clipboard、Save-to-PNG-and-Clipboard、Cancel／failure preservation／focus restoration。
+- `PRD-0004`–`PRD-0006`、`SPEC-0003`–`SPEC-0010`、`IMPLEMENTATION-CONTRACTS-001`、Implementation Readiness 與 Repository rules 已對齊新產品基線。
+- `ARCH-0001`–`ARCH-0005`、Architecture Baseline Review、System Overview、Architecture Diagram、Project Structure and Architecture index 已重整，移除 optional-Annotation、single-display、mouse-release-to-output 與 unconditional parallel Clipboard／Output assumptions。
+- `README.md`、`docs/index.md`、`ROADMAP.md`、`TODO.md`、PRD／Specs index、Development Guide、Technology Decision Roadmap、Repository Audit 與 UI Wireframe 已對齊目前 Repository 狀態與 conformance correction order。
+- PRD Freeze Review 與 Specification Baseline Review 更新為目前 v1.1 acceptance records；早期 v1.0 review content 保留為歷史背景，不再覆蓋 Accepted baseline。
+- 目前程式正式分類為可重用的單螢幕 WGC／same-frame crop／image／PNG／Clipboard technical prototype，而不是 SnipPlus v1 product-complete implementation。
+- 現行實作順序固定為 resident lifecycle → PrintScreen → Frozen Virtual Desktop → cross-monitor Selection → SelectionLocked adjustment → accepted state graph → function bar／commitments／focus → Annotation → history／clipping → Complete → Save → failure／revision／accessibility → authorized multi-display verification。
+- `global.json` 加入 .NET 10 的 Microsoft.Testing.Platform test runner opt-in。
+- Packaged `win-x64` restore graph、manifest assets、runtime identifiers and framework-dependent MSIX validation were corrected without replacing accepted SDK or package versions。
+- Capture workflow technical prototype改為 Selection 前只取得一次完整 monitor frame，Selection 顯示同一張 frame，最終 Crop 使用同一 Frozen Frame，不再於 Selection 後重新擷取。
+- Packaged runtime verification 改用 SnipPlus 內部 synthetic checkerboard source；正常產品啟動不建立該 source，未加入 external GUI fixture launch code。
+- Clipboard adapter保留 production WinRT publication／Flush behavior and added deterministic publisher／flush seams for retry and cancellation tests。
 
-### Verified
+### Verified — historical technical foundation
 
-- `dotnet restore SnipPlus.sln --locked-mode`：成功。
-- `dotnet build SnipPlus.sln -c Release -p:Platform=x64 --no-restore`：成功，0 warnings、0 errors。
-- `dotnet test SnipPlus.sln -c Release -p:Platform=x64 --no-build -- --filter "TestCategory!=Interactive&TestCategory!=Manual"`：3 個 baseline test assemblies 成功，3 passed、0 failed、0 skipped。
-- Core／Contracts contract slice：同一非互動指令成功，16 passed、0 failed、0 skipped。
-- Rendering／image slice：6 passed、0 failed、0 skipped；包含 deterministic pixel conversion、crop boundary、PNG encoding、lease cleanup、Win2D rendering 與 cancellation。
-- Capture adapter compile verification：`WindowsGraphicsCaptureAdapter` 已通過 Release x64 build；實際 platform capture 仍由 Interactive category 個別驗證。
-- Windows capture platform test 已建立為 `Platform`／`Capture`／`Interactive` category，未混入非互動測試。
-- Clipboard retry policy tests 已加入一般非互動測試集合；完整非互動測試目前 24 passed、0 failed、0 skipped。
-- Cancellation hardening tests 已驗證 capture `OperationCanceledException`、ResultReady callback cancellation、Clipboard cancellation 與 `ResultReady → Cancelled` legal transition。
-- Clipboard adapter filter 已驗證 busy retry success、retry budget boundary 與 retry cancellation：3 passed、0 failed、0 skipped；成功路徑只呼叫一次 `Flush()`，History／roaming 仍為 false。
-- Packaged runtime cancellation verification 已完成；`Start Capture → Cancel` 回到主畫面並回報 `Capture cancelled.`。
-- 完整非互動測試更新為 31 passed、0 failed、0 skipped。
-- Windows platform test 已可用 `Platform`／`Capture`／`Interactive` filter 單獨執行；support check 與 in-memory monitor frame check 均 passed，0 failed、0 skipped。
-- 先前以 public synthetic blank Paint fixture 執行的 packaged runtime verification 為歷史 evidence；本次核心流程修正未啟動 Paint 或其他外部 GUI，改以 SnipPlus 內部 synthetic checkerboard 完成 packaged runtime verification，未保存 desktop screenshot、Clipboard payload 或任何私人資料。
-- 最新 `dotnet restore SnipPlus.sln --locked-mode -r win-x64`：成功，未調整核准 SDK／package 版本。
-- 最新 `dotnet build SnipPlus.sln -c Release -p:Platform=x64 --no-restore`：成功，0 warnings、0 errors。
-- 最新非互動測試：33 passed、0 failed、0 skipped；Windows `Platform` filter：2 passed、0 failed、0 skipped。
-- 最新 packaged runtime verification：使用內部 synthetic checkerboard 顯示可辨識的凍結 frame，完成 selection、同一 frame crop、結果顯示與 Clipboard success status `Capture copied to Clipboard.`；未啟動 Paint，且測試後清除 Clipboard。
-- Application shell 已通過 packaged WinUI 3 Release x64 build；publish 僅有 `mspdbcmf.exe` 缺少造成的 symbol generation warning，未影響 package build 或 runtime verification。
+- Locked restore、Release x64 build and packaged WinUI 3 build succeeded for the earlier technical slice。
+- Non-interactive Unit／Contract／Rendering／Clipboard tests and categorized Windows platform tests were previously recorded as passing at the time of execution。
+- One-display Windows.Graphics.Capture frame acquisition、same-frame crop、BGRA8 result、PNG encoding、Win2D presentation and Clipboard publication were verified through synthetic or categorized platform evidence。
+- Packaged synthetic checkerboard verification demonstrated the superseded sequence `Start Capture → one-display Selection → mouse release → immediate crop／Clipboard`。
+- The historical verification did not persist private desktop screenshots or Clipboard payloads and did not launch Paint during the corrected synthetic run。
+
+The historical build／test／runtime evidence remains valid only for those technical foundations. It is not evidence of accepted v1 resident PrintScreen、all-display freeze、cross-monitor Selection、Editing／Annotation、Save As or focus restoration conformance.
+
+### Current conformance status
+
+- Resident lifecycle and PrintScreen takeover：Missing。
+- Frozen Virtual Desktop and per-display frame ownership：Missing。
+- Cross-monitor selection：Missing。
+- Mouse-release-to-output behavior：Incorrect／obsolete。
+- Selection adjustment and accepted state graph：Missing／obsolete current model。
+- Editing function bar and required Annotation tools：Missing。
+- Save As and PNG file-delivery workflow：Missing。
+- Recoverable Editing preservation、stale-revision protection and focus restoration：Missing。
+
+Detailed status and required actions are maintained in `PRD/PRD-TRACEABILITY-MATRIX.md`.
 
 ### Not released
 
-- 未進行 release publication、store deployment 或 release artifact 提交；本次 package 只用於本機 runtime verification。
-- Implementation Readiness approval 是開始 bounded first vertical slice 的文件門檻；本次實作與 runtime 結果另以本檔案 Verified 記錄。
+- No release publication、Store deployment or release artifact submission has occurred。
+- Existing packages were used only for development／runtime verification。
