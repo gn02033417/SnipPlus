@@ -2,64 +2,85 @@
 
 狀態：`Accepted`
 
-The pre-coding documentation backlog is complete. This file now tracks implementation and evidence work only.
+This file tracks implementation and evidence work. Product scope is owned by accepted PRD／Specs; conformance status is owned by `PRD/PRD-TRACEABILITY-MATRIX.md`.
 
-## P0 — First vertical slice
+## Completed technical foundations
 
-- [x] Create `SnipPlus.sln`、`global.json`、`Directory.Build.props`、`Directory.Packages.props` and `.editorconfig`.
-- [x] Create the four approved source projects and three test projects.
-- [x] Restore with locked dependencies and build the empty Release x64 baseline.
-- [x] Implement Implementation Contracts and Core workflow/state/failure behavior.
-- [x] Implement WinUI 3 app shell and explicit capture command.
-- [x] Implement single-monitor region selection and coordinate conversion.
-- [x] Implement one-shot Windows.Graphics.Capture acquisition before Selection and crop the same Frozen Frame.
-- [x] Implement BGRA8 premultiplied SoftwareBitmap result ownership.
-- [x] Implement Composition／Win2D display adapter.
-- [x] Implement DataPackage Clipboard publication、privacy options、Flush and bounded retry.
-- [x] Add Unit、Contract and deterministic Rendering tests.
-- [x] Run explicitly authorized packaged Capture/Clipboard verification with an internal synthetic frame; no external GUI fixture.
-- [x] Record restore、build、test、runtime and cleanup evidence.
+- [x] Create solution、configuration、four source projects and three test projects.
+- [x] Establish the accepted C#／.NET／Windows App SDK／Win2D／MSTest toolchain.
+- [x] Implement one-display WGC acquisition.
+- [x] Acquire a frozen frame before selection and crop the same frame.
+- [x] Implement one-display clear-inside／dim-outside selection mask.
+- [x] Implement canonical BGRA8 premultiplied SoftwareBitmap ownership.
+- [x] Implement deterministic crop and in-memory PNG encoding.
+- [x] Implement Win2D／WinUI image presentation foundation.
+- [x] Implement WinRT Clipboard delivery with bounded cancellable retry、history disabled and roaming disabled.
+- [x] Add low-level Unit、Contract、Rendering and authorized Platform tests for these foundations.
+- [x] Complete static requirements-to-code conformance review.
 
-第一個 Vertical Slice 已驗證完成。已知限制是未封裝 MSTest runner 的 Windows in-memory frame test 會因缺少 Windows App Runtime package graph 標記 `Inconclusive`；packaged runtime capture 已成功。
+These items are reusable technical assets. They do not mean the accepted v1 workflow is complete.
 
-## P0 — Stop/report conditions
+## P0 — v1 workflow conformance correction
 
-Report before expanding scope if：
+Work in order. Do not begin a later item while an earlier prerequisite is unresolved.
 
-- Pinned dependencies cannot restore/build together.
-- WGC or Win2D fails the accepted boundary.
-- Coordinate/crop fidelity is not deterministic.
-- Clipboard consumer compatibility requires a materially different API/format.
-- A project dependency cycle is required.
-- Frozen behavior or Architecture ownership must change.
-- Implementation enters an explicit non-goal.
+- [ ] Implement a manually started resident application lifecycle.
+- [ ] Implement a user-controlled PrintScreen takeover setting and release interception when disabled or exiting.
+- [ ] Route enabled PrintScreen through the single Workflow State Authority.
+- [ ] Define and implement one Frozen Virtual Desktop session with per-display snapshots and frozen-frame ownership.
+- [ ] Present all displays as one logical frozen selection canvas with crosshair and semi-transparent mask.
+- [ ] Support one rectangular selection spanning multiple displays.
+- [ ] Replace mouse-release-to-output with a locked-selection state.
+- [ ] Support selection move、four-edge／four-corner resize and reselection.
+- [ ] Replace the obsolete state graph with the accepted v1 state contract.
+- [ ] Add the mandatory editing／confirmation function bar.
+- [ ] Implement Complete、Save and Cancel commitment boundaries.
+- [ ] Record and restore the pre-capture foreground application without reopening the SnipPlus main window.
+- [ ] Implement the annotation document and object identity／revision model.
+- [ ] Implement Rectangle.
+- [ ] Implement Arrow／Line.
+- [ ] Implement semi-transparent freehand Highlighter.
+- [ ] Implement Text with Microsoft JhengHei、color、font size and bold.
+- [ ] Implement rectangular Mosaic／Blur with per-object mode.
+- [ ] Implement Numbered Marker with preserved numbering gaps and configurable next number.
+- [ ] Implement object selection、move、resize、style changes and delete.
+- [ ] Implement annotation-only Undo／Redo.
+- [ ] Anchor annotations to Frozen Virtual Desktop coordinates and clip output to the current selection.
+- [ ] Implement final render for the current selection and annotation revision.
+- [ ] Place Clipboard publication only behind explicit Complete or successful Save.
+- [ ] Implement Windows Save As、PNG-only output and `SnipPlus_yyyy-MM-dd_HHmmss.png` proposal.
+- [ ] Ensure Save writes the same rendered result to PNG and Clipboard.
+- [ ] Preserve Editing state after recoverable render、save or Clipboard failure.
+- [ ] Reject stale session／selection／annotation／output outcomes.
+- [ ] Add required accessibility names and non-color-only state indicators.
+- [ ] Run explicitly authorized multi-display runtime verification.
+- [ ] Update the conformance matrix after each verified slice.
 
-## P1 — After first-slice verification
+## Open decisions — stop before implementation chooses behavior
 
-- [x] Harden cancellation transition／cleanup paths and verify packaged `Start Capture → Cancel` runtime behavior.
-- [x] Run the Windows in-memory frame platform test with a resolvable Windows App Runtime 2.3 package graph and an actual display id.
-- [x] Add deterministic Clipboard adapter tests for busy retry success、retry budget boundary、cancellation and Flush/privacy options.
-- [ ] Decide whether to add file Output UI.
-- [ ] Define production logging/configuration needs from actual failures.
-- [ ] Decide final packaging、signing and distribution.
-- [ ] Establish broader Windows/ARM64 support matrix.
-- [ ] Add compatible annotation tools through new Specs if prioritized.
-
-## Completed documentation
-
-- [x] PRD、Specification and Architecture baselines frozen.
-- [x] ADR-0002 UI Framework.
-- [x] ADR-0003 Rendering Technology.
-- [x] ADR-0004 Capture Backend.
-- [x] ADR-0005 Image Representation.
-- [x] ADR-0006 Clipboard Integration.
-- [x] ADR-0007 Testing Strategy.
-- [x] Implementation Contracts.
-- [x] Project Structure and Toolchain Baseline.
-- [x] Implementation Readiness Review approved.
-- [x] Repository entry/status/index documents aligned.
-- [x] Clipboard D1 039→052 closure chain stopped.
+- [ ] Define representation of non-display gaps in irregular monitor layouts.
+- [ ] Define exact System Tray menu and MainWindow close-button behavior.
+- [ ] Define retention／rollback when PNG succeeds but Clipboard publication fails.
+- [ ] Define final keyboard-only annotation acceptance standard.
+- [ ] Define quantitative performance targets after measurement.
 
 ## Deferred product capabilities
 
-Not part of the first slice：OCR、cloud sync、sharing、cross-platform、plugins、advanced annotation、multi-monitor stitching、window mode、HDR preservation、telemetry and release/update infrastructure.
+Do not implement without a later explicit product decision:
+
+- Opaque freehand pen.
+- Ellipse annotation.
+- Pin image to desktop.
+- OCR.
+- Capture history.
+- Delayed capture.
+- Additional image formats.
+- Font-family selection、italic、underline and text background.
+- HDR preservation、ARM64、cloud、sharing、plugins、telemetry、updates and release publication.
+
+## Evidence rules
+
+- Build and tests must not be reported as proof of product conformance without relevant behavior evidence.
+- Interactive verification requires explicit authorization in the current task.
+- Do not persist real desktop screenshots or Clipboard payloads as repository evidence.
+- Update `CHANGELOG.md` and the existing conformance matrix with actual findings; do not create another readiness／closure chain.
