@@ -7,7 +7,7 @@
 | Field | Value |
 | --- | --- |
 | Document ID | `PRD-0006` |
-| Version | `1.3` |
+| Version | `1.4` |
 | Status | `Accepted` |
 | Product authority | Repository owner through explicit product decisions |
 | Last reviewed | `2026-07-27` |
@@ -23,15 +23,16 @@
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | `NFR-001` | PrintScreen acceptance through an interactive all-display masked Selection must meet the profile-specific p95 latency targets below. | `Must` |
-| `NFR-002` | Selection、object movement、resize、tool switching and Annotation interaction must meet the frame-time and input-response targets below. | `Must` |
+| `NFR-002` | Pointer-driven Selection、object movement、resize、tool switching and Annotation interaction must meet the frame-time and input-response targets below. | `Must` |
 | `NFR-003` | Render、PNG and Clipboard work must meet the output-size targets below and present a busy／progress state when work is not immediate. | `Must` |
 
 ### 3.1 Verification Profiles
 
-| Profile | Display configuration | Final-output class |
+| Profile | Display configuration | Purpose |
 | --- | --- | --- |
-| `Standard` | Up to 2 displays、total active source pixels no more than `16,588,800` | Up to `8,294,400` pixels (`3840 × 2160`) |
-| `Maximum` | Within the complete v1 support envelope in section 11 | Up to `67,108,864` pixels and the dimensional limits in section 11 |
+| `Owner Reference` | 3 displays: primary `2560 × 1440`、lower `1920 × 1080` at Windows scaling `150%`、left `2560 × 1440` | Mandatory mixed-DPI／layout verification matching the Repository owner’s current environment |
+| `Standard` | Up to 2 displays、total active source pixels no more than `16,588,800` | Common release-performance verification |
+| `Maximum` | Up to 4 active displays、each no larger than `3840 × 2160`、within the complete capacity envelope in section 11 | Maximum v1 support verification |
 
 Reference machine for release verification:
 
@@ -43,21 +44,21 @@ Reference machine for release verification:
 
 ### 3.2 Quantitative Targets
 
-| Operation | Standard target | Maximum target |
+| Operation | Owner Reference／Standard target | Maximum target |
 | --- | --- | --- |
 | PrintScreen accepted → all-display Selection interactive | p95 `≤ 500 ms` | p95 `≤ 1,000 ms` |
 | Selection／Annotation interaction frame time | p95 `≤ 33 ms` | p95 `≤ 33 ms` |
-| Discrete keyboard／pointer action → visible response | p95 `≤ 100 ms` | p95 `≤ 100 ms` |
+| Discrete pointer／UI action → visible response | p95 `≤ 100 ms` | p95 `≤ 100 ms` |
 | Complete: final render + Clipboard, output `≤ 8,294,400` pixels | p95 `≤ 1.5 s` | Same |
 | Complete: output `≤ 33,177,600` pixels | p95 `≤ 4 s` | Same |
-| Complete: output `≤ 67,108,864` pixels | — | p95 `≤ 8 s` |
+| Complete: output `≤ 67,108,864` pixels including transparent gaps | — | p95 `≤ 8 s` |
 | Save after the user confirms Save As, output `≤ 8,294,400` pixels | p95 `≤ 2 s` | Same |
 | Save after confirmation, output `≤ 33,177,600` pixels | p95 `≤ 6 s` | Same |
-| Save after confirmation, output `≤ 67,108,864` pixels | — | p95 `≤ 12 s` |
+| Save after confirmation, output `≤ 67,108,864` pixels including transparent gaps | — | p95 `≤ 12 s` |
 
 Additional rules:
 
-- No Selection or Annotation input operation may block visible input processing for more than `100 ms` under the supported envelope.
+- No pointer-driven Selection or Annotation operation may block visible input processing for more than `100 ms` under the supported envelope.
 - When a commit operation has not completed within `300 ms`, a non-blocking busy／progress state must become visible.
 - Successful completion remains silent after the operation finishes.
 
@@ -72,7 +73,8 @@ Additional rules:
 
 - Use `3` warm-up runs followed by at least `30` measured runs per scenario.
 - Report p50、p95 and maximum; release acceptance is based on p95 plus absence of hangs、crashes and resource leaks.
-- Use deterministic synthetic content for automated timing where possible; authorized real multi-display runtime verification remains required for final acceptance.
+- Use deterministic synthetic content for automated timing where possible.
+- Final acceptance must include explicitly authorized runtime verification on the Owner Reference three-display configuration and a Maximum-profile configuration.
 - User decision time inside Save As is excluded from Save timing.
 
 ## 4. Reliability and State Integrity
@@ -91,7 +93,7 @@ Additional rules:
 | --- | --- | --- |
 | `NFR-009` | The first release must support one rectangular selection spanning multiple displays within the v1 support envelope. | `Must` |
 | `NFR-010` | Virtual Desktop coordinates must support negative origins and arbitrary display arrangement; physical non-display gaps in final output must be transparent. | `Must` |
-| `NFR-011` | Mixed-DPI pointer and keyboard input must map deterministically to frozen physical-pixel content. | `Must` |
+| `NFR-011` | Mixed-DPI pointer input must map deterministically to frozen physical-pixel content, including the Owner Reference `150%` lower display. | `Must` |
 | `NFR-012` | Moving or resizing a selection must not scale、shift or corrupt annotation geometry anchored to the frozen canvas. | `Must` |
 | `NFR-013` | Display topology or DPI change that invalidates a session must produce a classified failure rather than silently using stale bounds. | `Must` |
 
@@ -125,41 +127,24 @@ Additional rules:
 | `NFR-027` | Normal development、build、unit test and product startup must not launch Paint or another external GUI fixture. | `Must` |
 | `NFR-028` | Interactive verification that opens external windows requires explicit authorization in the current task. | `Must` |
 
-## 9. Accessibility and Keyboard-only Editing
+## 9. Accessibility and Keyboard Boundary
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| `NFR-029` | Complete、Save、Cancel、tool、style and annotation-object controls must expose understandable accessible names、roles、values and state. | `Must` |
-| `NFR-030` | Keyboard cancellation with Esc must work before selection、during drag and at stable Editing; an open transient editor or picker consumes the first Esc before stable Editing cancellation applies. | `Must` |
-| `NFR-031` | Color must not be the only indicator of selected tool、selection boundary、focus or error state. | `Must` |
+| `NFR-029` | Complete、Save、Cancel and required function-bar controls must expose understandable accessible names and state. | `Must` |
+| `NFR-030` | Esc must cancel capture before selection、during drag and during stable Editing as defined by the accepted capture workflow. | `Must` |
+| `NFR-031` | Color must not be the only indicator of selected tool、selection boundary or error state. | `Must` |
 
-The complete v1 keyboard-only Annotation acceptance scope starts after a valid Selection is locked and continues through Complete、Save or Cancel. Initial crosshair region creation remains pointer-driven in v1.
+The following are explicitly deferred from v1:
 
-From `SelectionLocked` onward, the user must be able to complete the following without a pointer:
+- keyboard-only creation、selection、movement、resize and styling of Annotation objects;
+- F6／Tab zone and object traversal as a complete product workflow;
+- single-letter tool shortcuts;
+- Ctrl-based Undo／Redo、Save or Complete shortcuts;
+- Delete and Arrow-key object manipulation;
+- a release gate requiring the pointer to remain unused after `SelectionLocked`.
 
-- enter and leave the function bar and canvas zones;
-- select every required tool;
-- create at least one object for Rectangle、Arrow／Line、Highlighter、Text、Mosaic／Blur and Numbered Marker;
-- select objects in deterministic z-order;
-- move objects and the locked Selection by `1` physical output pixel with Arrow keys and `10` pixels with Shift+Arrow;
-- focus applicable resize handles and resize by the same `1`／`10` pixel increments;
-- edit text through normal Windows text editing and Chinese IME input;
-- change every applicable style、mode、number and size value;
-- delete objects;
-- Undo and Redo;
-- invoke Save、Complete and Cancel;
-- recover predictably from dialogs、pickers and transient editors without a keyboard trap.
-
-Required keyboard model:
-
-- `F6` cycles major zones; `Tab`／`Shift+Tab` navigate within the active zone.
-- `V` Selection、`R` Rectangle、`A` Arrow／Line、`H` Highlighter、`T` Text、`M` Mosaic／Blur、`N` Numbered Marker when text entry is not active.
-- `Ctrl+Z` Undo、`Ctrl+Y` Redo、`Ctrl+S` Save、`Ctrl+Enter` Complete、`Delete` remove selected object.
-- Activating a creation tool from the keyboard creates a deterministic default object inside the current Selection and focuses it for movement、resize and styling. Highlighter creates a short horizontal stroke; Text creates and focuses a text box; Numbered Marker is placed at the Selection center.
-- In the canvas zone, `Tab`／`Shift+Tab` traverse Selection、annotation objects in z-order and applicable resize handles.
-- The first Esc closes an open picker、popover、text editor or uncommitted creation operation. Esc from stable Editing cancels the capture session.
-
-Acceptance requires a keyboard-only test from `SelectionLocked` through object creation、editing、Undo／Redo and each output action with the pointer unused. Visible focus、high-contrast operation、200% UI scaling and Narrator-readable control names／states are included in acceptance.
+PrintScreen remains the required global capture key. Esc remains the required capture-cancellation key. No other keyboard shortcut is part of the v1 acceptance baseline.
 
 ## 10. Maintainability and Traceability
 
@@ -182,14 +167,17 @@ Acceptance requires a keyboard-only test from `SelectionLocked` through object c
 The supported v1 display envelope is:
 
 - `1` through `4` active logical desktop display surfaces;
-- each display no larger than `7,680 × 4,320` physical pixels;
-- total active display-source pixels no greater than `66,355,200`;
+- each display no larger than `3,840 × 2,160` physical pixels;
+- total active display-source pixels no greater than `33,177,600` (`4 × 3840 × 2160`);
 - Virtual Desktop bounding-box width no greater than `16,384` physical pixels;
 - Virtual Desktop bounding-box height no greater than `16,384` physical pixels;
 - final Selection width and height each no greater than `16,384` physical pixels;
 - final Selection area no greater than `67,108,864` pixels;
 - transparent non-display gaps count toward final Selection area because they still require output allocation;
-- mirrored outputs resolving to one logical desktop surface count once.
+- mirrored outputs resolving to one logical desktop surface count once;
+- an 8K display is outside the v1 support envelope even when total pixel count would otherwise fit.
+
+The `67,108,864` final-area limit intentionally exceeds four active 4K source surfaces so ordinary irregular arrangements can include transparent gaps without reducing the four-4K source guarantee.
 
 When any limit is exceeded:
 
@@ -203,11 +191,14 @@ When any limit is exceeded:
 The following are accepted and no longer open:
 
 - quantitative performance、responsiveness and memory targets in section 3;
-- the supported display-count、resolution、Virtual Desktop and output-size envelope in section 11;
-- the complete keyboard-only Editing／Annotation acceptance standard in section 9;
+- the Repository owner’s three-display mixed-DPI verification profile;
+- a maximum source configuration of four 4K displays;
+- the display-count、resolution、Virtual Desktop and output-allocation envelope in section 11;
+- keyboard-only Annotation and non-PrintScreen shortcut support are deferred;
+- PrintScreen entry and Esc cancellation remain required;
 - MainWindow `X` exits SnipPlus and releases PrintScreen takeover;
 - non-display gaps in final output are transparent;
 - a successfully created PNG is retained if later Clipboard publication fails;
-- Save As initially proposes the Downloads folder.
+- Save As initially proposes Downloads.
 
-No remaining product-quality decision blocks the ordered v1 implementation. Future changes to these limits require explicit Repository owner approval and updates to the existing canonical documents.
+No remaining product-quality decision blocks the ordered v1 implementation. Future changes require explicit Repository owner approval and updates to the existing canonical documents.
