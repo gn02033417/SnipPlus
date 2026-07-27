@@ -1,223 +1,119 @@
 # PRD-0006 Non-functional Requirements
 
-狀態：`Draft`
+狀態：`Accepted`
 
-## 1. 文件定位
-
-本文件回答唯一問題：SnipPlus 應具備哪些品質屬性（Quality Attributes）？
-
-本文件不描述如何寫、不決定 API、UI framework、renderer、plugin SDK、技術架構或任何工程實作，也不設定數值效能目標。
-
-每個 requirement 都有唯一 `NFR-` ID，並可追溯到既有的 Research、Analysis、Decision 或 PRD。未來 Specs 與 Architecture 必須尊重本文件核准後的品質邊界。
-
-## 2. Requirement format
-
-| Field | Meaning |
-| --- | --- |
-| ID | 穩定且唯一的 Non-functional Requirement identifier。 |
-| Title | 品質屬性的簡短名稱。 |
-| Description | 使用者或維護者可理解的品質要求，不包含 implementation。 |
-| Priority | 只使用 `Must`、`Should` 或 `Could`。 |
-| Dependencies | 直接影響本品質要求的既有文件或產品邊界。 |
-| Source | 支持此品質要求的 Research、Analysis、Decision 或 PRD 來源。 |
-
-## 3. Performance
-
-### NFR-001 — Keep the primary workflow responsive
+## 1. Document Control
 
 | Field | Value |
 | --- | --- |
-| ID | `NFR-001` |
-| Title | Keep the primary workflow responsive |
-| Description | Capture、Region Selection、Complete 與 Clipboard Ready 的主要流程應保持流暢，不應讓使用者感受到不必要的等待。 |
-| Priority | `Must` |
-| Dependencies | `FR-001`、`FR-002`、`FR-003`、`FR-007`、`PRD-0002` Principle 9 |
-| Source | [PRD-0002 Principle 9](PRD-0002-user-experience-principles.md#principle-9--先快再增加功能)；[PRD-0004 primary workflow](PRD-0004-core-workflow.md#2-primary-workflow) |
+| Document ID | `PRD-0006` |
+| Version | `1.1` |
+| Status | `Accepted` |
+| Product authority | Repository owner through explicit product decisions |
+| Last reviewed | `2026-07-27` |
 
-本 requirement 不設定 milliseconds、percentile、throughput 或任何其他數值門檻。
+## 2. Requirement Rules
 
-## 4. Reliability
+- `Must` is required for the first release.
+- Quantitative targets that have not been measured remain future verification work; they must not be invented.
+- These requirements constrain Specs、Architecture、code and tests.
 
-### NFR-002 — End interrupted workflows safely
+## 3. Performance and Responsiveness
 
-| Field | Value |
-| --- | --- |
-| ID | `NFR-002` |
-| Title | End interrupted workflows safely |
-| Description | 當 workflow 被取消、中斷或無法完成時，流程應能安全結束，不使使用者被迫停留在不明確的狀態。 |
-| Priority | `Must` |
-| Dependencies | `FR-010`、`FR-011`、`PRD-0004` Cancel and Error states |
-| Source | [PRD-0004 exit points](PRD-0004-core-workflow.md#4-exit-points)；[PRD-0004 workflow states](PRD-0004-core-workflow.md#5-workflow-states) |
-
-### NFR-003 — Protect the user’s current work context
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-003` |
-| Title | Protect the user’s current work context |
-| Description | Capture workflow 的中斷、失敗或結束不應不必要地破壞使用者當前的工作脈絡。 |
-| Priority | `Must` |
-| Dependencies | `FR-009`、`FR-010`、`FR-011`、`PRD-0003` Product Goals |
-| Source | [PRD-0003 Product Goals](PRD-0003-product-vision.md#2-product-goals)；[PRD-0004 open questions](PRD-0004-core-workflow.md#8-open-questions) |
-
-## 5. Usability
-
-### NFR-004 — Preserve familiar Windows interaction patterns
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-004` |
-| Title | Preserve familiar Windows interaction patterns |
-| Description | 主要 capture workflow 應符合 Windows 使用者已熟悉的操作習慣，並保持基本流程容易理解。 |
-| Priority | `Must` |
-| Dependencies | `FR-001`、`FR-002`、`FR-003`、`PRD-0002` Principles 1、3、5、8 |
-| Source | [PRD-0002 UX Principles](PRD-0002-user-experience-principles.md)；[PRD-0003 Product Statement](PRD-0003-product-vision.md#1-product-statement) |
-
-### NFR-005 — Keep advanced capabilities optional
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-005` |
-| Title | Keep advanced capabilities optional |
-| Description | 進階能力不應成為使用者完成基本 capture、Complete 或 Clipboard Ready 流程的必要前置條件。 |
-| Priority | `Must` |
-| Dependencies | `FR-004`、`FR-005`、`FR-006`、`PRD-0002` Principles 2、4、10 |
-| Source | [PRD-0002 Principle 4](PRD-0002-user-experience-principles.md#principle-4--進階能力全部是-optional)；[PRD-0004 workflow scope](PRD-0004-core-workflow.md#1-workflow-scope) |
-
-## 6. Accessibility
-
-### NFR-006 — Support accessible completion of the primary workflow
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-006` |
-| Title | Support accessible completion of the primary workflow |
-| Description | 主要 capture workflow 應能以符合 Windows Accessibility expectations 的方式被理解與完成，且不把單一輸入方式視為唯一可能路徑。 |
-| Priority | `Should` |
-| Dependencies | `FR-001`、`FR-002`、`FR-009`、`PRD-0002` Principles 1、5、8 |
-| Source | [PRD-0002 UX Principles](PRD-0002-user-experience-principles.md)；[PRD-0004 User Journey](PRD-0004-core-workflow.md#6-user-journey) |
-
-具體 accessibility standard、支援矩陣、輸入方式與驗證方法仍為 `TBD`，本 requirement 不設計 UI。
-
-## 7. Compatibility
-
-### NFR-007 — Prioritize Windows Desktop compatibility
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-007` |
-| Title | Prioritize Windows Desktop compatibility |
-| Description | 產品的主要相容性目標應是 Windows Desktop 使用情境，並維持與 Windows 原生操作習慣相容的產品方向。 |
-| Priority | `Must` |
-| Dependencies | `PRD-0003` Product Scope、`PRD-0004` Entry Points、`PRD-0005` Functional Requirements |
-| Source | [PRD-0003 Product Scope](PRD-0003-product-vision.md#3-product-scope)；[PRD-0002 Principle 8](PRD-0002-user-experience-principles.md#principle-8--windows-first暫不以跨平台為優先) |
-
-最低 Windows version、支援版本策略、硬體條件與跨平台未來範圍仍為 `TBD`。
-
-## 8. Maintainability
-
-### NFR-008 — Preserve documentation-first traceability
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-008` |
-| Title | Preserve documentation-first traceability |
-| Description | 產品、需求、規格、架構與測試之間應維持可追溯鏈結；每個未來 Spec 與 test case 都應能回溯到對應的 FR 或 NFR。 |
-| Priority | `Must` |
-| Dependencies | `PRD-0005` Requirements Traceability、Repository documentation rules |
-| Source | [PRD-0005 Traceability summary](PRD-0005-functional-requirements.md#9-traceability-summary)；[Development Guide](../docs/guides/development-guide.md) |
-
-### NFR-009 — Keep product documentation maintainable
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-009` |
-| Title | Keep product documentation maintainable |
-| Description | 長期維護時，產品文件應保持明確責任分界、狀態標記、來源連結與開放問題，不以文件完整度假裝未確認內容已定案。 |
-| Priority | `Must` |
-| Dependencies | `AGENTS.md`、Research、Analysis、Decision、PRD layers |
-| Source | [Repository rules](../AGENTS.md)；[Research framework](../docs/Research/README.md)；[Decision framework](../docs/Decision/README.md) |
-
-## 9. Extensibility
-
-### NFR-010 — Allow future capabilities without breaking the primary workflow
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-010` |
-| Title | Allow future capabilities without breaking the primary workflow |
-| Description | 未來新增能力應能與主要 capture workflow 保持清楚邊界，不迫使使用者改變基本工作習慣或使用進階能力。 |
-| Priority | `Should` |
-| Dependencies | `FR-004`、`FR-005`、`FR-006`、`PRD-0002` Principles 2、4、10、`PRD-0004` |
-| Source | [PRD-0002 UX Principles](PRD-0002-user-experience-principles.md)；[PRD-0003 Product Goals](PRD-0003-product-vision.md#2-product-goals) |
-
-本 requirement 不設計 plugin、extension point、SDK 或 module architecture。
-
-## 10. Privacy
-
-### NFR-011 — Keep capture handling within an explicit privacy boundary
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-011` |
-| Title | Keep capture handling within an explicit privacy boundary |
-| Description | Capture result 的保存、交付、分享或外部傳輸都必須有明確的產品邊界與使用者理解，不應在未經明確決策的情況下假設 cloud storage、cloud sync 或外部處理。 |
-| Priority | `Must` |
-| Dependencies | `FR-003`、`FR-007`、`PRD-0003` Out of Scope、`PRD-0005` Output |
-| Source | [PRD-0003 Out of Scope](PRD-0003-product-vision.md#out-of-scope-for-the-current-product-definition)；[PRD-0005 Output](PRD-0005-functional-requirements.md#6-output) |
-
-本 requirement 不決定 local storage、cloud policy、retention、encryption 或任何技術方案；具體隱私政策仍為 `TBD`。
-
-## 11. Security
-
-### NFR-012 — Require an explicit user action before capture
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-012` |
-| Title | Require an explicit user action before capture |
-| Description | 系統不應在沒有使用者明確啟動 capture workflow 的情況下擷取畫面。 |
-| Priority | `Must` |
-| Dependencies | `FR-001`、`PRD-0004` Entry Points、`NFR-011` |
-| Source | [PRD-0004 Entry Points](PRD-0004-core-workflow.md#3-entry-points)；[PRD-0005 Start capture workflow](PRD-0005-functional-requirements.md#fr-001--start-capture-workflow) |
-
-本 requirement 不指定 Windows API、permission model、process boundary 或 security implementation。
-
-## 12. Constraints
-
-### NFR-013 — Respect the product documentation lifecycle
-
-| Field | Value |
-| --- | --- |
-| ID | `NFR-013` |
-| Title | Respect the product documentation lifecycle |
-| Description | 後續產品與工程工作應依照 `Research → Analysis → Decision → PRD → Specs → Architecture → Coding` 的責任順序，不能跳過已定義的產品依據。 |
-| Priority | `Must` |
-| Dependencies | `PRD-0002`、`PRD-0003`、`PRD-0004`、`PRD-0005`、`AGENTS.md` |
-| Source | [Repository rules](../AGENTS.md)；[Development Guide](../docs/guides/development-guide.md)；[Decision framework](../docs/Decision/README.md) |
-
-本 requirement 是產品與文件治理約束，不是工程架構或 implementation instruction。
-
-## 13. Traceability summary
-
-| Quality area | Requirement IDs | Product source |
+| ID | Requirement | Priority |
 | --- | --- | --- |
-| Performance | `NFR-001` | `PRD-0002`、`PRD-0004` |
-| Reliability | `NFR-002` – `NFR-003` | `PRD-0003`、`PRD-0004` |
-| Usability | `NFR-004` – `NFR-005` | `PRD-0002`、`PRD-0003`、`PRD-0004` |
-| Accessibility | `NFR-006` | `PRD-0002`、`PRD-0004` |
-| Compatibility | `NFR-007` | `PRD-0002`、`PRD-0003` |
-| Maintainability | `NFR-008` – `NFR-009` | `PRD-0005`、Repository rules |
-| Extensibility | `NFR-010` | `PRD-0002`、`PRD-0003` |
-| Privacy | `NFR-011` | `PRD-0003`、`PRD-0005` |
-| Security | `NFR-012` | `PRD-0004`、`PRD-0005` |
-| Constraints | `NFR-013` | Repository rules、Development Guide |
+| `NFR-001` | PrintScreen takeover must start the capture experience without avoidable delay. | `Must` |
+| `NFR-002` | Multi-display freeze、mask presentation、selection movement and annotation interaction must remain visibly responsive. | `Must` |
+| `NFR-003` | Expensive render、save and Clipboard work must not freeze interaction without explicit progress or failure state. | `Must` |
 
-## 14. Requirement boundary
+No unsupported millisecond target is asserted by this PRD.
 
-- 本文件描述 quality attributes，不描述 technical solution。
-- `Must`、`Should`、`Could` 是唯一 priority values。
-- 本文件不設定數值效能目標。
-- 本文件不決定 WPF、WinUI、C#、API、Clipboard API、Renderer、Plugin SDK 或其他技術。
-- 後續 Specs 必須能追溯到 `FR-` 或 `NFR-` ID。
-- 未經 PRD Baseline Review 通過，不開始 Specs 或 Coding。
+## 4. Reliability and State Integrity
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `NFR-004` | One capture session owns one stable set of frozen display frames until Complete、successful Save、Cancel or terminal failure. | `Must` |
+| `NFR-005` | Selection、annotations、rendered output and Clipboard／file delivery must refer to the same capture session and coordinate snapshot. | `Must` |
+| `NFR-006` | Cancel and failure cleanup must be idempotent and must close every capture overlay and transient function bar. | `Must` |
+| `NFR-007` | Output failure must not destroy the user’s current selection or annotations when retry is possible. | `Must` |
+| `NFR-008` | A session must never be reported as completed unless its required Clipboard and optional Save obligations have succeeded. | `Must` |
+
+## 5. Multi-display and Coordinate Correctness
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `NFR-009` | The first release must support one rectangular selection spanning multiple displays. | `Must` |
+| `NFR-010` | Virtual Desktop coordinates must support negative origins and arbitrary display arrangement. | `Must` |
+| `NFR-011` | Mixed-DPI pointer input must map deterministically to frozen physical-pixel content. | `Must` |
+| `NFR-012` | Moving or resizing a selection must not scale、shift or corrupt annotation geometry anchored to the frozen canvas. | `Must` |
+| `NFR-013` | Display topology or DPI change that invalidates a session must produce a classified failure rather than silently using stale bounds. | `Must` |
+
+## 6. Usability
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `NFR-014` | The workflow must preserve familiar Windows screenshot behavior: PrintScreen、crosshair selection、dimmed outside region and clear inside region. | `Must` |
+| `NFR-015` | Mouse release must not be mistaken for final confirmation; the function bar and explicit Complete／Save actions define commitment. | `Must` |
+| `NFR-016` | Annotation operations are optional, but the editing／confirmation stage is always available after a valid selection. | `Must` |
+| `NFR-017` | The function bar must remain visible by repositioning around the selection when necessary. | `Must` |
+| `NFR-018` | Successful completion must be silent and return the user to the previous work context. | `Must` |
+| `NFR-019` | Error messages must state the failed operation and preserve an actionable retry or cancel path when possible. | `Must` |
+
+## 7. Focus and Work-context Protection
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `NFR-020` | The application active before PrintScreen must be recorded for later focus restoration. | `Must` |
+| `NFR-021` | SnipPlus normal windows must be excluded from the frozen capture source. | `Must` |
+| `NFR-022` | Complete、successful Save and Cancel must not open or foreground the SnipPlus main window. | `Must` |
+| `NFR-023` | Disabling takeover or exiting SnipPlus must not leave PrintScreen intercepted by a dead or hidden workflow. | `Must` |
+
+## 8. Privacy and Security
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `NFR-024` | Screen capture occurs only after an explicit user PrintScreen or authorized secondary capture action. | `Must` |
+| `NFR-025` | Frozen screen content、annotation state and Clipboard payload remain local unless a future explicit product decision adds external transfer. | `Must` |
+| `NFR-026` | Real desktop screenshots and Clipboard payloads must not be committed as repository evidence. | `Must` |
+| `NFR-027` | Normal development、build、unit test and product startup must not launch Paint or another external GUI fixture. | `Must` |
+| `NFR-028` | Interactive verification that opens external windows requires explicit authorization in the current task. | `Must` |
+
+## 9. Accessibility
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `NFR-029` | Complete、Save、Cancel and annotation controls must expose understandable accessible names and state. | `Must` |
+| `NFR-030` | Keyboard cancellation with Esc must work before selection、during drag and during editing. | `Must` |
+| `NFR-031` | Color must not be the only indicator of selected tool、selection boundary or error state. | `Must` |
+
+Detailed keyboard-only annotation operation remains a separate acceptance review and must not be assumed complete without evidence.
+
+## 10. Maintainability and Traceability
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `NFR-032` | Product decisions must be represented in the smallest set of canonical PRD、Spec and contract documents. | `Must` |
+| `NFR-033` | Historical Research and prior readiness chains must not override the accepted product baseline. | `Must` |
+| `NFR-034` | Every implemented v1 capability and test must trace to an accepted FR、NFR and Spec acceptance criterion. | `Must` |
+| `NFR-035` | Unknown product behavior must be reported instead of silently invented in code. | `Must` |
+| `NFR-036` | COMP-001 remains the sole shared Workflow State Authority. | `Must` |
+
+## 11. First-release Compatibility Boundary
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `NFR-037` | Windows Desktop is the first-release platform. | `Must` |
+| `NFR-038` | The implementation must support the approved Windows 11 baseline and multi-display desktop configuration used for verification. | `Must` |
+| `NFR-039` | HDR preservation、ARM64、cross-platform and additional output formats remain deferred unless separately approved. | `Must` |
+
+## 12. Open Quality Questions
+
+The following are not yet authorized implementation assumptions:
+
+- Quantitative latency targets.
+- Exact supported display-count and maximum Virtual Desktop dimensions.
+- Final keyboard-only annotation acceptance standard.
+- Representation of non-display gaps in an irregular monitor layout.
+- Rollback policy when PNG creation succeeds but Clipboard delivery fails.
+
+Affected implementation must stop and obtain a product decision before selecting behavior that would be visible to users.
