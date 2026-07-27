@@ -7,7 +7,7 @@
 | Field | Value |
 | --- | --- |
 | Document ID | `PRD-0006` |
-| Version | `1.1` |
+| Version | `1.2` |
 | Status | `Accepted` |
 | Product authority | Repository owner through explicit product decisions |
 | Last reviewed | `2026-07-27` |
@@ -36,14 +36,14 @@ No unsupported millisecond target is asserted by this PRD.
 | `NFR-005` | Selection、annotations、rendered output and Clipboard／file delivery must refer to the same capture session and coordinate snapshot. | `Must` |
 | `NFR-006` | Cancel and failure cleanup must be idempotent and must close every capture overlay and transient function bar. | `Must` |
 | `NFR-007` | Output failure must not destroy the user’s current selection or annotations when retry is possible. | `Must` |
-| `NFR-008` | A session must never be reported as completed unless its required Clipboard and optional Save obligations have succeeded. | `Must` |
+| `NFR-008` | A session must never be reported as completed unless its required Clipboard and Save obligations have succeeded; an already-created PNG may still remain after a later Clipboard failure. | `Must` |
 
 ## 5. Multi-display and Coordinate Correctness
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | `NFR-009` | The first release must support one rectangular selection spanning multiple displays. | `Must` |
-| `NFR-010` | Virtual Desktop coordinates must support negative origins and arbitrary display arrangement. | `Must` |
+| `NFR-010` | Virtual Desktop coordinates must support negative origins and arbitrary display arrangement; physical non-display gaps in final output must be transparent. | `Must` |
 | `NFR-011` | Mixed-DPI pointer input must map deterministically to frozen physical-pixel content. | `Must` |
 | `NFR-012` | Moving or resizing a selection must not scale、shift or corrupt annotation geometry anchored to the frozen canvas. | `Must` |
 | `NFR-013` | Display topology or DPI change that invalidates a session must produce a classified failure rather than silently using stale bounds. | `Must` |
@@ -57,16 +57,16 @@ No unsupported millisecond target is asserted by this PRD.
 | `NFR-016` | Annotation operations are optional, but the editing／confirmation stage is always available after a valid selection. | `Must` |
 | `NFR-017` | The function bar must remain visible by repositioning around the selection when necessary. | `Must` |
 | `NFR-018` | Successful completion must be silent and return the user to the previous work context. | `Must` |
-| `NFR-019` | Error messages must state the failed operation and preserve an actionable retry or cancel path when possible. | `Must` |
+| `NFR-019` | Error messages must state the failed operation and preserve an actionable retry or cancel path when possible; after PNG success and Clipboard failure, feedback must also state that the PNG was retained. | `Must` |
 
-## 7. Focus and Work-context Protection
+## 7. Focus、Exit and Work-context Protection
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | `NFR-020` | The application active before PrintScreen must be recorded for later focus restoration. | `Must` |
 | `NFR-021` | SnipPlus normal windows must be excluded from the frozen capture source. | `Must` |
 | `NFR-022` | Complete、successful Save and Cancel must not open or foreground the SnipPlus main window. | `Must` |
-| `NFR-023` | Disabling takeover or exiting SnipPlus must not leave PrintScreen intercepted by a dead or hidden workflow. | `Must` |
+| `NFR-023` | Disabling takeover、closing MainWindow with `X` or otherwise exiting SnipPlus must release PrintScreen interception and terminate without leaving a hidden resident process. | `Must` |
 
 ## 8. Privacy and Security
 
@@ -108,12 +108,17 @@ Detailed keyboard-only annotation operation remains a separate acceptance review
 
 ## 12. Open Quality Questions
 
-The following are not yet authorized implementation assumptions:
+The following remain unresolved:
 
 - Quantitative latency targets.
 - Exact supported display-count and maximum Virtual Desktop dimensions.
 - Final keyboard-only annotation acceptance standard.
-- Representation of non-display gaps in an irregular monitor layout.
-- Rollback policy when PNG creation succeeds but Clipboard delivery fails.
 
-Affected implementation must stop and obtain a product decision before selecting behavior that would be visible to users.
+The following are now resolved and must not be treated as open questions:
+
+- MainWindow `X` exits SnipPlus and releases PrintScreen takeover; it does not hide to tray.
+- Non-display gaps in final output are transparent.
+- A PNG that was successfully created is retained if later Clipboard publication fails.
+- Save As initially proposes the Downloads folder.
+
+Affected implementation must stop only for the remaining unresolved quality questions.
