@@ -1,99 +1,116 @@
 # PRD-0002 User Experience Principles
 
-狀態：`Draft`
+狀態：`Accepted`
 
-## 1. 文件目的
+## 1. Document Control
 
-本文件只定義 SnipPlus 應遵守的 UX 原則，作為後續 Product Vision、Core Workflow、Functional Requirements 與 Non-functional Requirements 的共同產品基線。
+| Field | Value |
+| --- | --- |
+| Document ID | `PRD-0002` |
+| Version | `1.1` |
+| Status | `Accepted` |
+| Product authority | Repository owner through explicit product decisions |
+| Last reviewed | `2026-07-27` |
+| Scope | SnipPlus v1 user-experience principles |
 
-本文件不是功能清單、UI 設計、Toolbar Spec、Overlay Spec、技術方案或程式碼授權。
+## 2. Purpose
 
-## 2. 來源與邊界
-
-本 PRD 只引用已完成的 Research、Analysis 與 Decision 層：
-
-- [Win11 capture workflow Research](../docs/Research/Win11/01-capture-workflow.md)
-- [Win11 capture workflow Analysis](../docs/Analysis/Win11/capture-workflow-analysis.md)
-- [Win11 capture workflow Decision](../docs/Decision/Win11/capture-workflow-decision.md)
-
-以上來源提供流程脈絡，不代表 SnipPlus 已完成所有產品範圍決策。未在本文件明確定義的功能、平台支援、效能指標、資料保存與整合方式仍為 `UNKNOWN` 或 `TBD`。
+This document defines the product-level UX principles that constrain Core Workflow、Functional Requirements、Specifications、Architecture and implementation. It does not choose implementation APIs or exact visual styling.
 
 ## 3. UX Principles
 
-### Principle 1 — 不改變 Windows 使用者的肌肉記憶
+### Principle 1 — Preserve Windows screenshot muscle memory
 
-SnipPlus 的主要操作應延續 Windows 使用者已熟悉的截圖入口與基本思考方式。使用者不應為了完成最基本的擷取而重新學習一套不同的操作語言。
+The primary v1 entry is PrintScreen when the user has enabled SnipPlus takeover. Initial selection uses a crosshair、a dimmed exterior and a clear selected interior. The user should recognize the workflow without learning a new screenshot language.
 
-本原則只定義熟悉感與操作連續性，不指定快捷鍵、視覺樣式或實作 API。
+### Principle 2 — Show the exact source being selected
 
-### Principle 2 — 新增能力不能增加基本操作的負擔
+Selection occurs on a frozen representation of all connected displays. The user must see the source content being selected, and the final result must come from the same frozen capture session rather than a later desktop frame.
 
-任何新增能力都必須保護基本擷取流程的直接性。進階能力不應讓使用者在完成日常擷取前，先處理額外設定、額外頁面或不必要的選擇。
+### Principle 3 — Keep basic capture direct, but require explicit commitment
 
-具體步驟數、延遲與量化門檻尚未定義，保留為 `TBD`。
+The common path is:
 
-### Principle 3 — 主要情境保持為「PrintScreen → 框選 → 完成 → Ctrl+V」
+```text
+PrintScreen
+→ select
+→ function bar
+→ Complete
+→ Ctrl+V
+```
 
-對大多數日常使用情境，核心結果應能沿著「進入擷取、選取範圍、完成、貼上」的短流程取得。這是 UX 原則，不是已核准的功能 Spec，也不預先決定所有 capture mode。
+Mouse release locks the selection but is not final confirmation. Explicit Complete or Save prevents accidental output while adding only one clear commitment step.
 
-目前「90%」只表示主要情境的產品優先順序方向，不是已建立的成功指標；正式數值仍為 `TBD`。
+### Principle 4 — Editing is always available; annotation actions are optional
 
-### Principle 4 — 進階能力全部是 Optional
+The editing／confirmation stage is a required part of the v1 workflow. The user may ignore every Annotation tool and choose Complete immediately. “Optional Annotation” means zero annotation actions are allowed; it does not mean the confirmation stage is bypassed.
 
-Annotation、editor、OCR、分享、整合或其他進階能力都不應成為完成基本擷取的必要前置條件。使用者可以忽略進階能力，仍能完成主要工作。
+### Principle 5 — Multi-display behavior must feel like one desktop
 
-本原則不代表任何進階能力已被 PRD 核准；各能力仍須在後續產品文件中個別決定。
+All connected displays participate in one logical Frozen Virtual Desktop. A single rectangular selection can cross display boundaries. Negative origins、mixed DPI and monitor arrangement must not create visibly incorrect selection or output.
 
-### Principle 5 — 使用者不應需要閱讀教學才能完成基本工作
+### Principle 6 — Selection remains controllable until commitment
 
-基本擷取流程應能透過介面與熟悉的操作直接理解。說明文字可以協助，但不應成為完成主要流程的必要依賴。
+After mouse release, the user can move the selection、resize from edges or corners、or drag elsewhere to replace it. Selection adjustment must not unexpectedly scale or move existing Annotation objects.
 
-教學、提示與無障礙說明的具體形式仍為 `TBD`。
+### Principle 7 — Common tools stay discoverable in one working context
 
-### Principle 6 — 常用工具在一層內完成
+The v1 function bar exposes ordinary tools without deep menu nesting:
 
-常用操作應在當前工作脈絡中可發現並完成，避免以三層以上的 menu nesting 隱藏基本工具。這是可發現性原則，不指定 toolbar 的位置、按鈕或視覺配置。
+- Selection;
+- Rectangle;
+- Arrow／Line;
+- Highlighter;
+- Text;
+- Mosaic／Blur;
+- Numbered Marker;
+- Undo／Redo;
+- color and applicable size／thickness;
+- Save、Cancel and Complete.
 
-哪些操作屬於「常用」仍需由後續 PRD 與研究確認。
+Exact icons、layout and visual styling remain design choices as long as required controls are readily discoverable.
 
-### Principle 7 — 優先遵循 Windows Fluent 語言
+### Principle 8 — Protect the user’s existing work context
 
-Windows 平台上的互動與視覺語言應優先與 Fluent 設計方向相容，而不是為了建立品牌感而引入不必要的自訂 UI 語言。
+SnipPlus normal windows must not appear in the frozen source. Complete、successful Save and Cancel close capture UI and return the user to the application active before PrintScreen. The main SnipPlus window does not automatically foreground after the session.
 
-這項原則不等於已決定 UI framework、component library、色彩、icon 或 layout。
+### Principle 9 — Success is quiet; failure is actionable
 
-### Principle 8 — Windows first，暫不以跨平台為優先
+Successful completion produces no success Toast or Dialog. Recoverable render、save or Clipboard failure keeps the editing session open、preserves the user’s current work and clearly offers retry or Cancel.
 
-SnipPlus 的 UX 優先針對 Windows 使用者與 Windows 工作習慣建立一致性。跨平台一致性目前不是第一優先事項。
+### Principle 10 — Keep screen content local and user-directed
 
-最低 Windows 版本、未來跨平台範圍與支援政策仍為 `TBD`，本原則不直接否決未來評估。
+Capture occurs only after explicit user action. Screen pixels、Annotation state、saved PNG and Clipboard payload stay local unless a future explicit product decision adds external transfer. Normal operation and evidence collection must not expose private content unnecessarily.
 
-### Principle 9 — 先快，再增加功能
+### Principle 11 — Responsive behavior is more important than feature count
 
-基本擷取流程的反應速度與連續性優先於功能數量。產品應先確保使用者可以快速完成主要工作，再評估是否加入額外能力。
+Capture start、all-display presentation、selection adjustment and Annotation interaction must remain visibly responsive. Unsupported latency numbers must not be invented; quantitative targets follow measurement.
 
-本階段不設定具體毫秒數、percentile 或其他效能目標；效能指標將在後續 PRD 階段定義。
+### Principle 12 — Deferred capabilities must not burden v1
 
-### Principle 10 — 所有新增能力都必須可以不用
+OCR、history、pinning、delayed capture、cloud、sharing、plugins、additional image formats and other deferred features must not appear as prerequisites or unexplained inactive UI in the first-release workflow.
 
-使用者應能選擇不使用新增能力，而不被迫改變基本工作流程。任何新增能力都必須能說明它如何保持 optional，以及不使用時的基本路徑為何。
+## 4. Relationship to optional capabilities
 
-若一項能力會變成完成基本擷取的必要條件，必須重新檢視它是否違反本原則。
+A capability is “optional” when the user can complete the common screenshot task without using it. This principle applies to individual Annotation actions and future advanced capabilities.
 
-## 4. Product decisions intentionally deferred
+The following are still mandatory product boundaries:
 
-本文件刻意不決定以下內容：
+- PrintScreen capture when takeover is enabled;
+- all-display Frozen Virtual Desktop;
+- explicit Selection lock;
+- editing／confirmation function bar;
+- Complete、Save and Cancel actions;
+- Clipboard commitment and failure preservation.
 
-- Toolbar、Overlay、Arrow、Annotation、OCR、AI、Plugin 或 Pin 的具體設計。
-- 支援哪些 capture mode 的最終功能範圍。
-- 詳細快捷鍵、視覺配置、interaction states 與 keyboard focus。
-- 效能、可靠性、儲存、隱私、分享與外部整合指標。
-- 技術棧、UI framework、架構、API 與部署方式。
+## 5. Deferred design details
 
-以上內容必須在後續 PRD、Specs、Architecture 或 ADR 中依責任範圍另行處理。
+This document does not fix:
 
-## 5. Review status
+- exact visual colors、icons、animation or spacing;
+- exact System Tray menu and MainWindow close-button behavior;
+- representation of non-display gaps in irregular monitor layouts;
+- final keyboard-only Annotation interaction standard;
+- quantitative performance targets.
 
-- Product owner review：`TBD`
-- Review date：`TBD`
-- Next PRD sequence：Product Vision、Core Workflow、Functional Requirements、Non-functional Requirements
+Those details must remain explicit until decided; implementation may not silently choose user-visible behavior that conflicts with the principles above.
