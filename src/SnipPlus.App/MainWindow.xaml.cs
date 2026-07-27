@@ -23,6 +23,8 @@ public partial class MainWindow : Window, IDisposable
 
     private readonly WorkflowStateAuthority _stateAuthority = new();
     private readonly CaptureWorkflowCoordinator _workflowCoordinator;
+    private readonly CaptureRequestCoordinator _captureRequestCoordinator;
+    private readonly CaptureRequestApplicationBoundary _captureRequestApplicationBoundary;
     private readonly ResidentLifecycleCoordinator _residentLifecycle;
     private readonly ICaptureService? _injectedCaptureService;
     private CancellationTokenSource? _captureCancellation;
@@ -45,6 +47,9 @@ public partial class MainWindow : Window, IDisposable
     {
         InitializeComponent();
         _workflowCoordinator = new CaptureWorkflowCoordinator(_stateAuthority);
+        _captureRequestCoordinator = new CaptureRequestCoordinator(_stateAuthority);
+        _captureRequestApplicationBoundary =
+            new CaptureRequestApplicationBoundary(_captureRequestCoordinator);
         _injectedCaptureService = captureService;
         _residentLifecycle = new ResidentLifecycleCoordinator(
             printScreenTakeover ?? new WindowsPrintScreenTakeover(WindowNative.GetWindowHandle(this)),
@@ -66,39 +71,17 @@ public partial class MainWindow : Window, IDisposable
         _appWindow = AppWindow.GetFromWindowId(windowId);
     }
 
-    private async void StartCaptureButton_Click(object sender, RoutedEventArgs args)
+    private void StartCaptureButton_Click(object sender, RoutedEventArgs args)
     {
-        if (_isSelecting)
+        if (Volatile.Read(ref _shutdownStarted) != 0)
         {
             return;
         }
 
-        try
-        {
-            _captureCancellation?.Dispose();
-            _captureCancellation = new CancellationTokenSource();
-            await BeginCaptureAsync(_captureCancellation.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            LeaveSelectionMode();
-            if (_stateAuthority.CurrentState == WorkflowState.Selecting)
-            {
-                _workflowCoordinator.CancelSelection(Guid.NewGuid(), _frozenFrame);
-            }
-            DisposeCaptureSession();
-            SetStatus("Capture cancelled.");
-        }
-        catch (Exception exception)
-        {
-            LeaveSelectionMode();
-            if (_stateAuthority.CurrentState == WorkflowState.Selecting)
-            {
-                _workflowCoordinator.CancelSelection(Guid.NewGuid(), _frozenFrame);
-            }
-            DisposeCaptureSession();
-            SetStatus($"Unable to start capture: {exception.GetType().Name}");
-        }
+        var result = _captureRequestApplicationBoundary.SubmitSecondaryInAppCommand(
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow);
+        SetStatus(result.UserMessage);
     }
 
     private void PrintScreenTakeoverCheckBox_Click(object sender, RoutedEventArgs args)
@@ -114,7 +97,13 @@ public partial class MainWindow : Window, IDisposable
 
     private void OnPrintScreenReceived(object? sender, PrintScreenReceivedEventArgs args)
     {
-        SetStatus("PrintScreen received. Capture workflow is not started in this slice.");
+        if (Volatile.Read(ref _shutdownStarted) != 0)
+        {
+            return;
+        }
+
+        var result = _captureRequestApplicationBoundary.SubmitPrintScreen(args);
+        SetStatus(result.UserMessage);
     }
 
     private void ApplyTakeoverResult(PrintScreenTakeoverResult result)
@@ -516,6 +505,7 @@ public partial class MainWindow : Window, IDisposable
         _captureCancellation?.Dispose();
         _captureCancellation = null;
         DisposeCaptureSession();
+        _captureRequestCoordinator.Dispose();
         _residentLifecycle.Dispose();
         GC.SuppressFinalize(this);
     }

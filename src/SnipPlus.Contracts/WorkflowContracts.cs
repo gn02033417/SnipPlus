@@ -1,7 +1,10 @@
-namespace SnipPlus.Contracts;
+﻿namespace SnipPlus.Contracts;
 
 public enum WorkflowState
 {
+    ResidentReady,
+    CaptureRequested,
+    Freezing,
     Idle,
     Starting,
     Selecting,
@@ -11,6 +14,61 @@ public enum WorkflowState
     Completed,
     Cancelled,
     Failed
+}
+
+public enum CaptureRequestSource
+{
+    PrintScreen,
+    SecondaryInAppCommand
+}
+
+public enum CaptureRequestRejectionReason
+{
+    None,
+    Busy,
+    InvalidState,
+    ApplicationExiting
+}
+
+public sealed record CaptureRequest(
+    Guid RequestId,
+    DateTimeOffset RequestedAt,
+    CaptureRequestSource RequestSource)
+{
+    public static CaptureRequest FromPrintScreen(PrintScreenReceivedEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        return new CaptureRequest(args.RequestId, args.ReceivedAt, CaptureRequestSource.PrintScreen);
+    }
+
+    public static CaptureRequest CreateSecondary(Guid requestId, DateTimeOffset requestedAt) =>
+        new(requestId, requestedAt, CaptureRequestSource.SecondaryInAppCommand);
+}
+
+public sealed record CaptureRequestResult(
+    CaptureRequest Request,
+    bool IsAccepted,
+    WorkflowState CurrentState,
+    WorkflowState? AcceptedWorkflowState,
+    CaptureRequestRejectionReason RejectionReason,
+    CaptureRequest? ActiveRequest,
+    string UserMessage)
+{
+    public static CaptureRequestResult Accepted(CaptureRequest request, WorkflowState state, string message) =>
+        new(request, true, state, state, CaptureRequestRejectionReason.None, request, message);
+
+    public static CaptureRequestResult Rejected(
+        CaptureRequest request,
+        WorkflowState state,
+        CaptureRequestRejectionReason reason,
+        CaptureRequest? activeRequest,
+        string message) =>
+        new(request, false, state, null, reason, activeRequest, message);
+}
+
+public interface ICaptureRequestBoundary
+{
+    CaptureRequestResult Submit(CaptureRequest request);
 }
 
 public sealed record WorkflowTransitionRequest(WorkflowState From, WorkflowState To, string Reason);

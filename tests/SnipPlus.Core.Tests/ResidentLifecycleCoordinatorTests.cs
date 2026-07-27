@@ -165,6 +165,28 @@ public sealed class ResidentLifecycleCoordinatorTests
         Assert.AreEqual(1, received);
     }
 
+    [TestMethod]
+    [TestCategory("Contract")]
+    public void LatePrintScreenAfterExitDoesNotCreateAWorkflowRequest()
+    {
+        var takeover = new FakePrintScreenTakeover();
+        var authority = new WorkflowStateAuthority();
+        using var requestCoordinator = new CaptureRequestCoordinator(authority);
+        using var lifecycle = new ResidentLifecycleCoordinator(
+            takeover,
+            new MemorySettingsStore { Enabled = true });
+        lifecycle.Initialize();
+        lifecycle.PrintScreenReceived += (_, args) =>
+            requestCoordinator.Submit(CaptureRequest.FromPrintScreen(args));
+
+        lifecycle.ExitApplication();
+        takeover.RaisePrintScreen();
+
+        Assert.AreEqual(WorkflowState.ResidentReady, authority.CurrentState);
+        Assert.AreEqual(0, authority.SuccessfulTransitionCount);
+        Assert.IsNull(requestCoordinator.ActiveRequest);
+    }
+
     private sealed class MemorySettingsStore : IPrintScreenTakeoverSettingsStore
     {
         public bool Enabled { get; set; }

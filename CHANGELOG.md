@@ -63,7 +63,20 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 
 ### Current Conformance Status
 
-- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build、deterministic non-interactive tests 與目前 HEAD 的 packaged Windows Runtime verification 已完成並通過；本 Slice 可標示為 Conforms。PrintScreen → `COMP-001` 與後續 Capture workflow 仍未整合。
+- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build、deterministic non-interactive tests 與目前 HEAD 的 packaged Windows Runtime verification 已完成並通過；第一個 Slice 可標示為 Conforms。第二個 slice 已完成 PrintScreen／secondary request 到 `COMP-001` 的 `ResidentReady → CaptureRequested` 靜態邊界，但後續 Capture workflow 尚未整合。
+
+### Verified — PrintScreen Capture Request Boundary Slice (2026-07-28)
+
+- 建立平台中立 `CaptureRequest`、`CaptureRequestResult`、`CaptureRequestSource`、typed rejection reason 與 `ICaptureRequestBoundary` contracts。
+- `WorkflowStateAuthority` 的正式初始狀態為 `ResidentReady`；唯一新增合法 transition 為 `ResidentReady → CaptureRequested`。本 slice 沒有進入 `Freezing`、Capture 或 Selection。
+- PrintScreen `RequestId`／`ReceivedAt` 由 `PrintScreenReceivedEventArgs` 原值傳入 request；`SecondaryInAppCommand` 透過同一個 Core application boundary 進入。
+- 第二個 active request 會回傳 typed `Busy`，保留第一個 request identity，且不產生第二次 transition。舊 `CaptureWorkflowCoordinator` 保留為技術程式碼，但在正式 `ResidentReady` authority 下無法繞過 request boundary。
+- PrintScreen 與 Start Capture 都不呼叫 `BeginCaptureAsync`，request boundary 不持有 `ICaptureService`、Clipboard 或 PNG adapter。
+- Locked restore 成功。
+- Release x64 build 成功，0 warnings、0 errors。
+- 非互動測試 50/50 通過，0 失敗、0 略過；包含新的 request／state／composition tests，以及 `ResidentLifecycleCoordinatorTests` 與 `WindowsPrintScreenTakeoverTests`。
+- 本 slice 10 個 C# 檔案的限定範圍 `dotnet format --verify-no-changes` 通過。
+- 本次沒有啟動 SnipPlus、Paint、Notepad、Snipping Tool 或其他外部 GUI，也沒有執行 Interactive／Manual tests；Windows Runtime Verification 尚未執行。
 
 ### Windows Runtime Verification — Blocked (2026-07-27)
 

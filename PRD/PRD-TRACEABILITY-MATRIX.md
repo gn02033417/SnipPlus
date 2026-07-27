@@ -1,14 +1,14 @@
 # SnipPlus v1 Requirements-to-Code Conformance Matrix
 
-狀態：`Reviewed — resident lifecycle correction implemented; non-interactive and current-HEAD packaged Windows runtime verification passed`
+狀態：`Reviewed — resident lifecycle conformance retained; PrintScreen-to-COMP-001 request boundary statically implemented and non-interactively verified; runtime pending`
 
 ## 1. Document Control
 
 | Field | Value |
 | --- | --- |
 | Document ID | `PRD-TRACEABILITY-MATRIX-001` |
-| Version | `2.3` |
-| Review date | `2026-07-27` |
+| Version | `2.4` |
+| Review date | `2026-07-28` |
 | Product baseline | Accepted current `PRD-0004`–`PRD-0006` and `SPEC-0003`–`SPEC-0010` |
 | Reviewed implementation | Branch `remove-snipplus-md` technical prototype |
 | Review type | Static requirements-to-code／test／runtime conformance review |
@@ -43,6 +43,7 @@ Reusable foundations:
 - shared state authority;
 - resident lifecycle coordinator、persisted takeover setting and platform-neutral PrintScreen boundary;
 - Windows PrintScreen registration／release adapter and direct application-exit cleanup path;
+- platform-neutral PrintScreen／secondary capture-request boundary、formal `ResidentReady` initial state and `ResidentReady → CaptureRequested` transition;
 - deterministic low-level tests.
 
 Major implementation gaps:
@@ -56,7 +57,7 @@ Major implementation gaps:
 - Complete／Save commitment boundaries and progress state;
 - Downloads-default Save As and retained-file outcome;
 - quantitative timing、memory and repeated-session evidence;
-- PrintScreen → `COMP-001` integration and the later Capture workflow runtime evidence;
+- CaptureRequested → Freezing and the later Capture workflow runtime evidence;
 - focus restoration and retained Editing after recoverable failure.
 
 Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not be classified as missing v1 work.
@@ -66,8 +67,10 @@ Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not
 | Requirement | Accepted behavior | Current result | Status | Required action |
 | --- | --- | --- | --- | --- |
 | `FR-001` | Manual startup keeps SnipPlus resident while running. | `ResidentLifecycleCoordinator` is wired from MainWindow construction and owns resident takeover state; locked restore、Release x64 build、non-interactive tests and current-HEAD packaged runtime startup passed. | `Conforms` | Preserve the resident entry and exit boundary. |
-| `FR-002`–`FR-004` | User controls PrintScreen takeover; disabled or exited app does not intercept. | `IPrintScreenTakeover`、persisted settings store and Windows `RegisterHotKey`／`UnregisterHotKey` implementation added; deterministic tests cover settings、idempotent registration／release and failure state. Current-HEAD packaged runtime verified enable、disable、restart persistence、event boundary and no interception after release. | `Conforms` | Preserve the takeover boundary; do not connect it to `COMP-001` in this slice. |
-| `FR-005` | In-app capture is secondary. | It is currently the only entry. | `Incorrect` | Retain only as secondary after PrintScreen exists. |
+| `FR-002` | User controls PrintScreen takeover. | `IPrintScreenTakeover`、persisted settings store and Windows `RegisterHotKey`／`UnregisterHotKey` implementation added; deterministic tests cover settings、idempotent registration／release and failure state. Current-HEAD packaged runtime verified enable、disable and restart persistence. | `Conforms` | Preserve the takeover setting boundary. |
+| `FR-003` | When takeover is enabled and SnipPlus is resident, PrintScreen starts one capture session. | PrintScreen now maps to a platform-neutral `CaptureRequest` and enters `COMP-001` exactly once through `ResidentReady → CaptureRequested`; later `Freezing`／Capture is intentionally not implemented in this slice. Deterministic tests cover identity／timestamp preservation、busy rejection and no capture-service call. | `Partial` | Implement the later `CaptureRequested → Freezing` and capture-session boundary. |
+| `FR-004` | Disabled takeover or application exit does not intercept PrintScreen. | Existing resident lifecycle／Windows registration-release implementation and packaged runtime evidence remain valid; late events after exit are ignored by deterministic tests. | `Conforms` | Preserve release and exit ownership. |
+| `FR-005` | In-app capture is secondary. | Start Capture now creates `SecondaryInAppCommand` and uses the same Core request boundary as PrintScreen; it intentionally stops at `CaptureRequested` and does not call `BeginCaptureAsync`. | `Partial` | Keep it secondary while implementing the later capture stages. |
 | `FR-046`–`FR-047` | MainWindow `X` and explicit Exit terminate、release takeover and do not hide to tray. | MainWindow `Closed` calls the resident exit boundary before `Environment.Exit(0)`; no tray surface exists; deterministic exit／Dispose tests and current-HEAD packaged runtime process／cleanup checks passed. | `Conforms` | Preserve direct process exit and release ordering. |
 | `FR-006`–`FR-010` | Freeze and present all supported displays、crosshair、cross-monitor Selection and mask. | One display only; mask foundation exists. | `Missing／Partial` | Add capacity-aware Virtual Desktop and per-display frames. |
 | `FR-011` | Mouse release locks Selection and creates no output. | Release invokes crop／Clipboard. | `Incorrect` | Replace with `SelectionLocked → Editing`. |
@@ -101,7 +104,7 @@ Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not
 | `NFR-020`–`NFR-023` | Focus and exit behavior. | Direct exit and takeover release path are statically implemented; deterministic lifecycle tests and current-HEAD packaged runtime process／release checks passed. Focus restoration belongs to a later slice. | `Partial` | Preserve exit／release; add focus restoration in the later capture slice. |
 | `NFR-024`–`NFR-028` | Privacy and verification boundaries. | Local-only and synthetic-evidence boundaries exist. | `Conforms` | Preserve. |
 | `NFR-029`–`NFR-031` | Accessible names、Esc cancellation and non-color-only state. | Accepted controls do not exist. | `Missing／Partial` | Implement only accepted baseline accessibility; do not add deferred shortcut workflow. |
-| `NFR-032`–`NFR-036` | Maintainability and traceability. | Canonical documents and state authority exist. | `Conforms／Partial` | Trace every corrected slice. |
+| `NFR-032`–`NFR-036` | Maintainability and traceability. | Canonical documents、single `WorkflowStateAuthority`、platform-neutral request boundary and deterministic request／transition tests exist; full later state graph remains unimplemented. | `Conforms／Partial` | Trace every corrected slice and preserve COMP-001 ownership. |
 | `NFR-037`–`NFR-039` | Windows v1 four-4K envelope and deferred compatibility. | Windows x64 foundation exists; envelope unimplemented. | `Missing／Partial` | Implement and verify all capacity boundaries. |
 
 ## 6. Code Classification
@@ -118,13 +121,14 @@ Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not
 | Clipboard retry adapter | `Conforms` technical foundation | Preserve bounded retry and privacy defaults. |
 | `PngEncoder` | `Partial` reusable foundation | Use in Save As and verify alpha／size tiers. |
 | Current workflow tests | `Partial` historical foundation | Supersede release-to-Clipboard assertions and add v1 quality tests. |
-| `ResidentLifecycleCoordinator` and PrintScreen contracts | `Conforms` for the first resident lifecycle／takeover slice | Added setting、registration、event-boundary and exit cleanup ownership; deterministic non-interactive evidence and current-HEAD packaged runtime evidence passed. PrintScreen remains intentionally disconnected from `COMP-001`. |
+| `ResidentLifecycleCoordinator` and PrintScreen contracts | `Conforms` for the first resident lifecycle／takeover slice | Added setting、registration、event-boundary and exit cleanup ownership; deterministic non-interactive evidence and current-HEAD packaged runtime evidence passed. The later request boundary is tracked separately. |
 | `WindowsPrintScreenTakeover` | `Conforms` for the first resident lifecycle／takeover slice | Added Win32 registration／release and HWND message boundary; deterministic adapter tests and current-HEAD packaged runtime registration／release evidence passed. |
+| `CaptureRequest`／`CaptureRequestCoordinator`／application boundary | `Partial` for the second request-boundary slice | PrintScreen and `SecondaryInAppCommand` share one platform-neutral Core boundary; COMP-001 starts at `ResidentReady` and accepts only `ResidentReady → CaptureRequested`; no Freezing／Capture side effect exists. Continue with the later capture slice. |
 
 ## 7. Required Correction Order
 
 1. Resident lifecycle、direct MainWindow exit and takeover setting — current-HEAD packaged runtime verification passed; preserve this boundary.
-2. PrintScreen entry integrated with `COMP-001`.
+2. PrintScreen entry integrated with `COMP-001` through `ResidentReady → CaptureRequested` — static implementation and deterministic tests passed; runtime pending.
 3. Four-4K capacity policy、Frozen Virtual Desktop context and per-display frame ownership.
 4. All-display presentation、crosshair and cross-monitor initial Selection.
 5. Locked Selection、pointer move、edge／corner resize and reselection.
@@ -156,4 +160,4 @@ No current v1 behavior is `Blocked by product decision`.
 
 ## 9. Final Conclusion
 
-The first resident lifecycle／PrintScreen takeover coding slice has a static implementation、contract tests、locked restore、Release x64 build、passing non-interactive verification and current-HEAD packaged Windows Runtime evidence. The limited Slice formatting verification also passed; the full repository retains 4,704 pre-existing formatting diagnostics that were not modified. Runtime A–H verified startup、toggle persistence、current Windows registration／release、application event boundary、direct MainWindow X process exit and cleanup without entering Capture. PrintScreen remains intentionally disconnected from `COMP-001`; the remaining v1 conformance order is unchanged.
+The first resident lifecycle／PrintScreen takeover coding slice remains conforming with static implementation、contract tests、locked restore、Release x64 build、passing non-interactive verification and current-HEAD packaged Windows Runtime evidence. The second request-boundary slice has static implementation、50 passing non-interactive tests and limited formatting verification: PrintScreen and the secondary in-app command now enter the sole `COMP-001` authority at `ResidentReady → CaptureRequested`. This slice intentionally stops before `Freezing`／Capture；Windows Runtime Verification for the new boundary has not run, and the remaining v1 conformance order is unchanged.

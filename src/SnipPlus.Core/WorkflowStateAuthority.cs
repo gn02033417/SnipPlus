@@ -1,11 +1,12 @@
-using SnipPlus.Contracts;
+﻿using SnipPlus.Contracts;
 
 namespace SnipPlus.Core;
 
 public sealed class WorkflowStateAuthority
 {
     private readonly object _gate = new();
-    private WorkflowState _currentState = WorkflowState.Idle;
+    private WorkflowState _currentState = WorkflowState.ResidentReady;
+    private int _successfulTransitionCount;
 
     public WorkflowState CurrentState
     {
@@ -14,6 +15,17 @@ public sealed class WorkflowStateAuthority
             lock (_gate)
             {
                 return _currentState;
+            }
+        }
+    }
+
+    public int SuccessfulTransitionCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _successfulTransitionCount;
             }
         }
     }
@@ -36,19 +48,14 @@ public sealed class WorkflowStateAuthority
             }
 
             _currentState = request.To;
+            _successfulTransitionCount++;
             return WorkflowTransitionResult.Success(_currentState);
         }
     }
 
     private static bool IsLegal(WorkflowState from, WorkflowState to) => from switch
     {
-        WorkflowState.Idle => to == WorkflowState.Starting,
-        WorkflowState.Starting => to is WorkflowState.Selecting or WorkflowState.Cancelled or WorkflowState.Failed,
-        WorkflowState.Selecting => to is WorkflowState.Capturing or WorkflowState.Cancelled or WorkflowState.Failed,
-        WorkflowState.Capturing => to is WorkflowState.ResultReady or WorkflowState.Cancelled or WorkflowState.Failed,
-        WorkflowState.ResultReady => to is WorkflowState.Delivering or WorkflowState.Cancelled or WorkflowState.Completed,
-        WorkflowState.Delivering => to is WorkflowState.Completed or WorkflowState.Cancelled or WorkflowState.Failed or WorkflowState.ResultReady,
-        WorkflowState.Completed or WorkflowState.Cancelled or WorkflowState.Failed => to == WorkflowState.Idle,
+        WorkflowState.ResidentReady => to == WorkflowState.CaptureRequested,
         _ => false
     };
 }
