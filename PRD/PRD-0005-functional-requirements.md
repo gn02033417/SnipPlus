@@ -1,182 +1,135 @@
 # PRD-0005 Functional Requirements
 
-狀態：`Draft`
+狀態：`Accepted`
 
-## 1. 文件定位
-
-本文件回答唯一問題：SnipPlus 在 v1.0 必須具備哪些功能能力（Capability）？
-
-本文件只描述使用者可理解的能力，不描述如何實作、不列出 Toolbar 按鈕、不定義 Arrow、Rectangle、Circle、Pen、Highlighter、OCR、AI、Plugin 或任何其他工具細節。
-
-每個 requirement 都有唯一 `FR-` ID，並可追溯到既有的 Research、Analysis、Decision 或 PRD 文件。未來每份 Spec 必須引用至少一個本文件的 FR ID。
-
-## 2. Requirement format
-
-| Field | Meaning |
-| --- | --- |
-| ID | 穩定且唯一的 Functional Requirement identifier。 |
-| Title | 能力的簡短名稱。 |
-| Description | 使用者可理解的能力描述，不包含 implementation。 |
-| Priority | 只使用 `Must`、`Should` 或 `Could`。 |
-| Dependencies | 直接影響本能力的既有文件或流程。 |
-| Source | 支持此能力的 Research、Analysis、Decision 或 PRD 來源。 |
-
-## 3. Capture
-
-### FR-001 — Start capture workflow
+## 1. Document Control
 
 | Field | Value |
 | --- | --- |
-| ID | `FR-001` |
-| Title | Start capture workflow |
-| Description | 使用者能從一個合法入口啟動一次 static image capture workflow。 |
-| Priority | `Must` |
-| Dependencies | `PRD-0003`、`PRD-0004`、Windows entry decision |
-| Source | [Capture entry decision](../docs/Decision/Win11/capture-workflow-decision.md#capture-entry-workflow)；[Core Workflow entry points](PRD-0004-core-workflow.md#3-entry-points) |
+| Document ID | `PRD-0005` |
+| Version | `1.1` |
+| Status | `Accepted` |
+| Product authority | Repository owner through explicit product decisions |
+| Last reviewed | `2026-07-27` |
+| Scope | SnipPlus v1 first release |
 
-### FR-002 — Select capture region or scope
+## 2. Requirement Rules
 
-| Field | Value |
-| --- | --- |
-| ID | `FR-002` |
-| Title | Select capture region or scope |
-| Description | 使用者能指定這次 capture 要取得的影像區域或已核准的 capture scope。 |
-| Priority | `Must` |
-| Dependencies | `FR-001`、`PRD-0004` |
-| Source | [Region selection decision](../docs/Decision/Win11/capture-workflow-decision.md#rectangle--freeform-selection)；[Core Workflow states](PRD-0004-core-workflow.md#5-workflow-states) |
+- `Must` means required for the first release.
+- `Deferred` means explicitly excluded from the first release.
+- Requirements describe observable product capability, not implementation APIs.
+- Specs、Architecture、code and tests must trace to these IDs.
 
-### FR-003 — Complete capture
+## 3. Capture Entry and Residency
 
-| Field | Value |
-| --- | --- |
-| ID | `FR-003` |
-| Title | Complete capture |
-| Description | 使用者能完成一次 capture，並取得可繼續處理或交付的 capture result。 |
-| Priority | `Must` |
-| Dependencies | `FR-002`、`PRD-0004` |
-| Source | [Capture workflow decision](../docs/Decision/Win11/capture-workflow-decision.md#capture-entry-workflow)；[Core Workflow complete state](PRD-0004-core-workflow.md#5-workflow-states) |
-
-## 4. Annotation
-
-Annotation 是 optional capability。以下 requirements 只描述「能對 capture result 進行後續標註處理」的能力，不決定任何工具類型、工具數量或 UI 內容。
-
-### FR-004 — Create annotations on a capture result
-
-| Field | Value |
-| --- | --- |
-| ID | `FR-004` |
-| Title | Create annotations on a capture result |
-| Description | 使用者能在 capture result 上建立標註內容。 |
-| Priority | `Should` |
-| Dependencies | `FR-003`、`PRD-0002` Principle 4、`PRD-0004` Annotation state |
-| Source | [Post-capture workflow decision](../docs/Decision/Win11/capture-workflow-decision.md#post-capture-toolbar--annotation-stage)；[Core Workflow scope](PRD-0004-core-workflow.md#1-workflow-scope) |
-
-### FR-005 — Modify annotations
-
-| Field | Value |
-| --- | --- |
-| ID | `FR-005` |
-| Title | Modify annotations |
-| Description | 使用者能修改已建立的標註內容，而不需要重新建立整個 capture result。 |
-| Priority | `Should` |
-| Dependencies | `FR-004`、`PRD-0002` Principle 4 |
-| Source | [Post-capture workflow decision](../docs/Decision/Win11/capture-workflow-decision.md#post-capture-toolbar--annotation-stage)；[Core Workflow user journey](PRD-0004-core-workflow.md#6-user-journey) |
-
-### FR-006 — Remove annotations
-
-| Field | Value |
-| --- | --- |
-| ID | `FR-006` |
-| Title | Remove annotations |
-| Description | 使用者能移除已建立的標註內容，並保留 capture result 的後續處理能力。 |
-| Priority | `Should` |
-| Dependencies | `FR-004`、`FR-005` |
-| Source | [Post-capture workflow decision](../docs/Decision/Win11/capture-workflow-decision.md#post-capture-toolbar--annotation-stage)；[Core Workflow annotation state](PRD-0004-core-workflow.md#5-workflow-states) |
-
-## 5. Clipboard
-
-### FR-007 — Deliver the result to the clipboard
-
-| Field | Value |
-| --- | --- |
-| ID | `FR-007` |
-| Title | Deliver the result to the clipboard |
-| Description | 使用者能將完成的 capture result 交付至 clipboard，以便進入下一個工作脈絡。 |
-| Priority | `Must` |
-| Dependencies | `FR-003`、`PRD-0004` Clipboard Ready state |
-| Source | [Clipboard handoff decision](../docs/Decision/Win11/capture-workflow-decision.md#automatic-clipboard-handoff)；[Core Workflow clipboard state](PRD-0004-core-workflow.md#5-workflow-states) |
-
-## 6. Output
-
-### FR-008 — Produce a screenshot result
-
-| Field | Value |
-| --- | --- |
-| ID | `FR-008` |
-| Title | Produce a screenshot result |
-| Description | 系統能在 capture workflow 完成後產出可供使用者繼續處理或交付的 screenshot result。 |
-| Priority | `Must` |
-| Dependencies | `FR-001`、`FR-002`、`FR-003` |
-| Source | [Product Vision scope](PRD-0003-product-vision.md#3-product-scope)；[Core Workflow complete state](PRD-0004-core-workflow.md#5-workflow-states) |
-
-本 requirement 不定義輸出格式、檔案副檔名、壓縮方式、儲存位置或任何 API。
-
-## 7. Workflow Control
-
-### FR-009 — Complete and exit the workflow
-
-| Field | Value |
-| --- | --- |
-| ID | `FR-009` |
-| Title | Complete and exit the workflow |
-| Description | 使用者能在 capture result 完成並交付後結束本次 workflow，回到下一個工作脈絡。 |
-| Priority | `Must` |
-| Dependencies | `FR-003`、`FR-007`、`PRD-0004` |
-| Source | [Core Workflow exit points](PRD-0004-core-workflow.md#4-exit-points)；[Product Vision goals](PRD-0003-product-vision.md#2-product-goals) |
-
-### FR-010 — Cancel before completion
-
-| Field | Value |
-| --- | --- |
-| ID | `FR-010` |
-| Title | Cancel before completion |
-| Description | 使用者能在 capture workflow 完成前放棄目前的操作，且不被迫完成一次不需要的 capture。 |
-| Priority | `Should` |
-| Dependencies | `FR-001`、`PRD-0004` Cancel boundary |
-| Source | [Core Workflow exit points](PRD-0004-core-workflow.md#4-exit-points)；[Workflow analysis unknowns](../docs/Analysis/Win11/capture-workflow-analysis.md#known-unknowns) |
-
-取消的實際觸發方式、資料 side effects 與 recovery 行為留給後續 Specs 定義。
-
-## 8. Error Handling
-
-### FR-011 — Provide appropriate feedback when the workflow cannot complete
-
-| Field | Value |
-| --- | --- |
-| ID | `FR-011` |
-| Title | Provide appropriate feedback when the workflow cannot complete |
-| Description | 當 capture、result delivery 或 workflow control 無法正常完成時，使用者能收到足以理解目前狀態的適當回饋。 |
-| Priority | `Must` |
-| Dependencies | `FR-003`、`FR-007`、`FR-009`、`PRD-0004` Error boundary |
-| Source | [Core Workflow error state](PRD-0004-core-workflow.md#5-workflow-states)；[Win11 analysis failure boundary](../docs/Analysis/Win11/capture-workflow-analysis.md#known-unknowns) |
-
-本 requirement 不設計錯誤畫面、錯誤文字、retry policy、logging、API 或 recovery implementation。
-
-## 9. Traceability summary
-
-| Capability area | Requirement IDs | Product source |
+| ID | Requirement | Priority |
 | --- | --- | --- |
-| Capture | `FR-001` – `FR-003` | `PRD-0003`、`PRD-0004`、Decision |
-| Annotation | `FR-004` – `FR-006` | `PRD-0002`、`PRD-0004`、Decision |
-| Clipboard | `FR-007` | `PRD-0004`、Decision |
-| Output | `FR-008` | `PRD-0003`、`PRD-0004` |
-| Workflow Control | `FR-009` – `FR-010` | `PRD-0002`、`PRD-0004` |
-| Error Handling | `FR-011` | `PRD-0004`、Analysis |
+| `FR-001` | The user can manually start SnipPlus and keep it resident in the background. | `Must` |
+| `FR-002` | SnipPlus provides a setting to enable or disable PrintScreen takeover. | `Must` |
+| `FR-003` | When takeover is enabled and SnipPlus is resident, pressing PrintScreen starts one capture session. | `Must` |
+| `FR-004` | When takeover is disabled, SnipPlus does not intercept PrintScreen. | `Must` |
+| `FR-005` | An in-app capture command may exist as a secondary or diagnostic entry but is not the primary v1 entry. | `Must` |
 
-## 10. Requirement boundary
+## 4. Multi-display Freeze and Selection
 
-- 本文件的 requirement 是 capability，不是 UI 或 implementation instruction。
-- `Must`、`Should`、`Could` 是本 PRD 的唯一 priority values。
-- 每一份 Spec 必須引用至少一個 `FR-` ID。
-- 每一個後續 test case 應能回溯到對應的 `FR-` ID。
-- 未經 PRD-0005 review 的內容不得自行進入 Specs 或 Coding。
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `FR-006` | A capture session freezes all connected displays before selection begins. | `Must` |
+| `FR-007` | The user sees one continuous Virtual Desktop selection canvas covering all connected displays. | `Must` |
+| `FR-008` | Every display shows a semi-transparent mask and the pointer becomes a crosshair during initial selection. | `Must` |
+| `FR-009` | The user can create one rectangular selection that spans multiple displays. | `Must` |
+| `FR-010` | During drag, the selected region shows the original frozen content without the mask while the outside region remains dimmed. | `Must` |
+| `FR-011` | Releasing the mouse locks the selection but does not complete capture or write Clipboard. | `Must` |
+| `FR-012` | Before output, the user can move the locked selection、resize it from edges or corners、or drag elsewhere to create a new selection. | `Must` |
+
+## 5. Editing and Confirmation
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `FR-013` | A function bar appears after a valid selection is locked. | `Must` |
+| `FR-014` | The editing／confirmation stage always appears, but the user can skip all annotation actions and immediately choose Complete. | `Must` |
+| `FR-015` | The user can choose Complete、Save or Cancel from the editing stage. | `Must` |
+| `FR-016` | The function bar remains visible by preferring the area below the selection and moving above it when needed. | `Must` |
+
+## 6. Annotation Tools
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `FR-017` | The user can create、select、move、resize、restyle and delete rectangle annotations. | `Must` |
+| `FR-018` | The user can create an arrow and switch it to a no-arrow straight-line mode. | `Must` |
+| `FR-019` | The user can create semi-transparent freehand highlighter strokes. | `Must` |
+| `FR-020` | The user can create、move and edit text using Microsoft JhengHei by default, with color、font size and bold controls. | `Must` |
+| `FR-021` | The user can apply rectangular Mosaic or Blur regions using one tool with a mode switch. | `Must` |
+| `FR-022` | The user can place numbered markers that increment sequentially, preserve gaps after deletion, allow a new starting number and support color／size changes. | `Must` |
+| `FR-023` | The user can choose annotation color and line thickness where applicable. | `Must` |
+| `FR-024` | The user can Undo and Redo annotation creation、deletion、movement、resize、content and style changes. | `Must` |
+| `FR-025` | Selection movement、selection resize and reselection are not part of annotation Undo／Redo history. | `Must` |
+
+## 7. Annotation Coordinate and Clipping Rules
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `FR-026` | Annotation objects are anchored to Frozen Virtual Desktop coordinates. | `Must` |
+| `FR-027` | Annotation output is clipped to the current selection bounds. | `Must` |
+| `FR-028` | Annotation portions outside a reduced selection are not output but the underlying objects are not deleted. | `Must` |
+| `FR-029` | Moving or resizing the selection does not scale or relocate existing annotation objects. | `Must` |
+
+## 8. Clipboard and File Output
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `FR-030` | Complete renders the current selection and annotations、writes the final image to Clipboard and ends only after Clipboard delivery succeeds. | `Must` |
+| `FR-031` | Save opens Windows Save As、supports PNG only in v1 and proposes `SnipPlus_yyyy-MM-dd_HHmmss.png`. | `Must` |
+| `FR-032` | A successful Save writes the same final image to both the selected PNG file and Clipboard, then ends the session. | `Must` |
+| `FR-033` | Cancelling Save As returns to the editing stage without cancelling the capture session. | `Must` |
+| `FR-034` | Save or Clipboard failure leaves the editing stage open and provides an actionable error. | `Must` |
+| `FR-035` | Successful completion does not show a success notification. | `Must` |
+
+## 9. Cancel and Focus Restoration
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `FR-036` | Esc before selection cancels the entire capture session. | `Must` |
+| `FR-037` | Esc during drag cancels the drag and the entire capture session. | `Must` |
+| `FR-038` | Esc after the function bar appears cancels the entire capture session. | `Must` |
+| `FR-039` | Cancel writes neither Clipboard nor a file. | `Must` |
+| `FR-040` | Complete、successful Save and Cancel close all capture overlays and function bars. | `Must` |
+| `FR-041` | After Complete、successful Save or Cancel, focus returns to the application active before PrintScreen. | `Must` |
+| `FR-042` | SnipPlus does not automatically show its main window after the session ends. | `Must` |
+| `FR-043` | SnipPlus normal windows are excluded from the frozen capture source. | `Must` |
+
+## 10. Error Feedback
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| `FR-044` | Capture、freeze、selection、render、save or Clipboard failures are not silently reported as success. | `Must` |
+| `FR-045` | Recoverable output failures retain the current selection and annotations so the user can retry or cancel. | `Must` |
+
+## 11. Explicitly Deferred Capabilities
+
+| ID | Capability | Priority |
+| --- | --- | --- |
+| `FR-D01` | Opaque freehand pen | `Deferred` |
+| `FR-D02` | Ellipse annotation | `Deferred` |
+| `FR-D03` | Pin image to desktop | `Deferred` |
+| `FR-D04` | OCR | `Deferred` |
+| `FR-D05` | Capture history | `Deferred` |
+| `FR-D06` | Delayed capture | `Deferred` |
+| `FR-D07` | Additional save formats beyond PNG | `Deferred` |
+| `FR-D08` | Font family selection、italic、underline and text background | `Deferred` |
+
+## 12. Traceability Summary
+
+| Capability | Requirement IDs |
+| --- | --- |
+| Entry／residency | `FR-001` – `FR-005` |
+| Multi-display selection | `FR-006` – `FR-012` |
+| Editing confirmation | `FR-013` – `FR-016` |
+| Annotation tools | `FR-017` – `FR-025` |
+| Coordinates／clipping | `FR-026` – `FR-029` |
+| Clipboard／file output | `FR-030` – `FR-035` |
+| Cancel／focus | `FR-036` – `FR-043` |
+| Error feedback | `FR-044` – `FR-045` |
+| Deferred | `FR-D01` – `FR-D08` |
+
+The previous `FR-001`–`FR-011` draft wording is superseded by this accepted v1.1 requirement set.
