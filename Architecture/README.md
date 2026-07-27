@@ -1,54 +1,70 @@
 # Architecture
 
-狀態：`Implementation baseline accepted`
+狀態：`Accepted v1 baseline`
 
-SnipPlus 的抽象 Architecture、implementation-critical ADR、cross-project contracts 與 Project Structure 已完成第一個 vertical slice 所需的收斂。
+SnipPlus architecture now reflects the accepted resident PrintScreen、all-display Frozen Virtual Desktop、cross-monitor Selection、mandatory Editing／confirmation、Annotation、Clipboard and PNG Save workflow.
 
 ## Effective sources
 
-- [Architecture Baseline Review](ARCH-BASELINE-REVIEW.md) — Layer、Module、Component、Interaction ownership。
-- [ADR index](adr/README.md) — Accepted technology decisions。
-- [Implementation Contracts](IMPLEMENTATION-CONTRACTS.md) — Cross-project information/lifecycle boundaries。
-- [Project Structure](PROJECT-STRUCTURE.md) — Toolchain、project mapping、build/test baseline。
-- [Implementation Readiness Review](../docs/IMPLEMENTATION-READINESS-REVIEW.md) — Approved implementation scope。
+Read in this order:
+
+1. [ARCH-0001 Architecture Principles](ARCH-0001-architecture-principles.md)
+2. [ARCH-0002 Layer Model](ARCH-0002-layer-model.md)
+3. [ARCH-0003 Module Catalog](ARCH-0003-module-catalog.md)
+4. [ARCH-0004 Component Boundaries](ARCH-0004-component-boundaries.md)
+5. [ARCH-0005 Component Interactions](ARCH-0005-component-interactions.md)
+6. [Architecture Baseline Review](ARCH-BASELINE-REVIEW.md)
+7. [Implementation Contracts](IMPLEMENTATION-CONTRACTS.md)
+8. [Project Structure and Toolchain](PROJECT-STRUCTURE.md)
+9. [ADR index](adr/README.md)
+10. [Requirements-to-Code Conformance Matrix](../PRD/PRD-TRACEABILITY-MATRIX.md)
 
 ## Accepted technology baseline
 
 | Area | Decision |
 | --- | --- |
 | UI | WinUI 3 |
-| Rendering | WinUI XAML／Microsoft.UI.Composition + Win2D adapter |
+| Rendering | WinUI XAML／Microsoft.UI.Composition + Win2D |
 | Capture | Windows.Graphics.Capture |
 | Image | BGRA8 premultiplied SoftwareBitmap |
 | Clipboard | WinRT DataPackage |
 | Testing | MSTest.Sdk + Microsoft.Testing.Platform |
 | Language/runtime | C# 14 / .NET 10 |
-| Initial platform | Windows 11 24H2 x64 |
+| Initial implementation baseline | Windows 11 24H2 x64 |
 
 ## Fixed ownership boundaries
 
-- Product Workflow → Feature Coordination → Domain Capability → Platform Integration。
-- COMP-001 是唯一 Workflow State Authority。
-- COMP-001 through COMP-013 map to `SnipPlus.Core`。
-- COMP-014 through COMP-018 map to `SnipPlus.Windows`。
-- Cross-project semantic types map to `SnipPlus.Contracts`。
-- WinUI host/composition root maps to `SnipPlus.App`。
-- Clipboard and Output remain parallel downstream paths。
-- Annotation remains optional。
-- Platform adapters do not own product semantics。
+- `COMP-001` is the sole Workflow State Authority.
+- One capture session owns one Frozen Virtual Desktop topology、all per-display frames、selection revision、annotation revision and output revision identities.
+- `FEAT-001` owns resident entry、display freeze and selection lifecycle.
+- `FEAT-002` is a required Editing／Annotation Feature; annotation actions are optional for the user.
+- `FEAT-003` owns Clipboard publication.
+- `FEAT-004` owns Windows Save As and PNG file delivery.
+- `FEAT-005` owns cancellation、failure preservation、cleanup、feedback and focus restoration.
+- Mouse release locks Selection and never commits output.
+- Complete and Save are explicit commitments.
+- Clipboard and PNG Output remain separate capabilities; Save coordination requires both to succeed.
+- Platform adapters return typed outcomes and do not mutate shared state or declare product completion.
 
 ## Current implementation state
 
 | Area | State |
 | --- | --- |
-| Documentation readiness | Approved |
-| Solution/projects | Not created |
-| Source code | Not started |
-| Restore/build/test | Not performed |
-| Runtime verification | Not performed |
+| Architecture documents | Accepted and aligned with v1 |
+| Solution／projects | Present |
+| Reusable technical foundation | One-display WGC、same-frame crop、image、PNG encoder and Clipboard retry present |
+| Resident PrintScreen | Missing |
+| Frozen Virtual Desktop／cross-monitor Selection | Missing |
+| SelectionLocked／Editing state model | Missing／current model obsolete |
+| Function bar and Annotation | Missing |
+| Save As and PNG file workflow | Missing |
+| Focus restoration | Missing |
+| Product conformance | Correction required through the existing matrix |
 
-The absence of runtime evidence is now an implementation task, not a documentation blocker.
+## Current next action
 
-## Next action
+Follow [PRD-TRACEABILITY-MATRIX-001](../PRD/PRD-TRACEABILITY-MATRIX.md) in order, beginning with resident lifecycle and user-controlled PrintScreen takeover. Do not begin with Annotation、Clipboard hardening、Packaging or unrelated scope expansion.
 
-Create the approved solution/projects and implement the bounded first vertical slice. Additional Architecture planning is prohibited unless an actual implementation finding requires a targeted correction or superseding decision.
+## Architecture change rule
+
+Update these existing documents only when accepted product behavior、ownership or a durable technology decision changes. Normal implementation work updates source、tests、CHANGELOG and the conformance matrix. Do not create another readiness or closure-document family.
