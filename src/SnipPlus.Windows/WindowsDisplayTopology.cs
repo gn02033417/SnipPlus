@@ -283,34 +283,48 @@ public sealed class WindowsDisplayTopologySource : IWindowsDisplayTopologySource
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var displays = DisplayArea.FindAll();
-        var descriptors = new List<WindowsDisplayDescriptor>(displays.Count);
-        foreach (var display in displays)
+        var previousDpiAwarenessContext = SetThreadDpiAwarenessContext(PerMonitorAwareV2Context);
+        if (previousDpiAwarenessContext == 0)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var outerBounds = display.OuterBounds;
-            var physicalBounds = new PhysicalRect(
-                outerBounds.X,
-                outerBounds.Y,
-                checked(outerBounds.X + outerBounds.Width),
-                checked(outerBounds.Y + outerBounds.Height));
-            var monitor = MonitorFromPoint(new NativePoint(
-                checked(outerBounds.X + Math.Max(0, outerBounds.Width / 2)),
-                checked(outerBounds.Y + Math.Max(0, outerBounds.Height / 2))),
-                MonitorDefaultNearest);
-            var (dpiScaleX, dpiScaleY) = GetDpiScale(monitor);
-            var orientation = GetOrientation(monitor);
-            var displayId = display.DisplayId.Value;
-            descriptors.Add(new WindowsDisplayDescriptor(
-                displayId,
-                physicalBounds,
-                dpiScaleX,
-                dpiScaleY,
-                orientation,
-                $"display:{displayId.ToString(CultureInfo.InvariantCulture)}"));
+            throw new InvalidOperationException("Windows could not enter per-monitor DPI-aware topology context.");
         }
 
-        return ValueTask.FromResult<IReadOnlyList<WindowsDisplayDescriptor>>(descriptors);
+        try
+        {
+            var displays = DisplayArea.FindAll();
+            var descriptors = new List<WindowsDisplayDescriptor>(displays.Count);
+            for (var index = 0; index < displays.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var display = displays[index];
+                var outerBounds = display.OuterBounds;
+                var physicalBounds = new PhysicalRect(
+                    outerBounds.X,
+                    outerBounds.Y,
+                    checked(outerBounds.X + outerBounds.Width),
+                    checked(outerBounds.Y + outerBounds.Height));
+                var monitor = MonitorFromPoint(new NativePoint(
+                    checked(outerBounds.X + Math.Max(0, outerBounds.Width / 2)),
+                    checked(outerBounds.Y + Math.Max(0, outerBounds.Height / 2))),
+                    MonitorDefaultNearest);
+                var (dpiScaleX, dpiScaleY) = GetDpiScale(monitor);
+                var orientation = GetOrientation(monitor);
+                var displayId = display.DisplayId.Value;
+                descriptors.Add(new WindowsDisplayDescriptor(
+                    displayId,
+                    physicalBounds,
+                    dpiScaleX,
+                    dpiScaleY,
+                    orientation,
+                    $"display:{displayId.ToString(CultureInfo.InvariantCulture)}"));
+            }
+
+            return ValueTask.FromResult<IReadOnlyList<WindowsDisplayDescriptor>>(descriptors);
+        }
+        finally
+        {
+            _ = SetThreadDpiAwarenessContext(previousDpiAwarenessContext);
+        }
     }
 
     private static (double DpiScaleX, double DpiScaleY) GetDpiScale(nint monitor)
@@ -358,6 +372,7 @@ public sealed class WindowsDisplayTopologySource : IWindowsDisplayTopologySource
 
     private const uint MonitorDefaultNearest = 2;
     private const uint CurrentSettings = uint.MaxValue;
+    private static readonly nint PerMonitorAwareV2Context = new(-4);
 
     private enum MonitorDpiType
     {
@@ -428,6 +443,9 @@ public sealed class WindowsDisplayTopologySource : IWindowsDisplayTopologySource
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern nint MonitorFromPoint(NativePoint point, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern nint SetThreadDpiAwarenessContext(nint dpiContext);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfoEx monitorInfo);
