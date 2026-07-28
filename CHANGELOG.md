@@ -103,6 +103,16 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 - 本 Slice 11 個實際修改 C# 檔案的限定範圍 `dotnet format --verify-no-changes --no-restore --include ...` 通過；全 Repository 既有 formatting baseline 未修正。
 - 未執行真實三螢幕 topology／WGC runtime、Overlay、Frozen Canvas、Crosshair、Selection 或 `Freezing → Selecting`；本 Slice 未啟動 SnipPlus、Paint、Notepad、Snipping Tool 或其他外部 GUI，也未執行 Interactive／Manual tests。真實多螢幕 runtime verification 保留給本 Slice 完成後的明確授權步驟。
 
+### Verified — Current-HEAD Windows Multi-display Freezing Runtime (2026-07-28)
+
+- Runtime 從 clean fix commit `369281c73606a073fe9acaed6f1678eefade9972` 的 `SnipPlus.Windows.Tests` test host 執行；Windows App Runtime 2.3 bootstrap 成功。未經 MainWindow、未啟動 SnipPlus GUI、Paint、Notepad 或 Snipping Tool，亦未保存桌面像素、截圖或 Clipboard payload。
+- Windows 11 x64 build `26200` 實際辨識 3 個 displays；Virtual Desktop bounds 為 `(-2560,0)–(2560,2520)`，保留負座標，`GapPolicy=Transparent`，連續 topology snapshot 的 `CoordinateVersion` 穩定。
+- Owner Reference topology 實際解析為兩個 `2560×1440`、DPI `1.00×1.00` 的 displays，以及下方 `1920×1080`、DPI `1.50×1.50`、`LandscapeFlipped` 的 display；下方螢幕未再被誤判為 `1280×720` logical size。Capacity 為 `Supported`，Total Source Pixels 為 `9,446,400`。
+- 真實 per-display WGC frame acquisition 通過：每個 session 取得完整 3-frame set，frame 數量／Display bounds／pixel size／SessionId／CoordinateVersion 一致；每個 frame 為 BGRA8、Premultiplied、sRGB SDR、`CursorIncluded=false`，不建立 giant bitmap、不 crop、不寫入 Clipboard、不建立 PNG。3 個獨立 session 均成功，CapturedAt 最大差分別為約 `0.01 ms`、`31.29 ms`、`36.45 ms`。
+- Runtime 發現並修正兩個第四個 Slice 相容性問題：WinRT `DisplayArea.FindAll()` collection 改用 index access 避免 test host 的 `InvalidCastException (0x80004002)`；topology enumeration 暫時切換至 per-monitor DPI-aware context 後還原，取得正確 physical bounds／DPI。
+- 真實 cancellation 在本機硬體於 `250 ms` 取消前已完成 frame acquisition，依規則記錄為 `Inconclusive`；deterministic cancellation／cleanup tests 仍保留。未進入 `Selecting`，未顯示 Frozen Canvas／Overlay／Crosshair／Selection。
+- 修正後 Release x64 build 為 `0 warnings、0 errors`；非互動測試 `83/83` 通過、`0` 失敗、`0` 略過；兩個本 Slice C# 檔案限定範圍 `dotnet format --verify-no-changes` 通過。
+
 ### Verified — Current-HEAD Packaged Request Boundary Runtime (2026-07-28)
 
 - 以 current HEAD `a94f8fd` 建立並部署 x64 Development MSIX；package Identity 為 `SnipPlus.App`、Version `1.0.0.0`，重裝後 installed `SnipPlus.App.dll` 與 Release x64 build 的 SHA-256 一致。

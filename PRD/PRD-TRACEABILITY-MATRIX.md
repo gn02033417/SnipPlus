@@ -1,13 +1,13 @@
 # SnipPlus v1 Requirements-to-Code Conformance Matrix
 
-狀態：`Reviewed — resident lifecycle and PrintScreen request boundary conformance retained; CaptureRequested→Freezing and Windows multi-display freezing integration statically and non-interactively verified; real Windows multi-display runtime pending`
+狀態：`Reviewed — resident lifecycle and PrintScreen request boundary conformance retained; CaptureRequested→Freezing and Windows multi-display freezing integration verified on the current Owner Reference topology; presentation and Selection remain pending`
 
 ## 1. Document Control
 
 | Field | Value |
 | --- | --- |
 | Document ID | `PRD-TRACEABILITY-MATRIX-001` |
-| Version | `2.5` |
+| Version | `2.6` |
 | Review date | `2026-07-28` |
 | Product baseline | Accepted current `PRD-0004`–`PRD-0006` and `SPEC-0003`–`SPEC-0010` |
 | Reviewed implementation | Branch `remove-snipplus-md` technical prototype |
@@ -52,7 +52,7 @@ Reusable foundations:
 
 Major implementation gaps:
 
-- real Windows display topology enumeration and per-display WGC runtime verification;
+- topology-change runtime verification and a stable runtime cancellation interruption;
 - cross-monitor Selection and transparent gap output;
 - SelectionLocked adjustment;
 - accepted state graph;
@@ -75,7 +75,7 @@ Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not
 | `FR-004` | Disabled takeover or application exit does not intercept PrintScreen. | Existing resident lifecycle／Windows registration-release implementation and packaged runtime evidence remain valid; late events after exit are ignored by deterministic tests. | `Conforms` | Preserve release and exit ownership. |
 | `FR-005` | In-app capture is secondary. | Start Capture now creates `SecondaryInAppCommand` and uses the same Core request boundary as PrintScreen; current-HEAD packaged runtime observed Start Capture first and PrintScreen first both entering the same accepted／Busy boundary. It intentionally stops at `CaptureRequested` and does not call `BeginCaptureAsync`. | `Partial` | Keep it secondary while implementing the later capture stages. |
 | `FR-046`–`FR-047` | MainWindow `X` and explicit Exit terminate、release takeover and do not hide to tray. | MainWindow `Closed` calls the resident exit boundary before `Environment.Exit(0)`; no tray surface exists; deterministic exit／Dispose tests and current-HEAD packaged runtime process／cleanup checks passed. | `Conforms` | Preserve direct process exit and release ordering. |
-| `FR-006`–`FR-010` | Freeze and present all supported displays、crosshair、cross-monitor Selection and mask. | Platform-neutral capacity、Virtual Desktop、per-display frame ownership and pre-Selection freezing boundary exist; Windows topology／per-display WGC integration is statically implemented with deterministic tests, but no real multi-display runtime or UI presentation. | `Partial` | Run authorized real topology／WGC verification, then add later presentation／Selection slices. |
+| `FR-006`–`FR-010` | Freeze and present all supported displays、crosshair、cross-monitor Selection and mask. | Current Owner Reference topology、physical bounds／DPI、capacity and real per-display WGC complete frame-set acquisition are verified from the dedicated Interactive test; Frozen Canvas presentation、mask、Crosshair and Selection are not implemented. | `Partial` | Add the later presentation／Crosshair／Selection slices; keep `Freezing → Selecting` unimplemented here. |
 | `FR-011` | Mouse release locks Selection and creates no output. | Release invokes crop／Clipboard. | `Incorrect` | Replace with `SelectionLocked → Editing`. |
 | `FR-012` | Locked Selection supports pointer move、edge／corner resize and reselection. | Not present. | `Missing` | Implement Selection revisions and pointer handles. |
 | `FR-048` | Non-display gap pixels are transparent. | No multi-display composition or gap tests. | `Missing` | Compose gaps as BGRA alpha `0`. |
@@ -102,21 +102,21 @@ Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not
 | --- | --- | --- | --- | --- |
 | `NFR-001`–`NFR-003` | p95 capture、pointer interaction、output、progress and memory targets. | Async foundations exist; no accepted harness or evidence. | `Missing／Partial` | Add timers、30-run reporting and memory scenarios. |
 | `NFR-004`–`NFR-008` | Stable Session and output integrity. | Immutable platform-neutral Session context、per-display frame set ownership、partial-failure cleanup and idempotent disposal have deterministic synthetic evidence; later output obligations remain. | `Partial` | Preserve ownership through Selection、render and output slices. |
-| `NFR-009`–`NFR-013` | Cross-display correctness、four-4K capacity and typed over-limit failure. | Four-4K policy、negative／mixed-DPI／irregular-gap snapshots、Windows topology mapping、per-display frame lifecycle、typed integration outcomes and cleanup have deterministic evidence; real Windows topology／WGC and stale-display runtime behavior remain unverified. | `Partial` | Run authorized real three-display topology／WGC verification, then continue later coordinate／Selection work. |
+| `NFR-009`–`NFR-013` | Cross-display correctness、four-4K capacity and typed over-limit failure. | Four-4K policy、negative／mixed-DPI／irregular-gap snapshots、Windows topology mapping、current Owner Reference per-display WGC frame lifecycle and repeated-session cleanup are verified; topology-change runtime and stable cancellation interruption remain unverified. | `Partial` | Preserve the verified freezing boundary, then implement later coordinate／Presentation／Selection work. |
 | `NFR-014`–`NFR-019` | Familiar interaction、silent success、progress and retained-error feedback. | One-display mask exists; immediate output and visible success conflict. | `Partial／Incorrect` | Implement Editing、300 ms progress and feedback. |
 | `NFR-020`–`NFR-023` | Focus and exit behavior. | Direct exit and takeover release path are statically implemented; deterministic lifecycle tests and current-HEAD packaged runtime process／release checks passed. Focus restoration belongs to a later slice. | `Partial` | Preserve exit／release; add focus restoration in the later capture slice. |
 | `NFR-024`–`NFR-028` | Privacy and verification boundaries. | Local-only and synthetic-evidence boundaries exist. | `Conforms` | Preserve. |
 | `NFR-029`–`NFR-031` | Accessible names、Esc cancellation and non-color-only state. | Accepted controls do not exist. | `Missing／Partial` | Implement only accepted baseline accessibility; do not add deferred shortcut workflow. |
 | `NFR-032`–`NFR-036` | Maintainability and traceability. | Canonical documents、single `WorkflowStateAuthority`、platform-neutral request／freezing boundary and deterministic capacity／session／ownership tests exist; full later state graph remains unimplemented. | `Conforms／Partial` | Trace every corrected slice and preserve COMP-001 ownership. |
-| `NFR-037`–`NFR-039` | Windows v1 four-4K envelope and deferred compatibility. | Platform-neutral four-4K policy and Windows topology／multi-display WGC integration are implemented and tested deterministically; real Windows topology／WGC verification is pending. | `Partial` | Run the separately authorized Windows runtime verification within the policy. |
+| `NFR-037`–`NFR-039` | Windows v1 four-4K envelope and deferred compatibility. | Platform-neutral four-4K policy and Windows topology／multi-display WGC integration are implemented; current Owner Reference three-display topology and real WGC freezing passed, while four-display runtime and topology-change runtime remain unverified. | `Partial` | Preserve the verified Owner Reference result and keep broader envelope verification separate. |
 
 ## 6. Code Classification
 
 | Current asset | Classification | Disposition |
 | --- | --- | --- |
 | One-display `WindowsGraphicsCaptureAdapter` | `Partial` reusable foundation | Retained for legacy `ICaptureService`; now also supports one-display prepare／start／first-frame ownership under the four-4K multi-display orchestrator. |
-| `WindowsDisplayTopologyProvider`／`WindowsDisplayTopologyMapper` | `Partial` implementation foundation | Maps Windows physical display data to platform-neutral snapshots with DPI、orientation、negative coordinates、mirror dedupe and deterministic coordinate versions; real topology runtime remains pending. |
-| `WindowsFrozenDisplayFrameSetProvider`／`WindowsDisplayCaptureAdapterFactory` | `Partial` implementation foundation | Creates one adapter per display after Core capacity validation, prepares all, starts all, collects first frames in parallel and cleans every partial resource; runtime WGC evidence remains pending. |
+| `WindowsDisplayTopologyProvider`／`WindowsDisplayTopologyMapper` | `Conforms` for current Owner Reference topology integration | Maps Windows physical display data to platform-neutral snapshots with DPI、orientation、negative coordinates、mirror dedupe and deterministic coordinate versions; current Owner Reference three-display runtime verified. |
+| `WindowsFrozenDisplayFrameSetProvider`／`WindowsDisplayCaptureAdapterFactory` | `Conforms` for current Owner Reference freezing integration | Creates one adapter per display after Core capacity validation, prepares all, starts all, collects first frames in parallel and cleans every partial resource; current Owner Reference real WGC frame-set acquisition and three-session re-entry verified. |
 | `FrozenCaptureFrame` | `Partial` reusable foundation | Evolve into Session-owned per-display frames. |
 | `CoordinateMapper` | `Partial` reusable foundation | Add Virtual Desktop intersections、mixed-DPI mapping and transparent gaps. |
 | One-display mask | `Partial` reusable behavior | Preserve clear-inside／dim-outside semantics. |
@@ -130,14 +130,14 @@ Keyboard-only Annotation and non-PrintScreen shortcuts are deferred and must not
 | `WindowsPrintScreenTakeover` | `Conforms` for the first resident lifecycle／takeover slice | Added Win32 registration／release and HWND message boundary; deterministic adapter tests and current-HEAD packaged runtime registration／release evidence passed. |
 | `CaptureRequest`／`CaptureRequestCoordinator`／application boundary | `Partial` for the second request-boundary slice | PrintScreen and `SecondaryInAppCommand` share one platform-neutral Core boundary; COMP-001 starts at `ResidentReady` and accepts only `ResidentReady → CaptureRequested`. Current-HEAD packaged runtime confirmed accepted first request、Busy rejection、restart reset and no Freezing／Capture side effect. Continue with the later capture slice. |
 | `SupportedCapacityPolicy`、`VirtualDesktopSnapshot`、`DisplaySnapshot` | `Conforms` for the third-slice platform-neutral foundation | Four-4K source、Virtual Desktop、Selection allocation limits、negative coordinates、mixed DPI、irregular gaps and typed over-limit outcomes are implemented with synthetic contract evidence. | Preserve limits and validate again before later Selection／render allocation. |
-| `CaptureSessionContext`、`FrozenDisplayFrame`、`FrozenDisplayFrameSet` | `Conforms` for the third-slice ownership foundation | One Session identity、RequestedAt、coordinate version、capacity result、cancellation and per-display immutable frame ownership are enforced; duplicate／missing／unknown／mismatched frames and partial cleanup are deterministic-tested. | Carry the same Session and frame set into later Selection and render; no real WGC evidence yet. |
-| `CaptureFreezingCoordinator` | `Partial` for the third／fourth freezing slices | Only the active accepted request can create one Session and request `CaptureRequested → Freezing`; capacity is checked before the all-display provider, complete frame-set attachment and cleanup outcomes are tested. No `Freezing → Selecting`, UI or product-entry auto-start is wired. | Run authorized Windows runtime verification, then add later display presentation／Selection slices without changing COMP-001 ownership. |
+| `CaptureSessionContext`、`FrozenDisplayFrame`、`FrozenDisplayFrameSet` | `Conforms` for the third-slice ownership foundation | One Session identity、RequestedAt、coordinate version、capacity result、cancellation and per-display immutable frame ownership are enforced; duplicate／missing／unknown／mismatched frames and partial cleanup are deterministic-tested, with current Owner Reference real frame-set metadata evidence. | Carry the same Session and frame set into later Selection and render. |
+| `CaptureFreezingCoordinator` | `Partial` for the third／fourth freezing slices | Only the active accepted request can create one Session and request `CaptureRequested → Freezing`; capacity is checked before the all-display provider, complete frame-set attachment and cleanup outcomes are tested, with current Owner Reference provider/WGC runtime evidence. No `Freezing → Selecting`, UI or product-entry auto-start is wired. | Add later display presentation／Selection slices without changing COMP-001 ownership; keep topology-change runtime separate. |
 
 ## 7. Required Correction Order
 
 1. Resident lifecycle、direct MainWindow exit and takeover setting — current-HEAD packaged runtime verification passed; preserve this boundary.
 2. PrintScreen entry integrated with `COMP-001` through `ResidentReady → CaptureRequested` — static implementation、deterministic tests and current-HEAD packaged runtime verification passed; preserve this boundary while continuing through the third-slice Freezing foundation.
-3. Four-4K capacity policy、Frozen Virtual Desktop context、per-display frame ownership、Windows topology／per-display WGC freezing integration and `CaptureRequested → Freezing` foundation — static implementation and deterministic non-interactive evidence passed; real Windows multi-display runtime remains pending.
+3. Four-4K capacity policy、Frozen Virtual Desktop context、per-display frame ownership、Windows topology／per-display WGC freezing integration and `CaptureRequested → Freezing` foundation — static implementation、deterministic non-interactive evidence and current Owner Reference three-display runtime passed; cancellation interruption remains inconclusive and topology-change runtime remains pending.
 4. All-display presentation、crosshair and cross-monitor initial Selection.
 5. Locked Selection、pointer move、edge／corner resize and reselection.
 6. Accepted workflow state graph.
@@ -168,4 +168,4 @@ No current v1 behavior is `Blocked by product decision`.
 
 ## 9. Final Conclusion
 
-The first resident lifecycle／PrintScreen takeover coding slice remains conforming with static implementation、contract tests、locked restore、Release x64 build、passing non-interactive verification and current-HEAD packaged Windows Runtime evidence. The second request-boundary slice has static implementation and current-HEAD packaged runtime evidence: PrintScreen and the secondary in-app command enter the sole `COMP-001` authority at `ResidentReady → CaptureRequested`. The third and fourth slices now provide the platform-neutral four-4K capacity、Frozen Virtual Desktop、Capture Session、per-display frame ownership、Windows topology mapping and per-display WGC freezing integration with 83 passing non-interactive tests and limited formatting verification. No `Freezing → Selecting`、real three-display topology／WGC runtime、Frozen Canvas、Crosshair or later Capture workflow is claimed; the remaining v1 conformance order is unchanged.
+The first resident lifecycle／PrintScreen takeover coding slice remains conforming with static implementation、contract tests、locked restore、Release x64 build、passing non-interactive verification and current-HEAD packaged Windows Runtime evidence. The second request-boundary slice has static implementation and current-HEAD packaged runtime evidence: PrintScreen and the secondary in-app command enter the sole `COMP-001` authority at `ResidentReady → CaptureRequested`. The third and fourth slices now provide the platform-neutral four-4K capacity、Frozen Virtual Desktop、Capture Session、per-display frame ownership、Windows topology mapping and per-display WGC freezing integration; current Owner Reference three-display physical topology and real per-display WGC freezing passed with 83 passing non-interactive tests and limited formatting verification. Cancellation interruption is inconclusive on this fast hardware and topology-change runtime remains unverified. No `Freezing → Selecting`、Frozen Canvas、Crosshair or later Capture workflow is claimed; the remaining v1 conformance order is unchanged.
