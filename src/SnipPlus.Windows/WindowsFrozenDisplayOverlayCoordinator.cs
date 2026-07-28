@@ -65,11 +65,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
 
             try
             {
-                foreach (var surface in surfaces)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    surface.Show();
-                }
+                cancellationToken.ThrowIfCancellationRequested();
+                OverlaySurface.ShowAll(surfaces);
             }
             catch (OperationCanceledException)
             {
@@ -197,6 +194,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
         private const int GwlExStyle = -20;
         private const nint WsExAppWindow = 0x00040000;
         private const nint WsExToolWindow = 0x00000080;
+        private const uint SwpNoSize = 0x0001;
+        private const uint SwpNoMove = 0x0002;
+        private const uint SwpNoZOrder = 0x0004;
+        private const uint SwpNoActivate = 0x0010;
+        private const uint SwpShowWindow = 0x0040;
         private const int OverlayMaskAlpha = 0x99;
 
         private readonly FrozenDisplayOverlayDescriptor _descriptor;
@@ -219,6 +221,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
         private readonly Line _crosshairHorizontal = CreateCrosshairLine();
         private readonly Line _crosshairVertical = CreateCrosshairLine();
         private AppWindow? _appWindow;
+        private nint _handle;
         private double _rasterizationScale = 1;
         private bool _disposed;
 
@@ -256,6 +259,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             {
                 throw new InvalidOperationException("The overlay window handle is unavailable.");
             }
+
+            _handle = handle;
 
             _appWindow = AppWindow.GetFromWindowId(
                 Win32Interop.GetWindowIdFromWindow(handle));
@@ -303,10 +308,61 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             }
         }
 
-        public void Show()
+        public static void ShowAll(IReadOnlyList<OverlaySurface> surfaces)
         {
-            ObjectDisposedException.ThrowIf(_disposed, nameof(OverlaySurface));
-            _appWindow?.Show();
+            ArgumentNullException.ThrowIfNull(surfaces);
+            if (surfaces.Count == 0)
+            {
+                return;
+            }
+
+            var deferredPosition = BeginDeferWindowPos(surfaces.Count);
+            if (deferredPosition == 0)
+            {
+                throw new InvalidOperationException(
+                    "The overlay windows could not be prepared for an atomic show.");
+            }
+
+            try
+            {
+                foreach (var surface in surfaces)
+                {
+                    ObjectDisposedException.ThrowIf(surface._disposed, nameof(OverlaySurface));
+                    deferredPosition = DeferWindowPos(
+                        deferredPosition,
+                        surface._handle,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SwpNoSize
+                            | SwpNoMove
+                            | SwpNoZOrder
+                            | SwpNoActivate
+                            | SwpShowWindow);
+                    if (deferredPosition == 0)
+                    {
+                        throw new InvalidOperationException(
+                            "The overlay windows could not be staged for an atomic show.");
+                    }
+                }
+
+                if (!EndDeferWindowPos(deferredPosition))
+                {
+                    throw new InvalidOperationException(
+                        "The overlay windows could not be shown as one batch.");
+                }
+
+                deferredPosition = 0;
+            }
+            finally
+            {
+                if (deferredPosition != 0)
+                {
+                    _ = EndDeferWindowPos(deferredPosition);
+                }
+            }
         }
 
         public void ApplySelection(SelectionVisualState state)
@@ -546,6 +602,24 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
 
         [DllImport("user32.dll")]
         private static extern nint SetThreadDpiAwarenessContext(nint dpiContext);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern nint BeginDeferWindowPos(int numberOfWindows);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern nint DeferWindowPos(
+            nint hWinPosInfo,
+            nint hWnd,
+            nint hWndInsertAfter,
+            int x,
+            int y,
+            int cx,
+            int cy,
+            uint uFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool EndDeferWindowPos(nint hWinPosInfo);
 
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
         private static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
