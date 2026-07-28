@@ -416,10 +416,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             var pointer = state.CurrentPhysicalPoint;
             var crosshairX = width / 2;
             var crosshairY = height / 2;
+            var pointerIsOnThisDisplay = false;
             if (pointer is PhysicalPoint current
                 && _descriptor.PhysicalBoundsInVirtualDesktop.Contains(
                     new PhysicalRect(current.X, current.Y, current.X + 1, current.Y + 1)))
             {
+                pointerIsOnThisDisplay = true;
                 crosshairX = (current.X - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
                     / _rasterizationScale;
                 crosshairY = (current.Y - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
@@ -434,6 +436,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             _crosshairVertical.X2 = crosshairX;
             _crosshairVertical.Y1 = 0;
             _crosshairVertical.Y2 = height;
+            _crosshairHorizontal.Visibility = pointerIsOnThisDisplay
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            _crosshairVertical.Visibility = pointerIsOnThisDisplay
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
         public void Dispose()
