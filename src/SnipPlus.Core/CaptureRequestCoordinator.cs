@@ -102,7 +102,7 @@ public sealed class CaptureRequestCoordinator : ICaptureRequestBoundary, IDispos
             return CaptureRequestResult.Accepted(
                 request,
                 transition.CurrentState,
-                "Capture request accepted. Freezing is not implemented in this slice.");
+                "Capture request accepted.");
         }
     }
 

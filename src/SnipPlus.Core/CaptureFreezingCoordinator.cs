@@ -41,6 +41,23 @@ public sealed class CaptureFreezingCoordinator : IFreezingBoundary, IDisposable
         }
     }
 
+    public WorkflowStateAuthority StateAuthority => _stateAuthority;
+
+    public bool ReleaseSession(CaptureSessionContext session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_activeSession, session))
+            {
+                return false;
+            }
+
+            _activeSession = null;
+            return true;
+        }
+    }
+
     public async ValueTask<CaptureFreezingOutcome> BeginFreezingAsync(
         CaptureRequest request,
         CancellationToken cancellationToken)

@@ -5,15 +5,16 @@ public enum WorkflowState
     ResidentReady,
     CaptureRequested,
     Freezing,
+    Selecting,
+    SelectionLocked,
+    Cancelled,
+    Failed,
     Idle,
     Starting,
-    Selecting,
     Capturing,
     ResultReady,
     Delivering,
-    Completed,
-    Cancelled,
-    Failed
+    Completed
 }
 
 public enum CaptureRequestSource

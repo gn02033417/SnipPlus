@@ -36,6 +36,17 @@ public readonly record struct PhysicalRect(int Left, int Top, int Right, int Bot
         && other.Top >= Top
         && other.Right <= Right
         && other.Bottom <= Bottom;
+
+    public bool Intersects(PhysicalRect other) => Left < other.Right
+        && other.Left < Right
+        && Top < other.Bottom
+        && other.Top < Bottom;
+
+    public PhysicalRect Intersection(PhysicalRect other) => new(
+        Math.Max(Left, other.Left),
+        Math.Max(Top, other.Top),
+        Math.Min(Right, other.Right),
+        Math.Min(Bottom, other.Bottom));
 }
 
 public sealed record DisplayContextSnapshot(
