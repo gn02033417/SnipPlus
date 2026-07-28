@@ -135,6 +135,15 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 - 本 Slice 19 個 C# 檔案的限定範圍 `dotnet format --verify-no-changes --no-restore --include ...` 通過，`git diff --check` 通過；未修正全 Repository 的既有 formatting baseline。
 - 本 Slice 尚未執行 packaged Windows Overlay／Frozen Canvas／Crosshair／Selection runtime、真實 pointer interaction 或 topology-change runtime；未啟動 SnipPlus GUI、Paint、Notepad、Snipping Tool 或其他外部 GUI，亦未執行 Interactive／Manual tests。
 
+### Windows Runtime Verification — Fifth Slice Blocked by Capture Access (2026-07-28)
+
+- 以目前工作樹建立並部署 x64 Development MSIX；Identity `SnipPlus.App`、Version `1.0.0.0` 未變更。安裝後 manifest 實際包含 `uap11:Capability Name="graphicsCaptureProgrammatic"` 與 `runFullTrust`，簽章驗證成功。
+- 修正 packaged WGC compatibility issue：`graphicsCaptureProgrammatic` 原先誤放在 `rescap:Capability`，已改為 Windows manifest schema 要求的 `uap11:Capability`；保留 `GraphicsCaptureAccess.RequestAccessAsync(Programmatic)` preflight，並在 MainWindow 隱藏前執行。
+- Locked restore 成功；Release x64 build 成功，0 warnings、0 errors；非互動測試 94/94 通過，0 失敗、0 略過；本 Slice C# 窄範圍 `dotnet format --verify-no-changes --no-restore --include ...` 通過。
+- Windows 11 x64 build `26200`、Owner Reference 三螢幕環境中，clean packaged Start Capture 在 WGC preflight 明確回報 `DeniedByUser`；MainWindow 未被隱藏，沒有建立 overlay、Frozen Canvas、Crosshair、Frozen frame set 或 Selection。實際 PrintScreen 嘗試也未形成可觀察 overlay，最後狀態為 bounded preflight `TimeoutException`；不能標示 WGC frame、Overlay 或 Selection runtime 通過。
+- 未啟動 Paint、Notepad、Snipping Tool 或其他外部 GUI；未保存真實桌面截圖、frozen frame 或 Clipboard payload。測試後 `SnipPlus.App` process 已清理。
+- 第五個 Slice 仍為 `Partial／Runtime blocked by DeniedByUser`；未開始第六個 Slice，也未進入 Selection adjustment、Function Bar、Annotation、Clipboard、PNG 或其他後續功能。
+
 ### Windows Runtime Verification — Blocked (2026-07-27)
 
 - Windows 11 x64、三個顯示器環境；只啟動已存在的 SnipPlus packaged runtime，未啟動外部 GUI。
