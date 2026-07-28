@@ -155,6 +155,7 @@ public sealed class WindowsGraphicsCapturePlatformTests
         Assert.IsTrue(firstSnapshot.Displays.All(display => display.PhysicalBoundsInVirtualDesktop.IsPositive));
         Assert.IsTrue(firstSnapshot.Displays.All(display => firstSnapshot.VirtualPhysicalBounds.Contains(display.PhysicalBoundsInVirtualDesktop)));
         Assert.IsFalse(string.IsNullOrWhiteSpace(firstSnapshot.CoordinateVersion));
+        Assert.AreEqual(1, firstSnapshot.Displays.Count(IsPrimaryDisplay));
 
         var secondSnapshot = await GetRuntimeSnapshotAsync(topologyProvider);
         Assert.AreEqual(firstSnapshot.CoordinateVersion, secondSnapshot.CoordinateVersion);
@@ -388,7 +389,7 @@ public sealed class WindowsGraphicsCapturePlatformTests
                 $"{SafeDisplayLabel(display.DisplayId)}; "
                 + $"Bounds={FormatBounds(display.PhysicalBoundsInVirtualDesktop)}; "
                 + $"Dpi={display.DpiScaleX:F2}x{display.DpiScaleY:F2}; "
-                + $"Orientation={display.RotationOrOrientation}");
+                + $"Orientation={display.RotationOrOrientation}; Primary={IsPrimaryDisplay(display)}");
         }
     }
 
@@ -410,6 +411,23 @@ public sealed class WindowsGraphicsCapturePlatformTests
         displayId.StartsWith("display:", StringComparison.Ordinal)
             ? $"display-{displayId["display:".Length..]}"
             : "display-unknown";
+
+    private static bool IsPrimaryDisplay(DisplaySnapshot display)
+    {
+        const string prefix = "display:";
+        if (!display.DisplayId.StartsWith(prefix, StringComparison.Ordinal)
+            || !ulong.TryParse(
+                display.DisplayId[prefix.Length..],
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var displayId))
+        {
+            Assert.Fail($"The topology display identity is not a Windows display id: {display.DisplayId}");
+            return false;
+        }
+
+        return DisplayArea.GetFromDisplayId(new global::Microsoft.UI.DisplayId(displayId)).IsPrimary;
+    }
 
     private static string FormatBounds(PhysicalRect bounds) =>
         $"{bounds.Left},{bounds.Top}..{bounds.Right},{bounds.Bottom}";
