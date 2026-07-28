@@ -192,6 +192,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
     {
         private const int PerMonitorAwareV2 = -4;
         private const int GwlExStyle = -20;
+        private const int SwHide = 0;
         private const nint WsExAppWindow = 0x00040000;
         private const nint WsExToolWindow = 0x00000080;
         private const uint SwpNoSize = 0x0001;
@@ -261,6 +262,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             }
 
             _handle = handle;
+            _ = ShowWindow(handle, SwHide);
 
             _appWindow = AppWindow.GetFromWindowId(
                 Win32Interop.GetWindowIdFromWindow(handle));
@@ -602,6 +604,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
 
         [DllImport("user32.dll")]
         private static extern nint SetThreadDpiAwarenessContext(nint dpiContext);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(nint hWnd, int command);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern nint BeginDeferWindowPos(int numberOfWindows);
