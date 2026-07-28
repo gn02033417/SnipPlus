@@ -107,8 +107,8 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 
 - Runtime 從 clean fix commit `369281c73606a073fe9acaed6f1678eefade9972` 的 `SnipPlus.Windows.Tests` test host 執行；Windows App Runtime 2.3 bootstrap 成功。未經 MainWindow、未啟動 SnipPlus GUI、Paint、Notepad 或 Snipping Tool，亦未保存桌面像素、截圖或 Clipboard payload。
 - Windows 11 x64 build `26200` 實際辨識 3 個 displays；Virtual Desktop bounds 為 `(-2560,0)–(2560,2520)`，保留負座標，`GapPolicy=Transparent`，連續 topology snapshot 的 `CoordinateVersion` 穩定。
-- Owner Reference topology 實際解析為兩個 `2560×1440`、DPI `1.00×1.00` 的 displays，以及下方 `1920×1080`、DPI `1.50×1.50`、`LandscapeFlipped` 的 display；下方螢幕未再被誤判為 `1280×720` logical size。Capacity 為 `Supported`，Total Source Pixels 為 `9,446,400`。
-- 真實 per-display WGC frame acquisition 通過：每個 session 取得完整 3-frame set，frame 數量／Display bounds／pixel size／SessionId／CoordinateVersion 一致；每個 frame 為 BGRA8、Premultiplied、sRGB SDR、`CursorIncluded=false`，不建立 giant bitmap、不 crop、不寫入 Clipboard、不建立 PNG。3 個獨立 session 均成功，CapturedAt 最大差分別為約 `0.01 ms`、`31.29 ms`、`36.45 ms`。
+- Owner Reference topology 實際解析為 primary `2560×1440`、DPI `1.00×1.00`，左側 `2560×1440`、DPI `1.00×1.00`，以及下方 `1920×1080`、DPI `1.50×1.50`、`LandscapeFlipped` 的 display；下方螢幕未再被誤判為 `1280×720` logical size。Capacity 為 `Supported`，Total Source Pixels 為 `9,446,400`。
+- 真實 per-display WGC frame acquisition 通過：每個 session 取得完整 3-frame set，frame 數量／Display bounds／pixel size／SessionId／CoordinateVersion 一致；每個 frame 為 BGRA8、Premultiplied、sRGB SDR、`CursorIncluded=false`，不建立 giant bitmap、不 crop、不寫入 Clipboard、不建立 PNG。3 個獨立 session 均成功，CapturedAt 最大差分別為約 `47.57 ms`、`18.21 ms`、`33.49 ms`。
 - Runtime 發現並修正兩個第四個 Slice 相容性問題：WinRT `DisplayArea.FindAll()` collection 改用 index access 避免 test host 的 `InvalidCastException (0x80004002)`；topology enumeration 暫時切換至 per-monitor DPI-aware context 後還原，取得正確 physical bounds／DPI。
 - 真實 cancellation 在本機硬體於 `250 ms` 取消前已完成 frame acquisition，依規則記錄為 `Inconclusive`；deterministic cancellation／cleanup tests 仍保留。未進入 `Selecting`，未顯示 Frozen Canvas／Overlay／Crosshair／Selection。
 - 修正後 Release x64 build 為 `0 warnings、0 errors`；非互動測試 `83/83` 通過、`0` 失敗、`0` 略過；兩個本 Slice C# 檔案限定範圍 `dotnet format --verify-no-changes` 通過。
