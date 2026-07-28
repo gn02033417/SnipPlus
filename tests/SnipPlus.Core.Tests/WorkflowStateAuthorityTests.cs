@@ -34,7 +34,7 @@ public sealed class WorkflowStateAuthorityTests
 
     [TestMethod]
     [TestCategory("Unit")]
-    public void CaptureRequestedCanEnterFreezingButCannotEnterLaterWorkflowStatesInThisSlice()
+    public void FreezingCanEnterSelectingAndSelectionLockedThroughTheSingleAuthority()
     {
         var authority = new WorkflowStateAuthority();
         Assert.IsTrue(authority.RequestTransition(new(
@@ -50,25 +50,56 @@ public sealed class WorkflowStateAuthorityTests
         Assert.IsTrue(freezing.IsSuccess);
         Assert.AreEqual(WorkflowState.Freezing, authority.CurrentState);
 
-        foreach (var laterState in new[]
-                 {
-                     WorkflowState.Selecting,
-                     WorkflowState.Capturing,
-                     WorkflowState.ResultReady,
-                     WorkflowState.Delivering,
-                     WorkflowState.Completed
-                 })
-        {
-            var result = authority.RequestTransition(new(
-                WorkflowState.Freezing,
-                laterState,
-                "not implemented in this slice"));
+        var selecting = authority.RequestTransition(new(
+            WorkflowState.Freezing,
+            WorkflowState.Selecting,
+            "frozen-frame-set-ready"));
+        Assert.IsTrue(selecting.IsSuccess);
 
-            Assert.IsFalse(result.IsSuccess, $"Unexpected transition to {laterState}.");
-            Assert.AreEqual(WorkflowState.Freezing, authority.CurrentState);
-        }
+        var locked = authority.RequestTransition(new(
+            WorkflowState.Selecting,
+            WorkflowState.SelectionLocked,
+            "valid-pointer-release"));
+        Assert.IsTrue(locked.IsSuccess);
+        Assert.AreEqual(WorkflowState.SelectionLocked, authority.CurrentState);
 
-        Assert.AreEqual(2, authority.SuccessfulTransitionCount);
+        var outputState = authority.RequestTransition(new(
+            WorkflowState.SelectionLocked,
+            WorkflowState.Capturing,
+            "output-is-out-of-scope"));
+        Assert.IsFalse(outputState.IsSuccess);
+        Assert.AreEqual(WorkflowState.SelectionLocked, authority.CurrentState);
+        Assert.AreEqual(4, authority.SuccessfulTransitionCount);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public void CancellationReturnsToResidentReadyWithoutAllowingOutputStates()
+    {
+        var authority = new WorkflowStateAuthority();
+
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.ResidentReady,
+            WorkflowState.CaptureRequested,
+            "test")).IsSuccess);
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.CaptureRequested,
+            WorkflowState.Freezing,
+            "test")).IsSuccess);
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.Freezing,
+            WorkflowState.Selecting,
+            "test")).IsSuccess);
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.Selecting,
+            WorkflowState.Cancelled,
+            "escape")).IsSuccess);
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.Cancelled,
+            WorkflowState.ResidentReady,
+            "cleanup")).IsSuccess);
+
+        Assert.AreEqual(WorkflowState.ResidentReady, authority.CurrentState);
     }
 
     [TestMethod]
