@@ -74,6 +74,23 @@ public sealed class InitialSelectionCoordinatorTests
         Assert.AreEqual(revision, selection.State.SelectionRevision);
     }
 
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void IdlePointerMovementDoesNotMutateSelectionState()
+    {
+        using var session = CreateSession();
+        using var selection = new InitialSelectionCoordinator(session);
+        var initial = selection.State;
+
+        var moved = selection.PointerMoved(Input(session, 2, 1));
+
+        Assert.AreEqual(SelectionInputResultKind.Ignored, moved.Kind);
+        Assert.AreEqual(SelectionStatus.None, moved.State.Status);
+        Assert.AreEqual(initial.SelectionRevision, moved.State.SelectionRevision);
+        Assert.AreEqual(initial, selection.State);
+    }
+
     private static SelectionPointerEvent Input(
         CaptureSessionContext session,
         int x,

@@ -1,5 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -207,7 +208,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
         private readonly Window _window = new();
         private readonly Grid _root = new();
         private readonly Image _image = new();
-        private readonly Canvas _canvas = new();
+        private readonly CrosshairCanvas _canvas = new();
         private readonly Rectangle _maskTop = CreateMask();
         private readonly Rectangle _maskLeft = CreateMask();
         private readonly Rectangle _maskRight = CreateMask();
@@ -219,8 +220,6 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             StrokeThickness = 2,
             Visibility = Visibility.Collapsed
         };
-        private readonly Line _crosshairHorizontal = CreateCrosshairLine();
-        private readonly Line _crosshairVertical = CreateCrosshairLine();
         private AppWindow? _appWindow;
         private nint _handle;
         private double _rasterizationScale = 1;
@@ -235,6 +234,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             _image.Stretch = Stretch.Fill;
             _canvas.IsTabStop = true;
             _canvas.Background = new SolidColorBrush(ColorHelper.FromArgb(0, 0, 0, 0));
+            _canvas.Cursor = InputSystemCursor.Create(InputSystemCursorShape.Cross);
             _canvas.PointerPressed += OnPointerPressed;
             _canvas.PointerMoved += OnPointerMoved;
             _canvas.PointerReleased += OnPointerReleased;
@@ -246,8 +246,6 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             _canvas.Children.Add(_maskRight);
             _canvas.Children.Add(_maskBottom);
             _canvas.Children.Add(_selectionBorder);
-            _canvas.Children.Add(_crosshairHorizontal);
-            _canvas.Children.Add(_crosshairVertical);
         }
 
         public async ValueTask InitializeAsync(CancellationToken cancellationToken)
@@ -413,35 +411,6 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
                     : Visibility.Collapsed;
             }
 
-            var pointer = state.CurrentPhysicalPoint;
-            var crosshairX = width / 2;
-            var crosshairY = height / 2;
-            var pointerIsOnThisDisplay = false;
-            if (pointer is PhysicalPoint current
-                && _descriptor.PhysicalBoundsInVirtualDesktop.Contains(
-                    new PhysicalRect(current.X, current.Y, current.X + 1, current.Y + 1)))
-            {
-                pointerIsOnThisDisplay = true;
-                crosshairX = (current.X - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
-                    / _rasterizationScale;
-                crosshairY = (current.Y - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
-                    / _rasterizationScale;
-            }
-
-            _crosshairHorizontal.X1 = 0;
-            _crosshairHorizontal.X2 = width;
-            _crosshairHorizontal.Y1 = crosshairY;
-            _crosshairHorizontal.Y2 = crosshairY;
-            _crosshairVertical.X1 = crosshairX;
-            _crosshairVertical.X2 = crosshairX;
-            _crosshairVertical.Y1 = 0;
-            _crosshairVertical.Y2 = height;
-            _crosshairHorizontal.Visibility = pointerIsOnThisDisplay
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-            _crosshairVertical.Visibility = pointerIsOnThisDisplay
-                ? Visibility.Visible
-                : Visibility.Collapsed;
         }
 
         public void Dispose()
@@ -456,6 +425,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             _canvas.PointerMoved -= OnPointerMoved;
             _canvas.PointerReleased -= OnPointerReleased;
             _canvas.KeyDown -= OnKeyDown;
+            _canvas.Cursor = null;
             try
             {
                 _appWindow?.Hide();
@@ -561,12 +531,14 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
                 0))
         };
 
-        private static Line CreateCrosshairLine() => new()
+        private sealed class CrosshairCanvas : Canvas
         {
-            Stroke = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 255, 255)),
-            StrokeThickness = 1,
-            IsHitTestVisible = false
-        };
+            public InputCursor? Cursor
+            {
+                get => ProtectedCursor;
+                set => ProtectedCursor = value;
+            }
+        }
 
         private static void SetMask(
             Rectangle rectangle,
