@@ -63,7 +63,7 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 
 ### Current Conformance Status
 
-- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build、deterministic non-interactive tests 與目前 HEAD 的 packaged Windows Runtime verification 已完成並通過；第一個 Slice 可標示為 Conforms。第二個 slice 已完成 PrintScreen／secondary request 到 `COMP-001` 的 `ResidentReady → CaptureRequested` 靜態邊界，但後續 Capture workflow 尚未整合。
+- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build、deterministic non-interactive tests 與目前 HEAD 的 packaged Windows Runtime verification 已完成並通過；第一個 Slice 可標示為 Conforms。第二個 slice 已完成 PrintScreen／secondary request 到 `COMP-001` 的 `ResidentReady → CaptureRequested` 邊界。第三、第四個 slice 已完成四螢幕容量／Frozen Virtual Desktop、per-display frame ownership、Windows topology／WGC freezing integration，並以 Owner Reference 三螢幕完成 runtime verification。第五個 slice 已完成 Frozen Display Presentation 與 initial cross-monitor Selection 的靜態實作及 deterministic verification；真實 Overlay／Crosshair／Selection runtime 仍待另行授權。
 
 ### Verified — PrintScreen Capture Request Boundary Slice (2026-07-28)
 
@@ -124,6 +124,16 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 - E：在 `CaptureRequested` 狀態以 MainWindow `X` 關閉後，`SnipPlus.App` process 完全結束；重新啟動後設定仍為 disabled、狀態回到 resident ready，PrintScreen 沒有進入 SnipPlus boundary。
 - 已核對沒有 hidden SnipPlus resident process；由停用 PrintScreen 產生的 Windows `SnippingTool` process 也已清理。未保存真實桌面截圖或 Clipboard payload。
 - 部署期間發現同 Identity／Version 的舊 installed package 未被直接覆蓋；移除後重新安裝 current-HEAD package 並以 installed DLL hash 重新確認。未建立新 signing certificate；只使用既有本機開發憑證完成本機信任設定。
+
+### Verified — Frozen Display Presentation and Initial Selection Static Slice (2026-07-28)
+
+- 新增 platform-neutral presentation／selection contracts、`FrozenDisplayOverlayPlanBuilder`、`InitialSelectionCoordinator` 與 `CapturePresentationWorkflowCoordinator`；正式流程由 `CaptureRequested → Freezing` 接續 complete frozen frame set、all-display presentation、`Selecting`，並在有效 mouse release 後只經由 `COMP-001` 進入 `SelectionLocked`。
+- MainWindow 的 Start Capture 與 PrintScreen request boundary 接入同一個 presentation coordinator；MainWindow 在任何 frame acquisition 前先進入 capture-source exclusion／hide，hide 失敗不進入 capture。正常產品入口不再呼叫舊的 `BeginCaptureAsync`／`CompleteSelectionAsync`，也不啟動 Clipboard、PNG 或其他外部 GUI。
+- Windows overlay 以每個 display 一個 physical-bounds window 呈現自己的 frozen frame；所有 overlay surface 初始化完成前保持隱藏，使用 PMA V2、topmost／無 taskbar surface、dim-outside／clear-inside mask、全域 crosshair 與跨螢幕 normalized physical selection。沒有建立 giant bitmap 或變更 frozen frames。
+- Esc 在 `Freezing`、`Selecting`、`SelectionLocked` 進入取消清理；frame set、session、overlay 與 source exclusion 均具明確 cleanup／idempotence，完成後回到 `ResidentReady`，不自動重新顯示 MainWindow。
+- `dotnet restore SnipPlus.sln --locked-mode` 成功；Release x64 build 成功，0 warnings、0 errors；非互動測試 94/94 通過，0 失敗、0 略過。
+- 本 Slice 19 個 C# 檔案的限定範圍 `dotnet format --verify-no-changes --no-restore --include ...` 通過，`git diff --check` 通過；未修正全 Repository 的既有 formatting baseline。
+- 本 Slice 尚未執行 packaged Windows Overlay／Frozen Canvas／Crosshair／Selection runtime、真實 pointer interaction 或 topology-change runtime；未啟動 SnipPlus GUI、Paint、Notepad、Snipping Tool 或其他外部 GUI，亦未執行 Interactive／Manual tests。
 
 ### Windows Runtime Verification — Blocked (2026-07-27)
 
