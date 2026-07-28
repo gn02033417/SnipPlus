@@ -26,6 +26,7 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
     private readonly CaptureFreezingCoordinator _freezingCoordinator;
     private readonly IAllDisplayOverlayPresentationCoordinator _overlayCoordinator;
     private readonly ICaptureSourceExclusion? _captureSourceExclusion;
+    private readonly ICaptureAccessPreflight? _captureAccessPreflight;
     private CaptureSessionContext? _activeSession;
     private InitialSelectionCoordinator? _selectionCoordinator;
     private CancellationTokenSource? _sessionCancellation;
@@ -36,7 +37,8 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
     public CapturePresentationWorkflowCoordinator(
         CaptureFreezingCoordinator freezingCoordinator,
         IAllDisplayOverlayPresentationCoordinator overlayCoordinator,
-        ICaptureSourceExclusion? captureSourceExclusion = null)
+        ICaptureSourceExclusion? captureSourceExclusion = null,
+        ICaptureAccessPreflight? captureAccessPreflight = null)
     {
         _freezingCoordinator = freezingCoordinator
             ?? throw new ArgumentNullException(nameof(freezingCoordinator));
@@ -44,6 +46,7 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
         _overlayCoordinator = overlayCoordinator
             ?? throw new ArgumentNullException(nameof(overlayCoordinator));
         _captureSourceExclusion = captureSourceExclusion;
+        _captureAccessPreflight = captureAccessPreflight;
     }
 
     public WorkflowState CurrentState => _stateAuthority.CurrentState;
@@ -92,6 +95,36 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
         try
         {
             var token = sessionCancellation.Token;
+            if (_captureAccessPreflight is not null)
+            {
+                var access = await _captureAccessPreflight
+                    .EnsureAccessAsync(token)
+                    .ConfigureAwait(true);
+                if (access is not CaptureAccessPreflightOutcome.Allowed)
+                {
+                    return access switch
+                    {
+                        CaptureAccessPreflightOutcome.Cancelled cancelled =>
+                            await CancelCurrentAsync(cancelled.CancellationOrigin)
+                                .ConfigureAwait(true),
+                        CaptureAccessPreflightOutcome.Failed failed =>
+                            await FailBeforeSessionAsync(
+                                    request,
+                                    failed.Failure,
+                                    cancelled: false)
+                                .ConfigureAwait(true),
+                        _ => await FailBeforeSessionAsync(
+                                request,
+                                CreateFailure(
+                                    request,
+                                    FailureCode.CapturePermissionDenied,
+                                    "Capture access preflight returned an unknown outcome."),
+                                cancelled: false)
+                            .ConfigureAwait(true)
+                    };
+                }
+            }
+
             if (_captureSourceExclusion is not null)
             {
                 var exclusion = await _captureSourceExclusion
@@ -208,7 +241,7 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
             var failure = CreateFailure(
                 request,
                 FailureCode.UnexpectedFailure,
-                exception.GetType().Name,
+                $"{exception.GetType().Name}: {exception.Message}",
                 exception.HResult);
             return await FailCurrentAsync(failure).ConfigureAwait(true);
         }
@@ -480,9 +513,21 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
         cancellation?.Cancel();
         if (session is not null)
         {
-            await _overlayCoordinator
-                .CloseAsync(session.SessionId, CancellationToken.None)
-                .ConfigureAwait(true);
+            try
+            {
+                await _overlayCoordinator
+                    .CloseAsync(session.SessionId, CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+            catch (Exception cleanupException)
+            {
+                failure = failure with
+                {
+                    DiagnosticMessage = $"{failure.DiagnosticMessage}; cleanup {cleanupException.GetType().Name}: {cleanupException.Message}",
+                    NativeCode = failure.NativeCode ?? cleanupException.HResult
+                };
+            }
+
             _freezingCoordinator.ReleaseSession(session);
             session.MarkFailedAndDispose();
         }

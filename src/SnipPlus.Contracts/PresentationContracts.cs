@@ -144,3 +144,22 @@ public interface ICaptureSourceExclusion
         CaptureRequest request,
         CancellationToken cancellationToken);
 }
+
+public abstract record CaptureAccessPreflightOutcome
+{
+    private CaptureAccessPreflightOutcome()
+    {
+    }
+
+    public sealed record Allowed : CaptureAccessPreflightOutcome;
+
+    public sealed record Cancelled(string CancellationOrigin) : CaptureAccessPreflightOutcome;
+
+    public sealed record Failed(Failure Failure) : CaptureAccessPreflightOutcome;
+}
+
+public interface ICaptureAccessPreflight
+{
+    ValueTask<CaptureAccessPreflightOutcome> EnsureAccessAsync(
+        CancellationToken cancellationToken);
+}

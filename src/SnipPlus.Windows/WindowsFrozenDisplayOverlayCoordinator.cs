@@ -307,7 +307,6 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
         {
             ObjectDisposedException.ThrowIf(_disposed, nameof(OverlaySurface));
             _appWindow?.Show();
-            _canvas.Focus(FocusState.Programmatic);
         }
 
         public void ApplySelection(SelectionVisualState state)
@@ -391,10 +390,30 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             _canvas.PointerMoved -= OnPointerMoved;
             _canvas.PointerReleased -= OnPointerReleased;
             _canvas.KeyDown -= OnKeyDown;
-            _appWindow?.Hide();
-            _window.Close();
-            _image.Source = null;
-            _window.Content = null;
+            try
+            {
+                _appWindow?.Hide();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                _window.Close();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                _image.Source = null;
+                _window.Content = null;
+            }
+            catch
+            {
+            }
         }
 
         private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
@@ -404,6 +423,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
                 return;
             }
 
+            _canvas.Focus(FocusState.Pointer);
             var handle = WindowNative.GetWindowHandle(_window);
             _ = SetCapture(handle);
             _inputSink.PointerPressed(new SelectionPointerEvent(

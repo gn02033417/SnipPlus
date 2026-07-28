@@ -5,7 +5,10 @@ using Windows.Security.Authorization.AppCapabilityAccess;
 
 namespace SnipPlus.Windows;
 
-public sealed class WindowsDisplayCaptureAdapterFactory : IWindowsDisplayCaptureAdapterFactory, IDisposable
+public sealed class WindowsDisplayCaptureAdapterFactory :
+    IWindowsDisplayCaptureAdapterFactory,
+    ICaptureAccessPreflight,
+    IDisposable
 {
     private readonly CanvasDevice _canvasDevice;
     private readonly object _gate = new();
@@ -15,6 +18,63 @@ public sealed class WindowsDisplayCaptureAdapterFactory : IWindowsDisplayCapture
     public WindowsDisplayCaptureAdapterFactory(CanvasDevice canvasDevice)
     {
         _canvasDevice = canvasDevice ?? throw new ArgumentNullException(nameof(canvasDevice));
+    }
+
+    public async ValueTask<CaptureAccessPreflightOutcome> EnsureAccessAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!WindowsGraphicsCaptureAdapter.IsSupported)
+            {
+                return new CaptureAccessPreflightOutcome.Failed(Failure.Create(
+                    FailureCode.UnsupportedCapture,
+                    FailureCategory.Unsupported,
+                    FailureRecoverability.UserActionRequired,
+                    nameof(WindowsDisplayCaptureAdapterFactory),
+                    Guid.Empty,
+                    "Windows.Graphics.Capture is not supported."));
+            }
+
+            var accessStatus = await GetAccessStatusAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return accessStatus == AppCapabilityAccessStatus.Allowed
+                ? new CaptureAccessPreflightOutcome.Allowed()
+                : new CaptureAccessPreflightOutcome.Failed(Failure.Create(
+                    FailureCode.CapturePermissionDenied,
+                    FailureCategory.Permission,
+                    FailureRecoverability.UserActionRequired,
+                    nameof(WindowsDisplayCaptureAdapterFactory),
+                    Guid.Empty,
+                    $"Programmatic Windows.Graphics.Capture access status was {accessStatus}."));
+        }
+        catch (OperationCanceledException)
+        {
+            return new CaptureAccessPreflightOutcome.Cancelled("CancellationToken");
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            return new CaptureAccessPreflightOutcome.Failed(Failure.Create(
+                FailureCode.CapturePermissionDenied,
+                FailureCategory.Permission,
+                FailureRecoverability.UserActionRequired,
+                nameof(WindowsDisplayCaptureAdapterFactory),
+                Guid.Empty,
+                exception.GetType().Name,
+                nativeCode: exception.HResult));
+        }
+        catch (Exception exception)
+        {
+            return new CaptureAccessPreflightOutcome.Failed(Failure.Create(
+                FailureCode.UnexpectedFailure,
+                FailureCategory.Unexpected,
+                FailureRecoverability.RetryNewIntent,
+                nameof(WindowsDisplayCaptureAdapterFactory),
+                Guid.Empty,
+                $"{exception.GetType().Name}: {exception.Message}",
+                nativeCode: exception.HResult));
+        }
     }
 
     public async ValueTask<WindowsDisplayCaptureAdapterCreationOutcome> CreateAsync(
@@ -52,7 +112,7 @@ public sealed class WindowsDisplayCaptureAdapterFactory : IWindowsDisplayCapture
                     FailureCategory.Permission,
                     FailureRecoverability.UserActionRequired,
                     session.RequestId,
-                    "Programmatic Windows.Graphics.Capture access was not allowed.");
+                    $"Programmatic Windows.Graphics.Capture access status was {accessStatus}.");
             }
 
             if (!TryParseDisplayId(display.DisplayId, out var displayId))
@@ -127,6 +187,14 @@ public sealed class WindowsDisplayCaptureAdapterFactory : IWindowsDisplayCapture
         GC.SuppressFinalize(this);
     }
 
+    private bool IsDisposed()
+    {
+        lock (_gate)
+        {
+            return _disposed;
+        }
+    }
+
     private async Task<AppCapabilityAccessStatus> GetAccessStatusAsync(
         CancellationToken cancellationToken)
     {
@@ -151,16 +219,8 @@ public sealed class WindowsDisplayCaptureAdapterFactory : IWindowsDisplayCapture
         return await GraphicsCaptureAccess
             .RequestAccessAsync(GraphicsCaptureAccessKind.Programmatic)
             .AsTask(cancellationToken)
-            .WaitAsync(TimeSpan.FromSeconds(3), cancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken)
             .ConfigureAwait(false);
-    }
-
-    private bool IsDisposed()
-    {
-        lock (_gate)
-        {
-            return _disposed;
-        }
     }
 
     private static bool TryParseDisplayId(string displayId, out global::Windows.Graphics.DisplayId parsed)

@@ -37,7 +37,8 @@ public partial class MainWindow : Window, IDisposable
         _capturePresentation = new CapturePresentationWorkflowCoordinator(
             freezingCoordinator,
             _platformResources.OverlayCoordinator,
-            new WindowsMainWindowCaptureSourceExclusion(this));
+            new WindowsMainWindowCaptureSourceExclusion(this),
+            _platformResources.AdapterFactory);
         _residentLifecycle = new ResidentLifecycleCoordinator(
             printScreenTakeover ?? new WindowsPrintScreenTakeover(WindowNative.GetWindowHandle(this)),
             settingsStore ?? new WindowsPrintScreenTakeoverSettingsStore());
@@ -102,7 +103,7 @@ public partial class MainWindow : Window, IDisposable
                 SetStatus($"Capture cancelled: {cancelled.CancellationOrigin}.");
                 break;
             case CapturePresentationOutcome.Failed failed:
-                SetStatus(failed.Failure.UserMessageKey);
+                SetStatus($"{failed.Failure.UserMessageKey}: {failed.Failure.DiagnosticMessage}");
                 break;
         }
     }
