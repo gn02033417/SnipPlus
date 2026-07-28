@@ -56,6 +56,7 @@ public sealed class WorkflowStateAuthority
     private static bool IsLegal(WorkflowState from, WorkflowState to) => from switch
     {
         WorkflowState.ResidentReady => to == WorkflowState.CaptureRequested,
+        WorkflowState.CaptureRequested => to == WorkflowState.Freezing,
         _ => false
     };
 }

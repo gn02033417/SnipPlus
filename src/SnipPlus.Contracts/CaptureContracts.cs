@@ -1,4 +1,4 @@
-namespace SnipPlus.Contracts;
+﻿namespace SnipPlus.Contracts;
 
 public enum SourceKind
 {
@@ -26,7 +26,11 @@ public readonly record struct PhysicalRect(int Left, int Top, int Right, int Bot
 
     public int Height => Bottom - Top;
 
-    public bool IsPositive => Width > 0 && Height > 0;
+    public long Width64 => (long)Right - Left;
+
+    public long Height64 => (long)Bottom - Top;
+
+    public bool IsPositive => Width64 > 0 && Height64 > 0;
 
     public bool Contains(PhysicalRect other) => other.Left >= Left
         && other.Top >= Top

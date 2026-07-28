@@ -1,4 +1,4 @@
-using SnipPlus.Contracts;
+﻿using SnipPlus.Contracts;
 
 namespace SnipPlus.Core.Tests;
 
@@ -6,23 +6,29 @@ internal sealed class TestImageResult : IImageResult
 {
     private int _leaseCount;
 
-    public TestImageResult(Guid? resultId = null)
+    public TestImageResult(
+        Guid? resultId = null,
+        Guid? sessionId = null,
+        int pixelWidth = 2,
+        int pixelHeight = 2,
+        PhysicalRect? sourceBounds = null,
+        PhysicalRect? cropBounds = null)
     {
         Metadata = new ImageResultMetadata
         {
             ResultId = resultId ?? Guid.NewGuid(),
-            SessionId = Guid.NewGuid(),
-            PixelWidth = 2,
-            PixelHeight = 2,
+            SessionId = sessionId ?? Guid.NewGuid(),
+            PixelWidth = pixelWidth,
+            PixelHeight = pixelHeight,
             PixelFormat = ImagePixelFormat.Bgra8,
             AlphaMode = ImageAlphaMode.Premultiplied,
             ColorSpace = ImageColorSpace.SrgbSdr,
             DpiX = 96,
             DpiY = 96,
-            RowStride = 8,
+            RowStride = checked(pixelWidth * 4),
             SourceKind = SourceKind.Monitor,
-            SourcePhysicalBounds = new PhysicalRect(0, 0, 2, 2),
-            CropPhysicalBounds = new PhysicalRect(0, 0, 2, 2),
+            SourcePhysicalBounds = sourceBounds ?? new PhysicalRect(0, 0, pixelWidth, pixelHeight),
+            CropPhysicalBounds = cropBounds ?? sourceBounds ?? new PhysicalRect(0, 0, pixelWidth, pixelHeight),
             CapturedAt = DateTimeOffset.UtcNow
         };
     }

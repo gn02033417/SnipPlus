@@ -78,6 +78,18 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 - 本 slice 10 個 C# 檔案的限定範圍 `dotnet format --verify-no-changes` 通過。
 - 本節的非互動驗證沒有啟動 SnipPlus、Paint、Notepad、Snipping Tool 或其他外部 GUI，也沒有執行 Interactive／Manual tests；current-HEAD packaged runtime evidence 另見下節。
 
+### Verified — CaptureRequested to Freezing Foundation Slice (2026-07-28)
+
+- 新增平台中立 `SupportedCapacityPolicy` 與 typed `CapacityValidationOutcome`，涵蓋 `1`–`4` displays、每個 `3840 × 2160`、總來源 `33,177,600` pixels、Virtual Desktop `16,384 × 16,384`、Selection `16,384 × 16,384` 與 `67,108,864` pixels 上限。
+- 新增 immutable `VirtualDesktopSnapshot`／`DisplaySnapshot`，保留 negative coordinates、mixed DPI、arbitrary arrangement 與 `Transparent` gap policy；沒有把 gap rasterize 成假的 display，也沒有建立 giant bitmap。
+- 新增 `CaptureSessionContext`、`FrozenDisplayFrame`、`FrozenDisplayFrameSet` 與 typed `CaptureFreezingCoordinator`；唯一新增正式 transition 為 `CaptureRequested → Freezing`，每個 accepted request 只建立一個 Session，且 frame set 是 per-display 資源的唯一 owner。
+- deterministic tests 覆蓋容量邊界、invalid topology、negative／mixed-DPI／gap snapshot、session identity、stale／busy／cancelled／disposed request、frame duplicate／missing／unknown／mismatch、partial failure cleanup 與 idempotent disposal。
+- `dotnet restore SnipPlus.sln --locked-mode` 成功。
+- `dotnet build SnipPlus.sln -c Release -p:Platform=x64 --no-restore` 成功，0 warnings、0 errors。
+- 非互動測試 70/70 通過，0 失敗、0 略過；Contracts 14/14、Core 41/41，Windows tests 包含於完整結果。
+- 本 Slice 11 個實際修改 C# 檔案的限定範圍 `dotnet format --verify-no-changes --include ...` 通過；沒有修正全 Repository 既有 formatting baseline。
+- 未執行 Windows multi-display topology／real WGC runtime、Overlay、Selection 或 `Freezing → Selecting`；本 Slice 沒有啟動 SnipPlus、Paint、Notepad、Snipping Tool 或其他外部 GUI，也沒有執行 Interactive／Manual tests。
+
 ### Verified — Current-HEAD Packaged Request Boundary Runtime (2026-07-28)
 
 - 以 current HEAD `a94f8fd` 建立並部署 x64 Development MSIX；package Identity 為 `SnipPlus.App`、Version `1.0.0.0`，重裝後 installed `SnipPlus.App.dll` 與 Release x64 build 的 SHA-256 一致。

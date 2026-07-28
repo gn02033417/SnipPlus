@@ -16,6 +16,19 @@ public sealed class CaptureRequestCoordinator : ICaptureRequestBoundary, IDispos
 
     public WorkflowState CurrentState => _stateAuthority.CurrentState;
 
+    internal WorkflowStateAuthority StateAuthority => _stateAuthority;
+
+    public bool IsDisposed
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _disposed;
+            }
+        }
+    }
+
     public CaptureRequest? ActiveRequest
     {
         get
@@ -24,6 +37,17 @@ public sealed class CaptureRequestCoordinator : ICaptureRequestBoundary, IDispos
             {
                 return _activeRequest;
             }
+        }
+    }
+
+    public bool IsActive(CaptureRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        lock (_gate)
+        {
+            return !_disposed
+                && _activeRequest?.RequestId == request.RequestId
+                && _stateAuthority.CurrentState == WorkflowState.CaptureRequested;
         }
     }
 

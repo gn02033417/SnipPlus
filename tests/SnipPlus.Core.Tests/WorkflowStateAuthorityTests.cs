@@ -34,7 +34,7 @@ public sealed class WorkflowStateAuthorityTests
 
     [TestMethod]
     [TestCategory("Unit")]
-    public void CaptureRequestedCannotEnterLaterWorkflowStatesInThisSlice()
+    public void CaptureRequestedCanEnterFreezingButCannotEnterLaterWorkflowStatesInThisSlice()
     {
         var authority = new WorkflowStateAuthority();
         Assert.IsTrue(authority.RequestTransition(new(
@@ -42,9 +42,16 @@ public sealed class WorkflowStateAuthorityTests
             WorkflowState.CaptureRequested,
             "test")).IsSuccess);
 
+        var freezing = authority.RequestTransition(new(
+            WorkflowState.CaptureRequested,
+            WorkflowState.Freezing,
+            "third-slice"));
+
+        Assert.IsTrue(freezing.IsSuccess);
+        Assert.AreEqual(WorkflowState.Freezing, authority.CurrentState);
+
         foreach (var laterState in new[]
                  {
-                     WorkflowState.Freezing,
                      WorkflowState.Selecting,
                      WorkflowState.Capturing,
                      WorkflowState.ResultReady,
@@ -53,15 +60,15 @@ public sealed class WorkflowStateAuthorityTests
                  })
         {
             var result = authority.RequestTransition(new(
-                WorkflowState.CaptureRequested,
+                WorkflowState.Freezing,
                 laterState,
                 "not implemented in this slice"));
 
             Assert.IsFalse(result.IsSuccess, $"Unexpected transition to {laterState}.");
-            Assert.AreEqual(WorkflowState.CaptureRequested, authority.CurrentState);
+            Assert.AreEqual(WorkflowState.Freezing, authority.CurrentState);
         }
 
-        Assert.AreEqual(1, authority.SuccessfulTransitionCount);
+        Assert.AreEqual(2, authority.SuccessfulTransitionCount);
     }
 
     [TestMethod]
