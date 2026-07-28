@@ -1,4 +1,4 @@
-﻿# Changelog
+﻿﻿﻿# Changelog
 
 本檔案依 Keep a Changelog 精神記錄對使用者、維護者與文件治理有意義的變更。尚未有產品版本發布。
 
@@ -63,7 +63,7 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 
 ### Current Conformance Status
 
-- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build、deterministic non-interactive tests 與目前 HEAD 的 packaged Windows Runtime verification 已完成並通過；第一個 Slice 可標示為 Conforms。第二個 slice 已完成 PrintScreen／secondary request 到 `COMP-001` 的 `ResidentReady → CaptureRequested` 邊界。第三、第四個 slice 已完成四螢幕容量／Frozen Virtual Desktop、per-display frame ownership、Windows topology／WGC freezing integration，並以 Owner Reference 三螢幕完成 runtime verification。第五個 slice 已完成 Owner Reference packaged Overlay／Crosshair／initial cross-monitor Selection runtime verification；FR-006～FR-010 的 Maximum four-4K envelope 仍維持 Partial，Selection adjustment、Editing、output 與 Annotation 尚未開始。
+- Resident lifecycle、direct application exit and PrintScreen takeover：static implementation、locked restore、Release x64 build、deterministic non-interactive tests 與目前 HEAD 的 packaged Windows Runtime verification 已完成並通過；第一個 Slice 可標示為 Conforms。第二個 slice 已完成 PrintScreen／secondary request 到 `COMP-001` 的 `ResidentReady → CaptureRequested` 邊界。第三、第四個 slice 已完成四螢幕容量／Frozen Virtual Desktop、per-display frame ownership、Windows topology／WGC freezing integration，並以 Owner Reference 三螢幕完成 runtime verification。第五個 slice 的 Crosshair 已完成修正、非互動驗證與 Development MSIX 建置，但 Repository owner manual acceptance 尚待重新驗收；FR-006～FR-010 的 Maximum four-4K envelope 仍維持 Partial，Selection adjustment、Editing、output 與 Annotation 尚未開始。
 
 ### Verified — PrintScreen Capture Request Boundary Slice (2026-07-28)
 
@@ -137,21 +137,28 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 
 ### Windows Runtime Verification — Fifth Slice Initial Attempt Blocked by Capture Access (2026-07-28)
 
-- 以目前工作樹建立並部署 x64 Development MSIX；Identity `SnipPlus.App`、Version `1.0.0.0` 未變更。安裝後 manifest 實際包含 `uap11:Capability Name="graphicsCaptureProgrammatic"` 與 `runFullTrust`，簽章驗證成功。
-- 修正 packaged WGC compatibility issue：`graphicsCaptureProgrammatic` 原先誤放在 `rescap:Capability`，已改為 Windows manifest schema 要求的 `uap11:Capability`；保留 `GraphicsCaptureAccess.RequestAccessAsync(Programmatic)` preflight，並在 MainWindow 隱藏前執行。
+- 以目前工作樹建立並部署 x64 Development MSIX；Identity `SnipPlus.App`、Version `1.0.0.0` 未變更。安裝後 manifest 實際包含 `uap11:Capability Name="graphicsCaptureProgrammatic"` 與
+unFullTrust`，簽章驗證成功。
+- 修正 packaged WGC compatibility issue：`graphicsCaptureProgrammatic` 原先誤放在
+escap:Capability`，已改為 Windows manifest schema 要求的 `uap11:Capability`；保留 `GraphicsCaptureAccess.RequestAccessAsync(Programmatic)` preflight，並在 MainWindow 隱藏前執行。
 - Locked restore 成功；Release x64 build 成功，0 warnings、0 errors；非互動測試 94/94 通過，0 失敗、0 略過；本 Slice C# 窄範圍 `dotnet format --verify-no-changes --no-restore --include ...` 通過。
 - Windows 11 x64 build `26200`、Owner Reference 三螢幕環境中，clean packaged Start Capture 在 WGC preflight 明確回報 `DeniedByUser`；MainWindow 未被隱藏，沒有建立 overlay、Frozen Canvas、Crosshair、Frozen frame set 或 Selection。實際 PrintScreen 嘗試也未形成可觀察 overlay，最後狀態為 bounded preflight `TimeoutException`；不能標示 WGC frame、Overlay 或 Selection runtime 通過。
 - 未啟動 Paint、Notepad、Snipping Tool 或其他外部 GUI；未保存真實桌面截圖、frozen frame 或 Clipboard payload。測試後 `SnipPlus.App` process 已清理。
 - 第五個 Slice 仍為 `Partial／Runtime blocked by DeniedByUser`；未開始第六個 Slice，也未進入 Selection adjustment、Function Bar、Annotation、Clipboard、PNG 或其他後續功能。
 
-### Verified — Fifth Slice Packaged Overlay, Crosshair and Initial Selection Runtime (2026-07-28)
+### Reclassified — Fifth Slice Packaged Overlay, Crosshair and Initial Selection Runtime (2026-07-28)
 
-- 以 clean commits `8e1b174`、`438467e`、`8fc6dab` 重建並部署 x64 Development MSIX；PackageFullName `SnipPlus.App_1.0.0.0_x64__26728c12bvz0c`、PackageFamilyName `SnipPlus.App_26728c12bvz0c`，package signature `Valid`。Release 與 installed `SnipPlus.App.dll` SHA-256 均為 `82111C97385F37BB2FE8FD5163C96925FC749F286721A7D7DF54CA14A2082352`。
-- Installed manifest 實際包含 `uap11:Capability Name="graphicsCaptureProgrammatic"` 與 `runFullTrust`；Windows 11 x64 build `26200` 的 Owner Reference 三螢幕 WGC preflight 實際回傳 `Allowed`。Solution locked restore 成功；Release x64 solution build 為 `0 warnings、0 errors`；packaged MSIX build 為 `0 errors`，僅有既有 `mspdbcmf.exe` symbols warning；非互動測試 `94/94` 通過，`0` 失敗、`0` 略過；修改檔案的限定範圍 format 通過。
-- Runtime display topology 為 Primary `(0,0)–(2560,1440)` @ `96 DPI`、Left `(-2560,0)–(0,1440)` @ `96 DPI`、Lower `(300,1440)–(2220,2520)`、physical `1920×1080` @ `144 DPI`（1.5）。MainWindow 在 capture 前可見，三個 overlay ready 後同一 HWND 已隱藏。
-- `Start Capture` sampling 為 `0x3 → 3x77`；實際 PrintScreen sampling 為 `0x10 → 3x70`。兩者均沒有 `1` 或 `2` 個 display-sized overlay；三個 overlay 均覆蓋各自 physical bounds，沒有建立 giant bitmap。Crosshair 修正為只有包含目前 Pointer 的 display 可見，其他 display 的 crosshair line 為 collapsed；pointer／mask／selection source path 在五組單螢幕及跨螢幕拖曳中實際運作。未保存桌面 screenshot 或 frozen frame，因此沒有提交任何私人像素證據。
-- Primary 正向／反向、Left↔Primary、Primary↔Lower 150%、Left↔Lower 跨 Gap 全部在 mouse release 後保持 `SelectionLocked`，沒有 crop、PNG 或 Clipboard sequence 變更。Esc 在 Drag 前、Drag 中及 Lower display focus 後均關閉所有 overlay；SelectionLocked 後的 Esc cleanup 亦通過。沒有 Function Bar、Resize Handles 或 Editing transition。
-- 正常流程未啟動 Paint、Notepad、Snipping Tool 或其他 GUI fixture；targeted scan 只觀察到兩個本次之前已存在且無視窗標題的 `SnippingTool` background processes，未由本次 workflow 啟動或操作。第六個 Slice 未開始；FR-012、Gap Rasterization、Function Bar、Annotation、Clipboard、PNG 與後續 output 仍未完成。
+- Earlier packaged runtime evidence covered three physical overlays, frozen-frame presentation, mask, cross-display drag and `SelectionLocked`, but it is not accepted as final Crosshair conformance.
+- Repository owner manual acceptance found that the implementation rendered two XAML crosshair `Line` elements per overlay. The result showed three visual crosses simultaneously and did not behave as one pointer-following system cursor.
+- The earlier result is therefore retained as historical runtime evidence only. The fifth Slice remains `Partial`; the sixth Slice has not started.
+
+### Corrected — Fifth Slice System Crosshair Cursor and Manual Acceptance Package (2026-07-28)
+
+- Removed the per-overlay XAML crosshair lines and their `SelectionVisualState.CurrentPhysicalPoint` positioning path. Each overlay input surface now uses one WinUI `InputSystemCursorShape.Cross` via `ProtectedCursor`; disposal clears the cursor without installing a global hook or affecting other applications.
+- Added deterministic coverage proving idle pointer movement leaves `SelectionStatus.None`, `SelectionRevision` and the selection state unchanged. Existing drag, cross-display, release-to-`SelectionLocked`, cancellation and no-output tests remain in the non-interactive suite.
+- Locked restore succeeded; Release x64 solution build succeeded with `0 warnings、0 errors`; non-interactive tests `96/96` passed with `0` failures and `0` skips; changed-file-only format verification and `git diff --check` passed.
+- Development MSIX was built from clean fix commit `03716d39dfe1517cc43712ff5e4505ae8fb5472b`; package signature was `Valid`. PackageFullName remained `SnipPlus.App_1.0.0.0_x64__26728c12bvz0c` and PackageFamilyName remained `SnipPlus.App_26728c12bvz0c`. Release and installed `SnipPlus.App.dll` SHA-256 both equal `A2279DD57D3B6AEC17AEFA5A98324A22A192C4196CC28922B4EF47E0FEE0B0A0`.
+- The Development MSIX is prepared for Repository owner manual acceptance. No SnipPlus GUI, Paint, Notepad, Snipping Tool or other external GUI was launched in this correction; no desktop screenshot, frozen frame or Clipboard payload was saved. Fifth Slice status is `Implementation and automated verification passed; Repository owner manual acceptance pending`; Selection adjustment, Function Bar, Annotation, Clipboard, PNG and the sixth Slice remain unstarted.
 
 ### Windows Runtime Verification — Blocked (2026-07-27)
 
