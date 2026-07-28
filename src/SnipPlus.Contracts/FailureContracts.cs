@@ -1,4 +1,4 @@
-namespace SnipPlus.Contracts;
+﻿namespace SnipPlus.Contracts;
 
 public enum FailureCategory
 {
@@ -41,6 +41,11 @@ public enum FailureCode
     CaptureFrameTimeout,
     CaptureFrameSizeChanged,
     CaptureDeviceLost,
+    DisplayTopologyUnavailable,
+    DisplayTopologyInvalid,
+    DisplayContextChanged,
+    StaleSession,
+    PartialAcquisitionFailed,
     ProtectedContentUnavailable,
     InvalidResultLifetime,
     RenderingResourceLost,

@@ -90,6 +90,19 @@ Historical evidence只適用於上述技術基礎，不證明 resident PrintScre
 - 本 Slice 11 個實際修改 C# 檔案的限定範圍 `dotnet format --verify-no-changes --include ...` 通過；沒有修正全 Repository 既有 formatting baseline。
 - 未執行 Windows multi-display topology／real WGC runtime、Overlay、Selection 或 `Freezing → Selecting`；本 Slice 沒有啟動 SnipPlus、Paint、Notepad、Snipping Tool 或其他外部 GUI，也沒有執行 Interactive／Manual tests。
 
+### Verified — Windows Multi-display Freezing Integration Slice (2026-07-28)
+
+- 新增 `WindowsDisplayTopologySource`／`WindowsDisplayTopologyProvider`：以 Windows `DisplayArea.FindAll()` 取得 active logical display surfaces，以 physical `OuterBounds` 建立 Virtual Desktop bounds，並讀取 monitor DPI X/Y 與 rotation／orientation；只使用 stable display identity，不把 monitor name、device path 或私人資料放入 failure evidence。
+- 新增 `WindowsDisplayTopologyMapper`：將 Windows descriptors 轉成 platform-neutral `VirtualDesktopSnapshot`／`DisplaySnapshot`，保留 negative coordinates、mixed DPI、physical pixel size、arbitrary layout 與 deterministic coordinate version；mirrored logical surface 只保留一次，gap 不產生假的 display。
+- 演進 `WindowsGraphicsCaptureAdapter`：每個 adapter 只擁有一個 display source、自己的 frame pool／capture session，支援 prepare → start → first-frame lifecycle；frame 驗證 session、display、coordinate version、physical bounds、pixel size，並產生 BGRA8 premultiplied、sRGB SDR canonical `SoftwareBitmap`，不包含 cursor、不 crop、不 merge。
+- 新增 `WindowsFrozenDisplayFrameSetProvider` 與 `IAllDisplayFrameProvider`：capacity 已由 Core 在建立 Session 前驗證；所有 display adapters 先建立／prepare，再統一 start，之後並行收集每個 display 的第一個 frame。只有完整 `FrozenDisplayFrameSet` 才成功；partial failure、timeout、cancel、stale session、coordinate-version change 與 late frame 都會清理，不進入 `Selecting`。
+- 新增 typed Windows integration outcomes，涵蓋 topology unavailable／invalid、unsupported capacity、capture unsupported／permission、source unavailable、frame timeout／size mismatch、display-context change、cancelled、stale session、partial acquisition 與 unexpected failure。
+- `dotnet restore SnipPlus.sln --locked-mode` 成功。
+- `dotnet build SnipPlus.sln -c Release -p:Platform=x64 --no-restore` 成功，0 warnings、0 errors。
+- 非互動測試 83/83 通過，0 失敗、0 略過；新增 Core all-display boundary tests、Windows topology mapping tests 與 Windows frozen-frame-set orchestration／cleanup tests。
+- 本 Slice 11 個實際修改 C# 檔案的限定範圍 `dotnet format --verify-no-changes --no-restore --include ...` 通過；全 Repository 既有 formatting baseline 未修正。
+- 未執行真實三螢幕 topology／WGC runtime、Overlay、Frozen Canvas、Crosshair、Selection 或 `Freezing → Selecting`；本 Slice 未啟動 SnipPlus、Paint、Notepad、Snipping Tool 或其他外部 GUI，也未執行 Interactive／Manual tests。真實多螢幕 runtime verification 保留給本 Slice 完成後的明確授權步驟。
+
 ### Verified — Current-HEAD Packaged Request Boundary Runtime (2026-07-28)
 
 - 以 current HEAD `a94f8fd` 建立並部署 x64 Development MSIX；package Identity 為 `SnipPlus.App`、Version `1.0.0.0`，重裝後 installed `SnipPlus.App.dll` 與 Release x64 build 的 SHA-256 一致。

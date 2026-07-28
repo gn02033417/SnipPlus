@@ -238,6 +238,14 @@ public sealed class CaptureFreezingCoordinator : IFreezingBoundary, IDisposable
             }
         }
 
+        if (_frameProvider is IAllDisplayFrameProvider allDisplayFrameProvider)
+        {
+            return await AcquireAllFramesAsync(
+                session,
+                allDisplayFrameProvider,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         var acquiredFrames = new List<FrozenDisplayFrame>(session.VirtualDesktopSnapshot.Displays.Count);
         try
         {
@@ -370,7 +378,100 @@ public sealed class CaptureFreezingCoordinator : IFreezingBoundary, IDisposable
         }
 
         session?.Dispose();
+        if (_frameProvider is IDisposable disposableFrameProvider)
+        {
+            disposableFrameProvider.Dispose();
+        }
+
         GC.SuppressFinalize(this);
+    }
+
+    private async ValueTask<CaptureFreezingOutcome> AcquireAllFramesAsync(
+        CaptureSessionContext session,
+        IAllDisplayFrameProvider frameProvider,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                session.Cancellation,
+                cancellationToken);
+            var outcome = await frameProvider
+                .AcquireAllAsync(session, linkedCancellation.Token)
+                .ConfigureAwait(false);
+
+            switch (outcome)
+            {
+                case FrozenDisplayFrameSetAcquisitionOutcome.Succeeded succeeded:
+                    if (!session.TryAttachFrozenDisplayFrames(succeeded.FrameSet))
+                    {
+                        succeeded.FrameSet.Dispose();
+                        session.MarkFailedAndDispose();
+                        ClearActiveSession(session);
+                        return new CaptureFreezingOutcome.FrameFailed(
+                            session.SessionId,
+                            CreateFailure(
+                                FailureCode.InvalidCaptureIntent,
+                                FailureCategory.Session,
+                                FailureRecoverability.RetryNewIntent,
+                                session.RequestId,
+                                "Frozen display frame set could not be attached to its session."),
+                            true);
+                    }
+
+                    return new CaptureFreezingOutcome.FrozenFrameSetReady(session);
+                case FrozenDisplayFrameSetAcquisitionOutcome.Cancelled cancelled:
+                    session.Cancel();
+                    ClearActiveSession(session);
+                    return new CaptureFreezingOutcome.Cancelled(
+                        session.RequestId,
+                        session.SessionId,
+                        cancelled.CancellationOrigin);
+                case FrozenDisplayFrameSetAcquisitionOutcome.Failed failed:
+                    session.MarkFailedAndDispose();
+                    ClearActiveSession(session);
+                    return new CaptureFreezingOutcome.FrameFailed(
+                        session.SessionId,
+                        failed.Failure,
+                        failed.CleanupCompleted);
+                default:
+                    session.MarkFailedAndDispose();
+                    ClearActiveSession(session);
+                    return new CaptureFreezingOutcome.FrameFailed(
+                        session.SessionId,
+                        CreateFailure(
+                            FailureCode.PartialAcquisitionFailed,
+                            FailureCategory.Resource,
+                            FailureRecoverability.RetryNewIntent,
+                            session.RequestId,
+                            "All-display frame provider returned an unknown outcome."),
+                        true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            session.Cancel();
+            ClearActiveSession(session);
+            return new CaptureFreezingOutcome.Cancelled(
+                session.RequestId,
+                session.SessionId,
+                "CancellationToken");
+        }
+        catch (Exception exception)
+        {
+            session.MarkFailedAndDispose();
+            ClearActiveSession(session);
+            return new CaptureFreezingOutcome.FrameFailed(
+                session.SessionId,
+                CreateFailure(
+                    FailureCode.PartialAcquisitionFailed,
+                    FailureCategory.Resource,
+                    FailureRecoverability.RetryNewIntent,
+                    session.RequestId,
+                    exception.GetType().Name,
+                    exception.HResult),
+                true);
+        }
     }
 
     private void ClearActiveSession(CaptureSessionContext session)

@@ -1,22 +1,33 @@
-using Microsoft.Graphics.Canvas;
+﻿using Microsoft.Graphics.Canvas;
 using SnipPlus.Contracts;
+using Windows.Graphics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
-using Windows.Graphics;
 using Windows.Security.Authorization.AppCapabilityAccess;
 
 namespace SnipPlus.Windows;
 
-public sealed class WindowsGraphicsCaptureAdapter : ICaptureService, IDisposable
+public sealed class WindowsGraphicsCaptureAdapter :
+    ICaptureService,
+    IDisposable,
+    IWindowsDisplayCaptureAdapter
 {
     private readonly CanvasDevice _canvasDevice;
+    private readonly string _displayId;
+    private PreparedCapture? _preparedCapture;
     private GraphicsCaptureItem? _captureItem;
 
-    public WindowsGraphicsCaptureAdapter(CanvasDevice canvasDevice, GraphicsCaptureItem captureItem)
+    public WindowsGraphicsCaptureAdapter(
+        CanvasDevice canvasDevice,
+        GraphicsCaptureItem captureItem,
+        string? displayId = null)
     {
         _canvasDevice = canvasDevice ?? throw new ArgumentNullException(nameof(canvasDevice));
         _captureItem = captureItem ?? throw new ArgumentNullException(nameof(captureItem));
+        _displayId = string.IsNullOrWhiteSpace(displayId) ? "legacy" : displayId;
     }
+
+    public string DisplayId => _displayId;
 
     public static bool IsSupported => GraphicsCaptureSession.IsSupported();
 
@@ -52,7 +63,306 @@ public sealed class WindowsGraphicsCaptureAdapter : ICaptureService, IDisposable
         }
 
         var captureItem = GraphicsCaptureItem.TryCreateFromDisplayId(displayId);
-        return captureItem is null ? null : new WindowsGraphicsCaptureAdapter(canvasDevice, captureItem);
+        return captureItem is null
+            ? null
+            : new WindowsGraphicsCaptureAdapter(
+                canvasDevice,
+                captureItem,
+                $"display:{displayId.Value}");
+    }
+
+    public ValueTask<WindowsDisplayCapturePreparationOutcome> PrepareAsync(
+        CaptureSessionContext session,
+        DisplaySnapshot display,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(display);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!IsSupported)
+            {
+                return ValueTask.FromResult<WindowsDisplayCapturePreparationOutcome>(new WindowsDisplayCapturePreparationOutcome.Failed(
+                    IntegrationFailure(
+                        WindowsCaptureIntegrationOutcomeKind.CaptureNotSupported,
+                        FailureCode.UnsupportedCapture,
+                        FailureCategory.Unsupported,
+                        FailureRecoverability.UserActionRequired,
+                        session.RequestId,
+                        "Windows.Graphics.Capture is not supported.")));
+            }
+
+            var captureItem = _captureItem;
+            if (captureItem is null)
+            {
+                return ValueTask.FromResult<WindowsDisplayCapturePreparationOutcome>(new WindowsDisplayCapturePreparationOutcome.Failed(
+                    IntegrationFailure(
+                        WindowsCaptureIntegrationOutcomeKind.DisplaySourceUnavailable,
+                        FailureCode.CaptureSourceClosed,
+                        FailureCategory.Device,
+                        FailureRecoverability.RetryNewIntent,
+                        session.RequestId,
+                        "The display capture source is unavailable.")));
+            }
+
+            var sourceSize = captureItem.Size;
+            var expectedSize = display.ExpectedFrozenFramePixelSize;
+            if (sourceSize.Width != expectedSize.Width || sourceSize.Height != expectedSize.Height)
+            {
+                return ValueTask.FromResult<WindowsDisplayCapturePreparationOutcome>(new WindowsDisplayCapturePreparationOutcome.Failed(
+                    IntegrationFailure(
+                        WindowsCaptureIntegrationOutcomeKind.FrameSizeMismatch,
+                        FailureCode.CaptureFrameSizeChanged,
+                        FailureCategory.Device,
+                        FailureRecoverability.RetryNewIntent,
+                        session.RequestId,
+                        "The display capture source size does not match the topology snapshot.")));
+            }
+
+            if (_preparedCapture is not null)
+            {
+                return ValueTask.FromResult<WindowsDisplayCapturePreparationOutcome>(new WindowsDisplayCapturePreparationOutcome.Failed(
+                    IntegrationFailure(
+                        WindowsCaptureIntegrationOutcomeKind.StaleSession,
+                        FailureCode.StaleSession,
+                        FailureCategory.Session,
+                        FailureRecoverability.RetryNewIntent,
+                        session.RequestId,
+                        "The display adapter already owns a prepared capture session.")));
+            }
+
+            Direct3D11CaptureFramePool? framePool = null;
+            GraphicsCaptureSession? captureSession = null;
+            try
+            {
+                framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
+                    _canvasDevice,
+                    DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                    1,
+                    sourceSize);
+                captureSession = framePool.CreateCaptureSession(captureItem);
+                captureSession.IsCursorCaptureEnabled = false;
+                _preparedCapture = new PreparedCapture(
+                    session,
+                    display,
+                    framePool,
+                    captureSession);
+            }
+            catch
+            {
+                captureSession?.Dispose();
+                framePool?.Dispose();
+                throw;
+            }
+            return ValueTask.FromResult<WindowsDisplayCapturePreparationOutcome>(
+                new WindowsDisplayCapturePreparationOutcome.Prepared());
+        }
+        catch (OperationCanceledException)
+        {
+            return ValueTask.FromResult<WindowsDisplayCapturePreparationOutcome>(
+                new WindowsDisplayCapturePreparationOutcome.Cancelled("CancellationToken"));
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            return ValueTask.FromResult<WindowsDisplayCapturePreparationOutcome>(new WindowsDisplayCapturePreparationOutcome.Failed(
+                IntegrationFailure(
+                    WindowsCaptureIntegrationOutcomeKind.CapturePermissionDenied,
+                    FailureCode.CapturePermissionDenied,
+                    FailureCategory.Permission,
+                    FailureRecoverability.UserActionRequired,
+                    session.RequestId,
+                    exception.GetType().Name,
+                    exception.HResult)));
+        }
+        catch (Exception exception)
+        {
+            DisposePreparedCapture();
+            return ValueTask.FromResult<WindowsDisplayCapturePreparationOutcome>(new WindowsDisplayCapturePreparationOutcome.Failed(
+                IntegrationFailure(
+                    WindowsCaptureIntegrationOutcomeKind.UnexpectedFailure,
+                    FailureCode.UnexpectedFailure,
+                    FailureCategory.Unexpected,
+                    FailureRecoverability.RetryNewIntent,
+                    session.RequestId,
+                    exception.GetType().Name,
+                    exception.HResult)));
+        }
+    }
+
+    public ValueTask<WindowsDisplayCaptureStartOutcome> StartAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var prepared = _preparedCapture;
+            if (prepared is null)
+            {
+                return ValueTask.FromResult<WindowsDisplayCaptureStartOutcome>(new WindowsDisplayCaptureStartOutcome.Failed(
+                    IntegrationFailure(
+                        WindowsCaptureIntegrationOutcomeKind.StaleSession,
+                        FailureCode.StaleSession,
+                        FailureCategory.Session,
+                        FailureRecoverability.RetryNewIntent,
+                        Guid.Empty,
+                        "The display adapter has not been prepared.")));
+            }
+
+            prepared.CaptureSession.StartCapture();
+            return ValueTask.FromResult<WindowsDisplayCaptureStartOutcome>(
+                new WindowsDisplayCaptureStartOutcome.Started());
+        }
+        catch (OperationCanceledException)
+        {
+            return ValueTask.FromResult<WindowsDisplayCaptureStartOutcome>(
+                new WindowsDisplayCaptureStartOutcome.Cancelled("CancellationToken"));
+        }
+        catch (Exception exception)
+        {
+            var requestId = _preparedCapture?.Session.RequestId ?? Guid.Empty;
+            return ValueTask.FromResult<WindowsDisplayCaptureStartOutcome>(new WindowsDisplayCaptureStartOutcome.Failed(
+                IntegrationFailure(
+                    WindowsCaptureIntegrationOutcomeKind.DisplaySourceUnavailable,
+                    FailureCode.CaptureSourceUnavailable,
+                    FailureCategory.Device,
+                    FailureRecoverability.RetryNewIntent,
+                    requestId,
+                    exception.GetType().Name,
+                    exception.HResult)));
+        }
+    }
+
+    public async ValueTask<WindowsDisplayCaptureFrameOutcome> CaptureFirstFrameAsync(
+        CancellationToken cancellationToken)
+    {
+        var prepared = _preparedCapture;
+        if (prepared is null)
+        {
+            return new WindowsDisplayCaptureFrameOutcome.Failed(
+                IntegrationFailure(
+                    WindowsCaptureIntegrationOutcomeKind.StaleSession,
+                    FailureCode.StaleSession,
+                    FailureCategory.Session,
+                    FailureRecoverability.RetryNewIntent,
+                    Guid.Empty,
+                    "The display adapter has not been prepared."));
+        }
+
+        try
+        {
+            using var frame = await WaitForFrameAsync(
+                prepared.FramePool,
+                cancellationToken).ConfigureAwait(false);
+            if (frame is null)
+            {
+                return new WindowsDisplayCaptureFrameOutcome.Failed(
+                    IntegrationFailure(
+                        WindowsCaptureIntegrationOutcomeKind.FrameTimeout,
+                        FailureCode.CaptureFrameTimeout,
+                        FailureCategory.Device,
+                        FailureRecoverability.RetryNewIntent,
+                        prepared.Session.RequestId,
+                        "No usable frame arrived before the bounded timeout."));
+            }
+
+            var contentSize = frame.ContentSize;
+            var contentWidth = checked((int)contentSize.Width);
+            var contentHeight = checked((int)contentSize.Height);
+            var expectedSize = prepared.Display.ExpectedFrozenFramePixelSize;
+            if (contentWidth != expectedSize.Width || contentHeight != expectedSize.Height)
+            {
+                return new WindowsDisplayCaptureFrameOutcome.Failed(
+                    IntegrationFailure(
+                        WindowsCaptureIntegrationOutcomeKind.FrameSizeMismatch,
+                        FailureCode.CaptureFrameSizeChanged,
+                        FailureCategory.Device,
+                        FailureRecoverability.RetryNewIntent,
+                        prepared.Session.RequestId,
+                        "The WGC frame size does not match the topology snapshot."));
+            }
+
+            using var canvasBitmap = CanvasBitmap.CreateFromDirect3D11Surface(
+                _canvasDevice,
+                frame.Surface);
+            var pixelWidth = checked((int)canvasBitmap.SizeInPixels.Width);
+            var pixelHeight = checked((int)canvasBitmap.SizeInPixels.Height);
+            if (pixelWidth != expectedSize.Width || pixelHeight != expectedSize.Height)
+            {
+                return new WindowsDisplayCaptureFrameOutcome.Failed(
+                    IntegrationFailure(
+                        WindowsCaptureIntegrationOutcomeKind.FrameSizeMismatch,
+                        FailureCode.CaptureFrameSizeChanged,
+                        FailureCategory.Device,
+                        FailureRecoverability.RetryNewIntent,
+                        prepared.Session.RequestId,
+                        "The WGC surface pixel size does not match the topology snapshot."));
+            }
+
+            var capturedAt = DateTimeOffset.UtcNow;
+            var metadata = new ImageResultMetadata
+            {
+                ResultId = Guid.NewGuid(),
+                SessionId = prepared.Session.SessionId,
+                PixelWidth = pixelWidth,
+                PixelHeight = pixelHeight,
+                PixelFormat = ImagePixelFormat.Bgra8,
+                AlphaMode = ImageAlphaMode.Premultiplied,
+                ColorSpace = ImageColorSpace.SrgbSdr,
+                DpiX = prepared.Display.DpiScaleX * 96,
+                DpiY = prepared.Display.DpiScaleY * 96,
+                RowStride = checked(pixelWidth * 4),
+                SourceKind = SourceKind.Monitor,
+                SourcePhysicalBounds = prepared.Display.PhysicalBoundsInVirtualDesktop,
+                CropPhysicalBounds = prepared.Display.PhysicalBoundsInVirtualDesktop,
+                CapturedAt = capturedAt,
+                CursorIncluded = false
+            };
+            var image = SoftwareBitmapFactory.CreateFromPremultipliedBgra(
+                canvasBitmap.GetPixelBytes(),
+                metadata);
+            var frozenFrame = new FrozenDisplayFrame(
+                prepared.Session.SessionId,
+                prepared.Display.DisplayId,
+                Guid.NewGuid(),
+                prepared.Session.VirtualDesktopSnapshot.CoordinateVersion,
+                prepared.Display.PhysicalBoundsInVirtualDesktop,
+                expectedSize,
+                new FrozenCaptureFrame(image));
+            return new WindowsDisplayCaptureFrameOutcome.Succeeded(frozenFrame);
+        }
+        catch (OperationCanceledException)
+        {
+            return new WindowsDisplayCaptureFrameOutcome.Cancelled("CancellationToken");
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            return new WindowsDisplayCaptureFrameOutcome.Failed(
+                IntegrationFailure(
+                    WindowsCaptureIntegrationOutcomeKind.CapturePermissionDenied,
+                    FailureCode.CapturePermissionDenied,
+                    FailureCategory.Permission,
+                    FailureRecoverability.UserActionRequired,
+                    prepared.Session.RequestId,
+                    exception.GetType().Name,
+                    exception.HResult));
+        }
+        catch (Exception exception)
+        {
+            return new WindowsDisplayCaptureFrameOutcome.Failed(
+                IntegrationFailure(
+                    WindowsCaptureIntegrationOutcomeKind.UnexpectedFailure,
+                    FailureCode.UnexpectedFailure,
+                    FailureCategory.Unexpected,
+                    FailureRecoverability.RetryNewIntent,
+                    prepared.Session.RequestId,
+                    exception.GetType().Name,
+                    exception.HResult));
+        }
+        finally
+        {
+            DisposePreparedCapture();
+        }
     }
 
     public async ValueTask<CaptureFrameOutcome> CaptureFrameAsync(
@@ -317,7 +627,62 @@ public sealed class WindowsGraphicsCaptureAdapter : ICaptureService, IDisposable
 
     public void Dispose()
     {
+        DisposePreparedCapture();
         _captureItem = null;
         GC.SuppressFinalize(this);
+    }
+
+    private void DisposePreparedCapture()
+    {
+        var prepared = Interlocked.Exchange(ref _preparedCapture, null);
+        prepared?.Dispose();
+    }
+
+    private static WindowsCaptureIntegrationOutcome IntegrationFailure(
+        WindowsCaptureIntegrationOutcomeKind kind,
+        FailureCode code,
+        FailureCategory category,
+        FailureRecoverability recoverability,
+        Guid correlationId,
+        string message,
+        int? nativeCode = null) => WindowsCaptureIntegrationOutcome.FailureResult(
+            kind,
+            Failure.Create(
+                code,
+                category,
+                recoverability,
+                "WindowsGraphicsCaptureAdapter",
+                correlationId,
+                message,
+                nativeCode: nativeCode),
+            true);
+
+    private sealed class PreparedCapture : IDisposable
+    {
+        public PreparedCapture(
+            CaptureSessionContext session,
+            DisplaySnapshot display,
+            Direct3D11CaptureFramePool framePool,
+            GraphicsCaptureSession captureSession)
+        {
+            Session = session;
+            Display = display;
+            FramePool = framePool;
+            CaptureSession = captureSession;
+        }
+
+        public CaptureSessionContext Session { get; }
+
+        public DisplaySnapshot Display { get; }
+
+        public Direct3D11CaptureFramePool FramePool { get; }
+
+        public GraphicsCaptureSession CaptureSession { get; }
+
+        public void Dispose()
+        {
+            CaptureSession.Dispose();
+            FramePool.Dispose();
+        }
     }
 }

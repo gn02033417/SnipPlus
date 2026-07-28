@@ -22,6 +22,13 @@ public interface IFrozenDisplayFrameProvider
         CancellationToken cancellationToken);
 }
 
+public interface IAllDisplayFrameProvider : IFrozenDisplayFrameProvider
+{
+    ValueTask<FrozenDisplayFrameSetAcquisitionOutcome> AcquireAllAsync(
+        CaptureSessionContext session,
+        CancellationToken cancellationToken);
+}
+
 public interface IFreezingBoundary
 {
     ValueTask<CaptureFreezingOutcome> BeginFreezingAsync(
@@ -57,6 +64,23 @@ public abstract record FrozenDisplayFrameAcquisitionOutcome
     public sealed record Cancelled(string CancellationOrigin) : FrozenDisplayFrameAcquisitionOutcome;
 
     public sealed record Failed(Failure Failure) : FrozenDisplayFrameAcquisitionOutcome;
+}
+
+public abstract record FrozenDisplayFrameSetAcquisitionOutcome
+{
+    private FrozenDisplayFrameSetAcquisitionOutcome()
+    {
+    }
+
+    public sealed record Succeeded(FrozenDisplayFrameSet FrameSet) : FrozenDisplayFrameSetAcquisitionOutcome;
+
+    public sealed record Cancelled(
+        string CancellationOrigin,
+        bool CleanupCompleted) : FrozenDisplayFrameSetAcquisitionOutcome;
+
+    public sealed record Failed(
+        Failure Failure,
+        bool CleanupCompleted) : FrozenDisplayFrameSetAcquisitionOutcome;
 }
 
 public abstract record CaptureFreezingOutcome
