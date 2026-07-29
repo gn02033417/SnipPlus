@@ -202,6 +202,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
         private const uint SwpNoActivate = 0x0010;
         private const uint SwpShowWindow = 0x0040;
         private const int OverlayMaskAlpha = 0x99;
+        private const double HandleVisualSizePixels = 8;
 
         private readonly FrozenDisplayOverlayDescriptor _descriptor;
         private readonly ISelectionInputSink _inputSink;
@@ -220,6 +221,18 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             StrokeThickness = 2,
             Visibility = Visibility.Collapsed
         };
+        private readonly IReadOnlyDictionary<SelectionHitTestKind, Rectangle> _handles =
+            new Dictionary<SelectionHitTestKind, Rectangle>
+            {
+                [SelectionHitTestKind.LeftEdge] = CreateHandle(),
+                [SelectionHitTestKind.TopEdge] = CreateHandle(),
+                [SelectionHitTestKind.RightEdge] = CreateHandle(),
+                [SelectionHitTestKind.BottomEdge] = CreateHandle(),
+                [SelectionHitTestKind.TopLeftCorner] = CreateHandle(),
+                [SelectionHitTestKind.TopRightCorner] = CreateHandle(),
+                [SelectionHitTestKind.BottomLeftCorner] = CreateHandle(),
+                [SelectionHitTestKind.BottomRightCorner] = CreateHandle()
+            };
         private AppWindow? _appWindow;
         private nint _handle;
         private double _rasterizationScale = 1;
@@ -246,6 +259,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             _canvas.Children.Add(_maskRight);
             _canvas.Children.Add(_maskBottom);
             _canvas.Children.Add(_selectionBorder);
+            foreach (var handle in _handles.Values)
+            {
+                _canvas.Children.Add(handle);
+            }
         }
 
         public async ValueTask InitializeAsync(CancellationToken cancellationToken)
@@ -389,6 +406,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
                 SetMask(_maskRight, 0, 0, 0, 0);
                 SetMask(_maskBottom, 0, 0, 0, 0);
                 _selectionBorder.Visibility = Visibility.Collapsed;
+                HideHandles();
             }
             else
             {
@@ -410,7 +428,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
                 _selectionBorder.Visibility = intersection.IsPositive
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+                ApplyHandles(selection, width, height);
             }
+
+            ApplyCursor(state);
 
         }
 
@@ -427,6 +448,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             _canvas.PointerReleased -= OnPointerReleased;
             _canvas.KeyDown -= OnKeyDown;
             _canvas.Cursor = null;
+            HideHandles();
             try
             {
                 _appWindow?.Hide();
@@ -462,12 +484,18 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
 
             _canvas.Focus(FocusState.Pointer);
             var handle = WindowNative.GetWindowHandle(_window);
-            _ = SetCapture(handle);
-            _inputSink.PointerPressed(new SelectionPointerEvent(
+            var result = _inputSink.PointerPressed(new SelectionPointerEvent(
                 _descriptor.SessionId,
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point));
+            if (result.Kind is SelectionInputResultKind.Dragging
+                or SelectionInputResultKind.Moving
+                or SelectionInputResultKind.Resizing
+                or SelectionInputResultKind.Reselecting)
+            {
+                _ = SetCapture(handle);
+            }
             args.Handled = true;
         }
 
@@ -536,6 +564,126 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
                 0,
                 0))
         };
+
+        private static Rectangle CreateHandle() => new()
+        {
+            Fill = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 255, 255)),
+            Stroke = new SolidColorBrush(ColorHelper.FromArgb(255, 40, 96, 160)),
+            StrokeThickness = 1,
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false
+        };
+
+        private void ApplyCursor(SelectionVisualState state)
+        {
+            var hitTest = state.InteractionMode is
+                SelectionInteractionMode.Moving
+                or SelectionInteractionMode.ResizingLeft
+                or SelectionInteractionMode.ResizingTop
+                or SelectionInteractionMode.ResizingRight
+                or SelectionInteractionMode.ResizingBottom
+                or SelectionInteractionMode.ResizingTopLeft
+                or SelectionInteractionMode.ResizingTopRight
+                or SelectionInteractionMode.ResizingBottomLeft
+                or SelectionInteractionMode.ResizingBottomRight
+                ? state.ActiveHitTest
+                : state.HoverHitTest;
+            _canvas.Cursor = InputSystemCursor.Create(CursorShapeFor(hitTest));
+        }
+
+        private static InputSystemCursorShape CursorShapeFor(SelectionHitTestKind hitTest) => hitTest switch
+        {
+            SelectionHitTestKind.Interior => InputSystemCursorShape.SizeAll,
+            SelectionHitTestKind.LeftEdge or SelectionHitTestKind.RightEdge =>
+                InputSystemCursorShape.SizeWestEast,
+            SelectionHitTestKind.TopEdge or SelectionHitTestKind.BottomEdge =>
+                InputSystemCursorShape.SizeNorthSouth,
+            SelectionHitTestKind.TopLeftCorner or SelectionHitTestKind.BottomRightCorner =>
+                InputSystemCursorShape.SizeNorthwestSoutheast,
+            SelectionHitTestKind.TopRightCorner or SelectionHitTestKind.BottomLeftCorner =>
+                InputSystemCursorShape.SizeNortheastSouthwest,
+            _ => InputSystemCursorShape.Cross
+        };
+
+        private void ApplyHandles(
+            PhysicalRect selection,
+            double canvasWidth,
+            double canvasHeight)
+        {
+            foreach (var pair in _handles)
+            {
+                if (!TryGetHandleCenter(selection, pair.Key, out var center)
+                    || !IsHandleOnDisplay(center, pair.Key))
+                {
+                    pair.Value.Visibility = Visibility.Collapsed;
+                    continue;
+                }
+
+                var size = HandleVisualSizePixels / _rasterizationScale;
+                var left = (center.X - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                    / _rasterizationScale - size / 2;
+                var top = (center.Y - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                    / _rasterizationScale - size / 2;
+                left = Math.Clamp(left, 0, Math.Max(0, canvasWidth - size));
+                top = Math.Clamp(top, 0, Math.Max(0, canvasHeight - size));
+                SetCanvasRectangle(pair.Value, left, top, size, size);
+                pair.Value.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void HideHandles()
+        {
+            foreach (var handle in _handles.Values)
+            {
+                handle.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private bool IsHandleOnDisplay(
+            PhysicalPoint center,
+            SelectionHitTestKind handle)
+        {
+            var probeX = UsesRightEdge(handle) ? center.X - 1 : center.X;
+            var probeY = UsesBottomEdge(handle) ? center.Y - 1 : center.Y;
+            var bounds = _descriptor.PhysicalBoundsInVirtualDesktop;
+            return probeX >= bounds.Left
+                && probeX < bounds.Right
+                && probeY >= bounds.Top
+                && probeY < bounds.Bottom;
+        }
+
+        private static bool TryGetHandleCenter(
+            PhysicalRect selection,
+            SelectionHitTestKind handle,
+            out PhysicalPoint center)
+        {
+            var middleX = checked((int)(((long)selection.Left + selection.Right) / 2));
+            var middleY = checked((int)(((long)selection.Top + selection.Bottom) / 2));
+            center = handle switch
+            {
+                SelectionHitTestKind.LeftEdge => new(selection.Left, middleY),
+                SelectionHitTestKind.TopEdge => new(middleX, selection.Top),
+                SelectionHitTestKind.RightEdge => new(selection.Right, middleY),
+                SelectionHitTestKind.BottomEdge => new(middleX, selection.Bottom),
+                SelectionHitTestKind.TopLeftCorner => new(selection.Left, selection.Top),
+                SelectionHitTestKind.TopRightCorner => new(selection.Right, selection.Top),
+                SelectionHitTestKind.BottomLeftCorner => new(selection.Left, selection.Bottom),
+                SelectionHitTestKind.BottomRightCorner => new(selection.Right, selection.Bottom),
+                _ => default
+            };
+            return handle is not SelectionHitTestKind.Outside
+                and not SelectionHitTestKind.Interior;
+        }
+
+        private static bool UsesRightEdge(SelectionHitTestKind handle) => handle is
+            SelectionHitTestKind.RightEdge
+            or SelectionHitTestKind.TopRightCorner
+            or SelectionHitTestKind.BottomRightCorner;
+
+        private static bool UsesBottomEdge(SelectionHitTestKind handle) => handle is
+            SelectionHitTestKind.BottomEdge
+            or SelectionHitTestKind.BottomLeftCorner
+            or SelectionHitTestKind.BottomRightCorner;
 
         private sealed class CrosshairCanvas : Canvas
         {

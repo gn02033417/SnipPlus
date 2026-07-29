@@ -18,6 +18,22 @@ public sealed record SelectionVisualState
 
     public SelectionStatus Status { get; init; }
 
+    public SelectionInteractionMode InteractionMode { get; init; }
+
+    public SelectionHitTestKind HoverHitTest { get; init; } = SelectionHitTestKind.Outside;
+
+    public SelectionHitTestKind ActiveHitTest { get; init; } = SelectionHitTestKind.Outside;
+
+    public SelectionHitTestKind? InteractionStartHitTest { get; init; }
+
+    public int? ActivePointerId { get; init; }
+
+    public PhysicalPoint? InteractionStartPhysicalPoint { get; init; }
+
+    public PhysicalRect? InteractionStartBounds { get; init; }
+
+    public bool IsGeometryValid { get; init; }
+
     public PhysicalPoint? DragStartPhysicalPoint { get; init; }
 
     public PhysicalPoint? CurrentPhysicalPoint { get; init; }
@@ -31,7 +47,9 @@ public sealed record SelectionVisualState
             SessionId = sessionId,
             CoordinateVersion = coordinateVersion,
             SelectionRevision = 0,
-            Status = SelectionStatus.None
+            Status = SelectionStatus.None,
+            InteractionMode = SelectionInteractionMode.None,
+            IsGeometryValid = false
         };
 }
 
@@ -48,7 +66,13 @@ public enum SelectionInputResultKind
     Locked,
     Cancelled,
     InvalidSelection,
-    StaleSession
+    StaleSession,
+    HitTested,
+    Moving,
+    Resizing,
+    Reselecting,
+    AdjustmentCommitted,
+    AdjustmentRolledBack
 }
 
 public sealed record SelectionInputResult(
