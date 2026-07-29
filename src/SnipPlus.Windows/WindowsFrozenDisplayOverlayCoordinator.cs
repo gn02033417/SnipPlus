@@ -354,6 +354,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
                         "The overlay windows could not be shown as one batch.");
                 }
 
+                FocusSessionEscapeOwner(surfaces[0]);
                 deferredPosition = 0;
             }
             finally
@@ -578,6 +579,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             _ = SetWindowLongPtr(handle, GwlExStyle, style);
         }
 
+        private static void FocusSessionEscapeOwner(OverlaySurface surface)
+        {
+            _ = SetForegroundWindow(surface._handle);
+            _ = surface._canvas.Focus(FocusState.Programmatic);
+        }
+
         [DllImport("user32.dll")]
         private static extern nint SetCapture(nint hWnd);
 
@@ -592,6 +599,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
 
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(nint hWnd, int command);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(nint hWnd);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern nint BeginDeferWindowPos(int numberOfWindows);

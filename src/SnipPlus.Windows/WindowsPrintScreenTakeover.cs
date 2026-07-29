@@ -9,25 +9,34 @@ public sealed class WindowsPrintScreenTakeover : IPrintScreenTakeover
     private const int GwlWndProc = -4;
     private const uint VkSnapshot = 0x2C;
     private const uint WmHotKey = 0x0312;
+    private const nint HwndMessage = -3;
     private const int ErrorHotKeyNotRegistered = 1409;
 
     private static int _nextHotKeyId;
 
     private readonly nint _windowHandle;
-    private readonly int _hotKeyId = Interlocked.Increment(ref _nextHotKeyId);
+    private readonly bool _ownsWindowHandle;
+    private readonly int _hotKeyId;
     private readonly WindowProcedure _windowProcedure;
     private nint _previousWindowProcedure;
     private bool _windowProcedureInstalled;
     private bool _isRegistered;
     private bool _disposed;
 
-    public WindowsPrintScreenTakeover(nint windowHandle)
+    public WindowsPrintScreenTakeover()
+        : this(CreateMessageOnlyWindow(), ownsWindowHandle: true)
     {
-        _windowHandle = windowHandle;
-        _windowProcedure = HandleWindowMessage;
+    }
+
+    public WindowsPrintScreenTakeover(nint windowHandle)
+        : this(windowHandle, ownsWindowHandle: false)
+    {
     }
 
     public bool IsRegistered => _isRegistered;
+
+    public bool IsApplicationOwnedMessageWindow =>
+        _ownsWindowHandle && _windowHandle != 0;
 
     public event EventHandler<PrintScreenReceivedEventArgs>? PrintScreenReceived;
 
@@ -51,7 +60,7 @@ public sealed class WindowsPrintScreenTakeover : IPrintScreenTakeover
             return PrintScreenTakeoverResult.Failed(
                 PrintScreenTakeoverFailureCode.InvalidWindowHandle,
                 false,
-                "PrintScreen takeover could not start because the application window handle is invalid.");
+                "PrintScreen takeover could not start because its application-owned message window handle is unavailable.");
         }
 
         if (!InstallWindowProcedure(out var installError))
@@ -110,7 +119,7 @@ public sealed class WindowsPrintScreenTakeover : IPrintScreenTakeover
 
         if (_isRegistered)
         {
-            Unregister();
+            _ = Unregister();
         }
         else
         {
@@ -118,8 +127,22 @@ public sealed class WindowsPrintScreenTakeover : IPrintScreenTakeover
         }
 
         PrintScreenReceived = null;
+        if (_ownsWindowHandle && _windowHandle != 0)
+        {
+            _ = DestroyWindow(_windowHandle);
+        }
+
+        _isRegistered = false;
         _disposed = true;
         GC.SuppressFinalize(this);
+    }
+
+    private WindowsPrintScreenTakeover(nint windowHandle, bool ownsWindowHandle)
+    {
+        _windowHandle = windowHandle;
+        _ownsWindowHandle = ownsWindowHandle;
+        _hotKeyId = Interlocked.Increment(ref _nextHotKeyId);
+        _windowProcedure = HandleWindowMessage;
     }
 
     private bool InstallWindowProcedure(out int error)
@@ -146,12 +169,16 @@ public sealed class WindowsPrintScreenTakeover : IPrintScreenTakeover
             return;
         }
 
-        SetWindowLongPtr(_windowHandle, GwlWndProc, _previousWindowProcedure);
+        _ = SetWindowLongPtr(_windowHandle, GwlWndProc, _previousWindowProcedure);
         _previousWindowProcedure = 0;
         _windowProcedureInstalled = false;
     }
 
-    private nint HandleWindowMessage(nint windowHandle, uint message, nint wParam, nint lParam)
+    private nint HandleWindowMessage(
+        nint windowHandle,
+        uint message,
+        nint wParam,
+        nint lParam)
     {
         if (message == WmHotKey
             && wParam.ToInt32() == _hotKeyId
@@ -163,6 +190,23 @@ public sealed class WindowsPrintScreenTakeover : IPrintScreenTakeover
         }
 
         return CallWindowProc(_previousWindowProcedure, windowHandle, message, wParam, lParam);
+    }
+
+    private static nint CreateMessageOnlyWindow()
+    {
+        return CreateWindowEx(
+            0,
+            "STATIC",
+            "SnipPlus.PrintScreenOwner",
+            0,
+            0,
+            0,
+            0,
+            0,
+            HwndMessage,
+            0,
+            GetModuleHandle(null),
+            0);
     }
 
     private static string FormatWin32Error(int error)
@@ -193,4 +237,25 @@ public sealed class WindowsPrintScreenTakeover : IPrintScreenTakeover
         uint message,
         nint wParam,
         nint lParam);
+
+    [DllImport("user32.dll", EntryPoint = "CreateWindowExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint CreateWindowEx(
+        uint extendedStyle,
+        string className,
+        string windowName,
+        uint style,
+        int x,
+        int y,
+        int width,
+        int height,
+        nint parentWindow,
+        nint menu,
+        nint instance,
+        nint parameter);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyWindow(nint hWnd);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint GetModuleHandle(string? moduleName);
 }

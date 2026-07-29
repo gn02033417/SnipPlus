@@ -1,4 +1,5 @@
-﻿using Microsoft.UI.Xaml;
+﻿using System.Runtime.InteropServices;
+using Microsoft.UI.Xaml;
 using SnipPlus.Contracts;
 using SnipPlus.Core;
 using SnipPlus.Windows;
@@ -14,6 +15,7 @@ public partial class MainWindow : Window, IDisposable
     private readonly ResidentLifecycleCoordinator _residentLifecycle;
     private readonly WindowsCapturePlatformResources _platformResources;
     private readonly CapturePresentationWorkflowCoordinator _capturePresentation;
+    private readonly ResidentActivationBoundary _residentActivation;
     private bool _updatingTakeoverSetting;
     private int _shutdownStarted;
     private int _disposed;
@@ -39,8 +41,13 @@ public partial class MainWindow : Window, IDisposable
             _platformResources.OverlayCoordinator,
             new WindowsMainWindowCaptureSourceExclusion(this),
             _platformResources.AdapterFactory);
+        _residentActivation = new ResidentActivationBoundary(
+            isApplicationExiting: () => Volatile.Read(ref _shutdownStarted) != 0
+                || Program.IsApplicationExitStarted,
+            isCaptureActive: () => _capturePresentation.CurrentState != WorkflowState.ResidentReady,
+            showMainWindow: ShowMainWindow);
         _residentLifecycle = new ResidentLifecycleCoordinator(
-            printScreenTakeover ?? new WindowsPrintScreenTakeover(WindowNative.GetWindowHandle(this)),
+            printScreenTakeover ?? new WindowsPrintScreenTakeover(),
             settingsStore ?? new WindowsPrintScreenTakeoverSettingsStore());
         _residentLifecycle.PrintScreenReceived += OnPrintScreenReceived;
         Closed += OnClosed;
@@ -118,6 +125,32 @@ public partial class MainWindow : Window, IDisposable
 
     private void SetStatus(string text) => StatusText.Text = text;
 
+    internal void HandleExternalActivation()
+    {
+        _ = _residentActivation.HandleActivation();
+    }
+
+    private void ShowMainWindow()
+    {
+        if (Volatile.Read(ref _shutdownStarted) != 0
+            || Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
+        var handle = WindowNative.GetWindowHandle(this);
+        if (handle != 0)
+        {
+            _ = ShowWindow(handle, ShowWindowRestore);
+        }
+
+        Activate();
+        if (handle != 0)
+        {
+            _ = SetForegroundWindow(handle);
+        }
+    }
+
     private void OnClosed(object sender, WindowEventArgs args)
     {
         if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
@@ -127,6 +160,7 @@ public partial class MainWindow : Window, IDisposable
 
         try
         {
+            Program.BeginApplicationExit();
             _residentLifecycle.ExitApplication();
         }
         finally
@@ -149,4 +183,12 @@ public partial class MainWindow : Window, IDisposable
         _residentLifecycle.Dispose();
         GC.SuppressFinalize(this);
     }
+
+    private const int ShowWindowRestore = 9;
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(nint hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(nint hWnd);
 }

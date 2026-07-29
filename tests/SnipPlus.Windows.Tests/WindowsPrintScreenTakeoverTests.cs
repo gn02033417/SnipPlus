@@ -9,6 +9,16 @@ public sealed class WindowsPrintScreenTakeoverTests
 {
     [TestMethod]
     [TestCategory("Contract")]
+    public void DefaultTakeoverOwnsAnApplicationMessageWindowWithoutRegisteringAHotkey()
+    {
+        using var takeover = new WindowsPrintScreenTakeover();
+
+        Assert.IsTrue(takeover.IsApplicationOwnedMessageWindow);
+        Assert.IsFalse(takeover.IsRegistered);
+    }
+
+    [TestMethod]
+    [TestCategory("Contract")]
     public void InvalidWindowHandleReturnsUnderstandableRegistrationFailure()
     {
         using var takeover = new WindowsPrintScreenTakeover(nint.Zero);
