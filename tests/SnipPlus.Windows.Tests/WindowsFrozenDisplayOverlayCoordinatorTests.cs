@@ -79,4 +79,27 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
             InputSystemCursorShape.SizeNortheastSouthwest,
             cursorMapper.Invoke(null, new object[] { SelectionHitTestKind.TopRightCorner }));
     }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void FunctionBarIsHostedInsideOverlayAndHasNoTopLevelWindowType()
+    {
+        var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("FunctionBarSurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(functionBarSurface);
+        Assert.AreEqual(
+            typeof(Microsoft.UI.Xaml.Controls.Border),
+            functionBarSurface.GetField("_root", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
+        Assert.IsNotNull(functionBarSurface.GetField(
+            "_buttons",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNotNull(functionBarSurface.GetMethod(
+            "TryMeasurePhysicalSize",
+            BindingFlags.Instance | BindingFlags.Public));
+        Assert.IsNull(functionBarSurface.GetField(
+            "_window",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+    }
 }

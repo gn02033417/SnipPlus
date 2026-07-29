@@ -63,13 +63,20 @@ public sealed class WorkflowStateAuthorityTests
         Assert.IsTrue(locked.IsSuccess);
         Assert.AreEqual(WorkflowState.SelectionLocked, authority.CurrentState);
 
-        var outputState = authority.RequestTransition(new(
+        var editing = authority.RequestTransition(new(
             WorkflowState.SelectionLocked,
+            WorkflowState.Editing,
+            "function-bar-ready"));
+        Assert.IsTrue(editing.IsSuccess);
+        Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
+
+        var outputState = authority.RequestTransition(new(
+            WorkflowState.Editing,
             WorkflowState.Capturing,
             "output-is-out-of-scope"));
         Assert.IsFalse(outputState.IsSuccess);
-        Assert.AreEqual(WorkflowState.SelectionLocked, authority.CurrentState);
-        Assert.AreEqual(4, authority.SuccessfulTransitionCount);
+        Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
+        Assert.AreEqual(5, authority.SuccessfulTransitionCount);
     }
 
     [TestMethod]

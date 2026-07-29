@@ -146,16 +146,145 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.AreEqual(2, overlay.CloseCalls);
     }
 
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public async Task LockedSelectionEntersEditingAndOnlyCancelIsEnabled()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        using var workflow = CreateWorkflow(requests, provider, overlay, functionBar);
+
+        var result = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        var input = overlay.InputSink!;
+        input.PointerPressed(Input(result.Session, -3, 0));
+        input.PointerMoved(Input(result.Session, 3, 2));
+        var locked = input.PointerReleased(Input(result.Session, 3, 2));
+
+        Assert.AreEqual(SelectionInputResultKind.Locked, locked.Kind);
+        Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
+        Assert.AreEqual(SelectionStatus.Locked, workflow.CurrentSelection!.Status);
+        Assert.AreEqual(1, functionBar.PrepareCalls);
+        Assert.AreEqual(1, functionBar.ShowCalls);
+
+        foreach (var command in new[]
+        {
+            FunctionBarCommand.Complete,
+            FunctionBarCommand.Save,
+            FunctionBarCommand.Undo,
+            FunctionBarCommand.Redo
+        })
+        {
+            var disabled = workflow.Execute(new FunctionBarCommandRequest(
+                result.Session.SessionId,
+                result.Session.VirtualDesktopSnapshot.CoordinateVersion,
+                locked.State.SelectionRevision,
+                command));
+            Assert.AreEqual(FunctionBarCommandResultKind.Disabled, disabled.Kind);
+        }
+
+        var cancel = workflow.Execute(new FunctionBarCommandRequest(
+            result.Session.SessionId,
+            result.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            locked.State.SelectionRevision,
+            FunctionBarCommand.Cancel));
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, cancel.Kind);
+        await workflow.CancelCurrentAsync("test");
+        Assert.AreEqual(WorkflowState.ResidentReady, authority.CurrentState);
+        Assert.IsTrue(functionBar.CloseCalls >= 1);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Cancellation")]
+    public async Task FunctionBarPreparationFailureDoesNotEnterEditing()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator
+        {
+            PreparationFailure = Failure.Create(
+                FailureCode.FunctionBarPlacementFailed,
+                FailureCategory.Resource,
+                FailureRecoverability.RetryNewIntent,
+                "test-function-bar",
+                request.RequestId,
+                "synthetic placement failure")
+        };
+        using var workflow = CreateWorkflow(requests, provider, overlay, functionBar);
+
+        var result = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        var input = overlay.InputSink!;
+        input.PointerPressed(Input(result.Session, -3, 0));
+        input.PointerMoved(Input(result.Session, 3, 2));
+        input.PointerReleased(Input(result.Session, 3, 2));
+        await Task.Yield();
+
+        Assert.AreEqual(WorkflowState.ResidentReady, authority.CurrentState);
+        Assert.AreEqual(1, functionBar.PrepareCalls);
+        Assert.IsTrue(provider.LastSession?.IsDisposed ?? false);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task EditingAdjustmentHidesAndRepositionsFunctionBar()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        using var workflow = CreateWorkflow(requests, provider, overlay, functionBar);
+
+        var result = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        var input = overlay.InputSink!;
+        input.PointerPressed(Input(result.Session, -3, 0));
+        input.PointerMoved(Input(result.Session, 3, 2));
+        var locked = input.PointerReleased(Input(result.Session, 3, 2));
+        Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
+
+        input.PointerPressed(Input(result.Session, 0, 1));
+        input.PointerMoved(Input(result.Session, 5, 4));
+        var adjusted = input.PointerReleased(Input(result.Session, 5, 4));
+
+        Assert.AreEqual(SelectionInputResultKind.AdjustmentCommitted, adjusted.Kind);
+        Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
+        Assert.IsTrue(functionBar.HideCalls >= 1);
+        Assert.IsTrue(functionBar.RepositionCalls >= 1);
+        Assert.IsTrue(functionBar.ShowCalls >= 2);
+
+        await workflow.CancelCurrentAsync("test");
+    }
+
     private static CapturePresentationWorkflowCoordinator CreateWorkflow(
         CaptureRequestCoordinator requests,
         FakeAllDisplayProvider provider,
-        FakeOverlayCoordinator overlay)
+        FakeOverlayCoordinator overlay,
+        IFunctionBarPresentationCoordinator? functionBar = null)
     {
         var freezing = new CaptureFreezingCoordinator(
             requests,
             new FixedTopologyProvider(CreateSnapshot()),
             provider);
-        return new CapturePresentationWorkflowCoordinator(freezing, overlay, new HiddenSourceExclusion());
+        return new CapturePresentationWorkflowCoordinator(
+            freezing,
+            overlay,
+            new HiddenSourceExclusion(),
+            functionBarPresentation: functionBar);
     }
 
     private static SelectionPointerEvent Input(
@@ -287,5 +416,112 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         public void Dispose()
         {
         }
+    }
+
+    private sealed class FakeFunctionBarPresentationCoordinator : IFunctionBarPresentationCoordinator
+    {
+        public Failure? PreparationFailure { get; init; }
+
+        public int PrepareCalls { get; private set; }
+
+        public int RepositionCalls { get; private set; }
+
+        public int ShowCalls { get; private set; }
+
+        public int HideCalls { get; private set; }
+
+        public int CloseCalls { get; private set; }
+
+        public FunctionBarPresentationResult Prepare(FunctionBarPresentationRequest request)
+        {
+            PrepareCalls++;
+            return PreparationFailure is null
+                ? Ready(request, FunctionBarPresentationResultKind.Ready)
+                : Failed(request, PreparationFailure);
+        }
+
+        public FunctionBarPresentationResult Reposition(FunctionBarPresentationRequest request)
+        {
+            RepositionCalls++;
+            return Ready(request, FunctionBarPresentationResultKind.Ready);
+        }
+
+        public FunctionBarPresentationResult Show(
+            Guid sessionId,
+            string coordinateVersion,
+            int selectionRevision)
+        {
+            ShowCalls++;
+            return new FunctionBarPresentationResult(
+                FunctionBarPresentationResultKind.Shown,
+                sessionId,
+                coordinateVersion,
+                selectionRevision,
+                new FunctionBarPlacementResult(
+                    "left",
+                    new PhysicalRect(0, 8, 100, 48),
+                    FunctionBarPlacementSide.Below,
+                    selectionRevision,
+                    true),
+                null,
+                "shown");
+        }
+
+        public FunctionBarPresentationResult Hide(Guid sessionId)
+        {
+            HideCalls++;
+            return new FunctionBarPresentationResult(
+                FunctionBarPresentationResultKind.Hidden,
+                sessionId,
+                string.Empty,
+                0,
+                null,
+                null,
+                "hidden");
+        }
+
+        public FunctionBarPresentationResult Close(Guid sessionId)
+        {
+            CloseCalls++;
+            return new FunctionBarPresentationResult(
+                FunctionBarPresentationResultKind.Closed,
+                sessionId,
+                string.Empty,
+                0,
+                null,
+                null,
+                "closed");
+        }
+
+        public void Dispose()
+        {
+        }
+
+        private static FunctionBarPresentationResult Ready(
+            FunctionBarPresentationRequest request,
+            FunctionBarPresentationResultKind kind) => new(
+            kind,
+            request.SessionId,
+            request.CoordinateVersion,
+            request.Selection.SelectionRevision,
+            new FunctionBarPlacementResult(
+                "left",
+                new PhysicalRect(0, 8, 100, 48),
+                FunctionBarPlacementSide.Below,
+                request.Selection.SelectionRevision,
+                true),
+            null,
+            "ready");
+
+        private static FunctionBarPresentationResult Failed(
+            FunctionBarPresentationRequest request,
+            Failure failure) => new(
+            FunctionBarPresentationResultKind.Failed,
+            request.SessionId,
+            request.CoordinateVersion,
+            request.Selection.SelectionRevision,
+            null,
+            failure,
+            "failed");
     }
 }
