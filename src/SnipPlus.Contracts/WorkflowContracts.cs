@@ -7,6 +7,7 @@ public enum WorkflowState
     Freezing,
     Selecting,
     SelectionLocked,
+    Editing,
     Cancelled,
     Failed,
     Idle,

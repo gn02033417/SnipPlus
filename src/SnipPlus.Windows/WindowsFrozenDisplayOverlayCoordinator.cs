@@ -8,17 +8,28 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using SnipPlus.Contracts;
+using Windows.Foundation;
 using Windows.Graphics;
 using Windows.Graphics.Imaging;
 using WinRT.Interop;
 
 namespace SnipPlus.Windows;
 
-public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayPresentationCoordinator
+public sealed class WindowsFrozenDisplayOverlayCoordinator :
+    IAllDisplayOverlayPresentationCoordinator,
+    IFunctionBarPresentationCoordinator
 {
     private readonly object _gate = new();
     private readonly Dictionary<Guid, IReadOnlyList<OverlaySurface>> _sessions = new();
+    private readonly Dictionary<Guid, FunctionBarSessionPresentation> _functionBars = new();
+    private readonly IFunctionBarPlacementService _placementService;
     private bool _disposed;
+
+    public WindowsFrozenDisplayOverlayCoordinator(IFunctionBarPlacementService placementService)
+    {
+        _placementService = placementService
+            ?? throw new ArgumentNullException(nameof(placementService));
+    }
 
     public async ValueTask<FrozenDisplayOverlayPresentationOutcome> PresentAsync(
         FrozenDisplayOverlayPresentationRequest request,
@@ -102,6 +113,106 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
         }
     }
 
+    public FunctionBarPresentationResult Prepare(FunctionBarPresentationRequest request) =>
+        PrepareOrReposition(request, allowExisting: false);
+
+    public FunctionBarPresentationResult Reposition(FunctionBarPresentationRequest request) =>
+        PrepareOrReposition(request, allowExisting: true);
+
+    public FunctionBarPresentationResult Show(
+        Guid sessionId,
+        string coordinateVersion,
+        int selectionRevision)
+    {
+        lock (_gate)
+        {
+            if (!_functionBars.TryGetValue(sessionId, out var presentation))
+            {
+                return FunctionBarResult(
+                    FunctionBarPresentationResultKind.StaleSession,
+                    sessionId,
+                    coordinateVersion,
+                    selectionRevision,
+                    null,
+                    null,
+                    "The Function Bar session is no longer active.");
+            }
+
+            if (!string.Equals(
+                    presentation.Request.CoordinateVersion,
+                    coordinateVersion,
+                    StringComparison.Ordinal)
+                || selectionRevision != presentation.Request.Selection.SelectionRevision)
+            {
+                return FunctionBarResult(
+                    FunctionBarPresentationResultKind.StaleSelectionRevision,
+                    sessionId,
+                    coordinateVersion,
+                    selectionRevision,
+                    presentation.Placement,
+                    null,
+                    "The Function Bar show request is stale.");
+            }
+
+            presentation.Surface.SetVisible(true);
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.Shown,
+                sessionId,
+                coordinateVersion,
+                selectionRevision,
+                presentation.Placement,
+                null,
+                "The Function Bar is visible.");
+        }
+    }
+
+    public FunctionBarPresentationResult Hide(Guid sessionId)
+    {
+        lock (_gate)
+        {
+            if (!_functionBars.TryGetValue(sessionId, out var presentation))
+            {
+                return FunctionBarResult(
+                    FunctionBarPresentationResultKind.Hidden,
+                    sessionId,
+                    string.Empty,
+                    0,
+                    null,
+                    null,
+                    "The Function Bar was already hidden.");
+            }
+
+            presentation.Surface.SetVisible(false);
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.Hidden,
+                sessionId,
+                presentation.Request.CoordinateVersion,
+                presentation.Request.Selection.SelectionRevision,
+                presentation.Placement,
+                null,
+                "The Function Bar is hidden while the Selection is adjusted.");
+        }
+    }
+
+    public FunctionBarPresentationResult Close(Guid sessionId)
+    {
+        FunctionBarSessionPresentation? presentation;
+        lock (_gate)
+        {
+            _functionBars.Remove(sessionId, out presentation);
+        }
+
+        presentation?.Dispose();
+        return FunctionBarResult(
+            FunctionBarPresentationResultKind.Closed,
+            sessionId,
+            presentation?.Request.CoordinateVersion ?? string.Empty,
+            presentation?.Request.Selection.SelectionRevision ?? 0,
+            presentation?.Placement,
+            null,
+            "The Function Bar is closed.");
+    }
+
     public void ApplySelection(SelectionVisualState state)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -125,6 +236,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
     public async ValueTask CloseAsync(Guid sessionId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        Close(sessionId);
         IReadOnlyList<OverlaySurface>? surfaces;
         lock (_gate)
         {
@@ -158,6 +270,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             _disposed = true;
             sessions = _sessions.Values.ToArray();
             _sessions.Clear();
+            var functionBars = _functionBars.Values.ToArray();
+            _functionBars.Clear();
+            foreach (var functionBar in functionBars)
+            {
+                functionBar.Dispose();
+            }
         }
 
         foreach (var surfaces in sessions)
@@ -188,6 +306,427 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
         correlationId,
         message,
         nativeCode: nativeCode));
+
+    private FunctionBarPresentationResult PrepareOrReposition(
+        FunctionBarPresentationRequest request,
+        bool allowExisting)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        IReadOnlyList<OverlaySurface>? surfaces;
+        FunctionBarSessionPresentation? existing;
+        lock (_gate)
+        {
+            _sessions.TryGetValue(request.SessionId, out surfaces);
+            _functionBars.TryGetValue(request.SessionId, out existing);
+        }
+
+        if (surfaces is null)
+        {
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.StaleSession,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.Selection.SelectionRevision,
+                null,
+                null,
+                "The Function Bar belongs to a stale capture session.");
+        }
+
+        if (surfaces.Any(surface => !string.Equals(
+                surface.CoordinateVersion,
+                request.CoordinateVersion,
+                StringComparison.Ordinal)))
+        {
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.StaleSession,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.Selection.SelectionRevision,
+                existing?.Placement,
+                null,
+                "The Function Bar coordinate version is stale.");
+        }
+
+        if (existing is not null
+            && (request.Selection.SelectionRevision < existing.Request.Selection.SelectionRevision
+                || (!allowExisting
+                    && existing.Request.Selection.SelectionRevision != request.Selection.SelectionRevision)))
+        {
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.StaleSelectionRevision,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.Selection.SelectionRevision,
+                existing.Placement,
+                null,
+                "The Function Bar already has a newer Selection revision.");
+        }
+
+        var workAreas = new List<FunctionBarDisplayWorkArea>(surfaces.Count);
+        foreach (var surface in surfaces)
+        {
+            if (!surface.TryGetPhysicalWorkArea(out var workArea))
+            {
+                return FunctionBarResult(
+                    FunctionBarPresentationResultKind.Failed,
+                    request.SessionId,
+                    request.CoordinateVersion,
+                    request.Selection.SelectionRevision,
+                    null,
+                    CreateFailure(
+                        request.SessionId,
+                        FailureCode.InvalidWorkArea,
+                        "A display Work Area could not be read."),
+                    "The Function Bar could not determine a display Work Area.");
+            }
+
+            workAreas.Add(new FunctionBarDisplayWorkArea(
+                surface.DisplayId,
+                surface.PhysicalBounds,
+                workArea,
+                surface.RasterizationScale,
+                surface.RasterizationScale));
+        }
+
+        var anchor = _placementService.Place(new FunctionBarPlacementRequest(
+            request.SessionId,
+            request.CoordinateVersion,
+            request.Selection.SelectionRevision,
+            request.Selection.NormalizedPhysicalBounds!.Value,
+            workAreas,
+            new PhysicalPixelSize(1, 1),
+            MarginPixels: 8,
+            request.Selection.CurrentPhysicalPoint));
+        if (anchor is not FunctionBarPlacementOutcome.Ready anchorReady)
+        {
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.Failed,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.Selection.SelectionRevision,
+                null,
+                anchor is FunctionBarPlacementOutcome.Failed failed
+                    ? failed.Failure
+                    : CreateFailure(
+                        request.SessionId,
+                        FailureCode.FunctionBarPlacementFailed,
+                        "The Function Bar anchor could not be selected."),
+                "The Function Bar anchor could not be selected.");
+        }
+
+        var anchorSurface = surfaces.FirstOrDefault(
+            surface => string.Equals(
+                surface.DisplayId,
+                anchorReady.Placement.DisplayId,
+                StringComparison.Ordinal));
+        if (anchorSurface is null)
+        {
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.Failed,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.Selection.SelectionRevision,
+                null,
+                CreateFailure(
+                    request.SessionId,
+                    FailureCode.InvalidWorkArea,
+                    "The Function Bar anchor display is no longer available."),
+                "The Function Bar anchor display is no longer available.");
+        }
+
+        FunctionBarSurface? surfaceForBar = null;
+        var reusesExisting = existing is not null
+            && ReferenceEquals(existing.Surface.Owner, anchorSurface);
+        if (reusesExisting)
+        {
+            surfaceForBar = existing!.Surface;
+            surfaceForBar.Update(request);
+        }
+        else
+        {
+            surfaceForBar = anchorSurface.CreateFunctionBar(request);
+        }
+
+        if (!surfaceForBar.TryMeasurePhysicalSize(out var measuredSize))
+        {
+            if (!reusesExisting)
+            {
+                surfaceForBar.Dispose();
+            }
+
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.Failed,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.Selection.SelectionRevision,
+                null,
+                CreateFailure(
+                    request.SessionId,
+                    FailureCode.BarMeasurementFailed,
+                    "The Function Bar could not be measured."),
+                "The Function Bar could not be measured.");
+        }
+
+        var placed = _placementService.Place(new FunctionBarPlacementRequest(
+            request.SessionId,
+            request.CoordinateVersion,
+            request.Selection.SelectionRevision,
+            request.Selection.NormalizedPhysicalBounds.Value,
+            workAreas,
+            measuredSize,
+            MarginPixels: 8,
+            request.Selection.CurrentPhysicalPoint));
+        if (placed is not FunctionBarPlacementOutcome.Ready placedReady)
+        {
+            if (!reusesExisting)
+            {
+                surfaceForBar.Dispose();
+            }
+
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.Failed,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.Selection.SelectionRevision,
+                null,
+                placed is FunctionBarPlacementOutcome.Failed failed
+                    ? failed.Failure
+                    : CreateFailure(
+                        request.SessionId,
+                        FailureCode.FunctionBarPlacementFailed,
+                        "The Function Bar could not be placed."),
+                "The Function Bar could not be placed.");
+        }
+
+        surfaceForBar.ApplyPlacement(placedReady.Placement);
+        surfaceForBar.SetVisible(false);
+        var next = new FunctionBarSessionPresentation(request, placedReady.Placement, surfaceForBar);
+        lock (_gate)
+        {
+            if (_disposed || !_sessions.ContainsKey(request.SessionId))
+            {
+                next.Dispose();
+                return FunctionBarResult(
+                    FunctionBarPresentationResultKind.StaleSession,
+                    request.SessionId,
+                    request.CoordinateVersion,
+                    request.Selection.SelectionRevision,
+                    null,
+                    null,
+                    "The Function Bar session ended while it was being prepared.");
+            }
+
+            _functionBars[request.SessionId] = next;
+        }
+
+        if (existing is not null && !ReferenceEquals(existing.Surface, surfaceForBar))
+        {
+            existing.Dispose();
+        }
+
+        return FunctionBarResult(
+            FunctionBarPresentationResultKind.Ready,
+            request.SessionId,
+            request.CoordinateVersion,
+            request.Selection.SelectionRevision,
+            placedReady.Placement,
+            null,
+            "The Function Bar is prepared and hidden.");
+    }
+
+    private static FunctionBarPresentationResult FunctionBarResult(
+        FunctionBarPresentationResultKind kind,
+        Guid sessionId,
+        string coordinateVersion,
+        int selectionRevision,
+        FunctionBarPlacementResult? placement,
+        Failure? failure,
+        string message) => new(
+        kind,
+        sessionId,
+        coordinateVersion,
+        selectionRevision,
+        placement,
+        failure,
+        message);
+
+    private static Failure CreateFailure(Guid correlationId, FailureCode code, string message) =>
+        Failure.Create(
+            code,
+            FailureCategory.Resource,
+            FailureRecoverability.RetryNewIntent,
+            nameof(WindowsFrozenDisplayOverlayCoordinator),
+            correlationId,
+            message);
+
+    private sealed class FunctionBarSessionPresentation : IDisposable
+    {
+        public FunctionBarSessionPresentation(
+            FunctionBarPresentationRequest request,
+            FunctionBarPlacementResult placement,
+            FunctionBarSurface surface)
+        {
+            Request = request;
+            Placement = placement;
+            Surface = surface;
+        }
+
+        public FunctionBarPresentationRequest Request { get; }
+
+        public FunctionBarPlacementResult Placement { get; }
+
+        public FunctionBarSurface Surface { get; }
+
+        public void Dispose() => Surface.Dispose();
+    }
+
+    private sealed class FunctionBarSurface : IDisposable
+    {
+        private readonly OverlaySurface _owner;
+        private readonly Border _root = new()
+        {
+            Background = new SolidColorBrush(ColorHelper.FromArgb(245, 32, 32, 32)),
+            BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(255, 128, 128, 128)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(6),
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = true
+        };
+        private readonly StackPanel _panel = new()
+        {
+            Orientation = Orientation.Horizontal
+        };
+        private readonly IReadOnlyDictionary<FunctionBarCommand, Button> _buttons;
+        private FunctionBarPresentationRequest _request;
+        private bool _disposed;
+
+        public FunctionBarSurface(
+            OverlaySurface owner,
+            FunctionBarPresentationRequest request)
+        {
+            _owner = owner;
+            _request = request;
+            _buttons = new Dictionary<FunctionBarCommand, Button>
+            {
+                [FunctionBarCommand.Complete] = CreateButton("Complete"),
+                [FunctionBarCommand.Save] = CreateButton("Save"),
+                [FunctionBarCommand.Cancel] = CreateButton("Cancel"),
+                [FunctionBarCommand.Undo] = CreateButton("Undo"),
+                [FunctionBarCommand.Redo] = CreateButton("Redo")
+            };
+            _buttons[FunctionBarCommand.Cancel].Click += OnCancelClicked;
+            _root.PointerPressed += OnPointerPressed;
+            foreach (var button in _buttons.Values)
+            {
+                _panel.Children.Add(button);
+            }
+
+            _root.Child = _panel;
+            Update(request);
+        }
+
+        public OverlaySurface Owner => _owner;
+
+        public FrameworkElement Root => _root;
+
+        public void Update(FunctionBarPresentationRequest request)
+        {
+            _request = request;
+            foreach (var pair in _buttons)
+            {
+                pair.Value.IsEnabled = request.Availability.IsEnabled(pair.Key);
+            }
+        }
+
+        public bool TryMeasurePhysicalSize(out PhysicalPixelSize size)
+        {
+            size = default;
+            if (_disposed || _owner.RasterizationScale <= 0)
+            {
+                return false;
+            }
+
+            _root.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var desired = _root.DesiredSize;
+            if (!double.IsFinite(desired.Width)
+                || !double.IsFinite(desired.Height)
+                || desired.Width <= 0
+                || desired.Height <= 0)
+            {
+                return false;
+            }
+
+            var width = (int)Math.Ceiling(desired.Width * _owner.RasterizationScale);
+            var height = (int)Math.Ceiling(desired.Height * _owner.RasterizationScale);
+            if (width <= 0 || height <= 0)
+            {
+                return false;
+            }
+
+            size = new PhysicalPixelSize(width, height);
+            return true;
+        }
+
+        public void ApplyPlacement(FunctionBarPlacementResult placement)
+        {
+            var bounds = _owner.PhysicalBounds;
+            var scale = _owner.RasterizationScale;
+            Canvas.SetLeft(_root, (placement.FunctionBarPhysicalBounds.Left - bounds.Left) / scale);
+            Canvas.SetTop(_root, (placement.FunctionBarPhysicalBounds.Top - bounds.Top) / scale);
+            _root.Width = placement.FunctionBarPhysicalBounds.Width / scale;
+            _root.Height = placement.FunctionBarPhysicalBounds.Height / scale;
+        }
+
+        public void SetVisible(bool visible)
+        {
+            if (!_disposed)
+            {
+                _root.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _buttons[FunctionBarCommand.Cancel].Click -= OnCancelClicked;
+            _root.PointerPressed -= OnPointerPressed;
+            _owner.RemoveFunctionBar(this);
+            _root.Visibility = Visibility.Collapsed;
+            _panel.Children.Clear();
+            _root.Child = null;
+        }
+
+        private static Button CreateButton(string label)
+        {
+            var button = new Button
+            {
+                Content = label,
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(2, 0, 2, 0),
+                IsTabStop = true
+            };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
+            return button;
+        }
+
+        private void OnCancelClicked(object sender, RoutedEventArgs args)
+        {
+            _ = _request.CommandSink.Execute(new FunctionBarCommandRequest(
+                _request.SessionId,
+                _request.CoordinateVersion,
+                _request.Selection.SelectionRevision,
+                FunctionBarCommand.Cancel));
+        }
+
+        private void OnPointerPressed(object sender, PointerRoutedEventArgs args) =>
+            args.Handled = true;
+    }
 
     private sealed class OverlaySurface : IDisposable
     {
@@ -233,10 +772,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
                 [SelectionHitTestKind.BottomLeftCorner] = CreateHandle(),
                 [SelectionHitTestKind.BottomRightCorner] = CreateHandle()
             };
+        private FunctionBarSurface? _functionBar;
         private AppWindow? _appWindow;
         private nint _handle;
         private double _rasterizationScale = 1;
         private bool _disposed;
+
+        public string DisplayId => _descriptor.DisplayId;
+
+        public PhysicalRect PhysicalBounds => _descriptor.PhysicalBoundsInVirtualDesktop;
+
+        public string CoordinateVersion => _descriptor.CoordinateVersion;
+
+        public double RasterizationScale => _rasterizationScale;
 
         public OverlaySurface(
             FrozenDisplayOverlayDescriptor descriptor,
@@ -323,6 +871,59 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             {
                 _ = SetThreadDpiAwarenessContext(previousDpiContext);
             }
+        }
+
+        public FunctionBarSurface CreateFunctionBar(FunctionBarPresentationRequest request)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, nameof(OverlaySurface));
+            _functionBar?.Dispose();
+            _functionBar = new FunctionBarSurface(this, request);
+            _canvas.Children.Add(_functionBar.Root);
+            return _functionBar;
+        }
+
+        public void RemoveFunctionBar(FunctionBarSurface functionBar)
+        {
+            if (ReferenceEquals(_functionBar, functionBar))
+            {
+                _canvas.Children.Remove(functionBar.Root);
+                _functionBar = null;
+            }
+        }
+
+        public bool TryGetPhysicalWorkArea(out PhysicalRect workArea)
+        {
+            workArea = default;
+            var bounds = _descriptor.PhysicalBoundsInVirtualDesktop;
+            if (!bounds.IsPositive)
+            {
+                return false;
+            }
+
+            var center = new PointNative(
+                bounds.Left + (int)Math.Min(int.MaxValue, bounds.Width64 / 2),
+                bounds.Top + (int)Math.Min(int.MaxValue, bounds.Height64 / 2));
+            var monitor = MonitorFromPoint(center, MonitorDefaultToNearest);
+            if (monitor == 0)
+            {
+                return false;
+            }
+
+            var info = new MonitorInfoNative
+            {
+                Size = Marshal.SizeOf<MonitorInfoNative>()
+            };
+            if (!GetMonitorInfo(monitor, ref info))
+            {
+                return false;
+            }
+
+            workArea = new PhysicalRect(
+                info.Work.Left,
+                info.Work.Top,
+                info.Work.Right,
+                info.Work.Bottom);
+            return workArea.IsPositive;
         }
 
         public static void ShowAll(IReadOnlyList<OverlaySurface> surfaces)
@@ -443,6 +1044,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
             }
 
             _disposed = true;
+            _functionBar?.Dispose();
+            _functionBar = null;
             _canvas.PointerPressed -= OnPointerPressed;
             _canvas.PointerMoved -= OnPointerMoved;
             _canvas.PointerReleased -= OnPointerReleased;
@@ -742,6 +1345,17 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out PointNative lpPoint);
 
+        private const uint MonitorDefaultToNearest = 2;
+
+        [DllImport("user32.dll")]
+        private static extern nint MonitorFromPoint(PointNative point, uint flags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetMonitorInfo(
+            nint monitor,
+            ref MonitorInfoNative monitorInfo);
+
         [DllImport("user32.dll")]
         private static extern nint SetThreadDpiAwarenessContext(nint dpiContext);
 
@@ -778,8 +1392,32 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
         [StructLayout(LayoutKind.Sequential)]
         private readonly struct PointNative
         {
+            public PointNative(int x, int y)
+            {
+                X = x;
+                Y = y;
+            }
+
             public readonly int X;
             public readonly int Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MonitorInfoNative
+        {
+            public int Size;
+            public RectNative Monitor;
+            public RectNative Work;
+            public uint Flags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private readonly struct RectNative
+        {
+            public readonly int Left;
+            public readonly int Top;
+            public readonly int Right;
+            public readonly int Bottom;
         }
     }
 }

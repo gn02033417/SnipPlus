@@ -19,7 +19,10 @@ public abstract record CapturePresentationOutcome
     public sealed record Failed(Failure Failure) : CapturePresentationOutcome;
 }
 
-public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink, IDisposable
+public sealed class CapturePresentationWorkflowCoordinator :
+    ISelectionInputSink,
+    IFunctionBarCommandSink,
+    IDisposable
 {
     private readonly object _gate = new();
     private readonly WorkflowStateAuthority _stateAuthority;
@@ -27,6 +30,7 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
     private readonly IAllDisplayOverlayPresentationCoordinator _overlayCoordinator;
     private readonly ICaptureSourceExclusion? _captureSourceExclusion;
     private readonly ICaptureAccessPreflight? _captureAccessPreflight;
+    private readonly IFunctionBarPresentationCoordinator? _functionBarPresentation;
     private CaptureSessionContext? _activeSession;
     private InitialSelectionCoordinator? _selectionCoordinator;
     private CancellationTokenSource? _sessionCancellation;
@@ -38,7 +42,8 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
         CaptureFreezingCoordinator freezingCoordinator,
         IAllDisplayOverlayPresentationCoordinator overlayCoordinator,
         ICaptureSourceExclusion? captureSourceExclusion = null,
-        ICaptureAccessPreflight? captureAccessPreflight = null)
+        ICaptureAccessPreflight? captureAccessPreflight = null,
+        IFunctionBarPresentationCoordinator? functionBarPresentation = null)
     {
         _freezingCoordinator = freezingCoordinator
             ?? throw new ArgumentNullException(nameof(freezingCoordinator));
@@ -47,6 +52,7 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
             ?? throw new ArgumentNullException(nameof(overlayCoordinator));
         _captureSourceExclusion = captureSourceExclusion;
         _captureAccessPreflight = captureAccessPreflight;
+        _functionBarPresentation = functionBarPresentation;
     }
 
     public WorkflowState CurrentState => _stateAuthority.CurrentState;
@@ -278,9 +284,86 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
                     FailureCode.InvalidStateTransition,
                     "The valid Selection could not be locked.")));
             }
+            else if (_functionBarPresentation is not null)
+            {
+                PrepareEditing(result.State);
+            }
         }
 
         return result;
+    }
+
+    public FunctionBarCommandResult Execute(FunctionBarCommandRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        CaptureSessionContext? session;
+        InitialSelectionCoordinator? selection;
+        lock (_gate)
+        {
+            session = _activeSession;
+            selection = _selectionCoordinator;
+        }
+
+        if (session is null
+            || selection is null
+            || session.SessionId != request.SessionId
+            || !string.Equals(
+                session.VirtualDesktopSnapshot.CoordinateVersion,
+                request.CoordinateVersion,
+                StringComparison.Ordinal))
+        {
+            return new FunctionBarCommandResult(
+                request.Command,
+                FunctionBarCommandResultKind.StaleSession,
+                _stateAuthority.CurrentState,
+                selection?.State.SelectionRevision ?? -1,
+                null,
+                "The Function Bar command belongs to a stale capture session.");
+        }
+
+        var currentSelection = selection.State;
+        if (currentSelection.SelectionRevision != request.SelectionRevision)
+        {
+            return new FunctionBarCommandResult(
+                request.Command,
+                FunctionBarCommandResultKind.StaleSelectionRevision,
+                _stateAuthority.CurrentState,
+                currentSelection.SelectionRevision,
+                null,
+                "The Function Bar command belongs to a stale Selection revision.");
+        }
+
+        if (_stateAuthority.CurrentState != WorkflowState.Editing)
+        {
+            return new FunctionBarCommandResult(
+                request.Command,
+                FunctionBarCommandResultKind.InvalidWorkflowState,
+                _stateAuthority.CurrentState,
+                currentSelection.SelectionRevision,
+                null,
+                "The Function Bar command is not valid in the current workflow state.");
+        }
+
+        if (!FunctionBarCommandAvailability.Stage6B.IsEnabled(request.Command))
+        {
+            return new FunctionBarCommandResult(
+                request.Command,
+                FunctionBarCommandResultKind.Disabled,
+                _stateAuthority.CurrentState,
+                currentSelection.SelectionRevision,
+                null,
+                "The Function Bar command is disabled in this slice.");
+        }
+
+        Observe(CancelCurrentAsync("FunctionBarCancel"));
+        return new FunctionBarCommandResult(
+            request.Command,
+            FunctionBarCommandResultKind.Accepted,
+            _stateAuthority.CurrentState,
+            currentSelection.SelectionRevision,
+            null,
+            "The capture session cancellation was accepted.");
     }
 
     public SelectionInputResult Escape(Guid sessionId, string coordinateVersion)
@@ -339,6 +422,7 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
         sessionCancellation?.Cancel();
         if (session is not null)
         {
+            _functionBarPresentation?.Close(session.SessionId);
             await _overlayCoordinator
                 .CloseAsync(session.SessionId, CancellationToken.None)
                 .ConfigureAwait(true);
@@ -377,6 +461,7 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
         cancellation?.Cancel();
         if (session is not null)
         {
+            _functionBarPresentation?.Close(session.SessionId);
             Observe(_overlayCoordinator.CloseAsync(session.SessionId, CancellationToken.None));
             _freezingCoordinator.ReleaseSession(session);
             session.Dispose();
@@ -410,8 +495,118 @@ public sealed class CapturePresentationWorkflowCoordinator : ISelectionInputSink
             : handler(selection, input);
     }
 
-    private void OnSelectionStateChanged(SelectionVisualState state) =>
+    private void OnSelectionStateChanged(SelectionVisualState state)
+    {
         _overlayCoordinator.ApplySelection(state);
+
+        if (_functionBarPresentation is null
+            || _stateAuthority.CurrentState != WorkflowState.Editing)
+        {
+            return;
+        }
+
+        if (state.InteractionMode is
+            SelectionInteractionMode.Moving
+            or SelectionInteractionMode.ResizingLeft
+            or SelectionInteractionMode.ResizingTop
+            or SelectionInteractionMode.ResizingRight
+            or SelectionInteractionMode.ResizingBottom
+            or SelectionInteractionMode.ResizingTopLeft
+            or SelectionInteractionMode.ResizingTopRight
+            or SelectionInteractionMode.ResizingBottomLeft
+            or SelectionInteractionMode.ResizingBottomRight
+            or SelectionInteractionMode.Reselecting)
+        {
+            var hidden = _functionBarPresentation.Hide(state.SessionId);
+            if (hidden.Kind == FunctionBarPresentationResultKind.Failed)
+            {
+                Observe(CancelCurrentAsync("FunctionBarHideFailed"));
+            }
+
+            return;
+        }
+
+        if (state.Status != SelectionStatus.Locked
+            || !state.IsGeometryValid
+            || state.NormalizedPhysicalBounds is null)
+        {
+            return;
+        }
+
+        var repositioned = _functionBarPresentation.Reposition(
+            CreateFunctionBarRequest(state));
+        if (repositioned.Kind != FunctionBarPresentationResultKind.Ready)
+        {
+            Observe(CancelCurrentAsync("FunctionBarRepositionFailed"));
+            return;
+        }
+
+        var shown = _functionBarPresentation.Show(
+            state.SessionId,
+            state.CoordinateVersion,
+            state.SelectionRevision);
+        if (shown.Kind != FunctionBarPresentationResultKind.Shown)
+        {
+            Observe(CancelCurrentAsync("FunctionBarShowFailed"));
+        }
+    }
+
+    private void PrepareEditing(SelectionVisualState selection)
+    {
+        if (_functionBarPresentation is null
+            || selection.Status != SelectionStatus.Locked
+            || !selection.IsGeometryValid
+            || selection.NormalizedPhysicalBounds is null)
+        {
+            Observe(FailCurrentAsync(CreateFailure(
+                selection.SessionId,
+                FailureCode.InvalidSelection,
+                "A valid locked Selection is required before Editing.")));
+            return;
+        }
+
+        var prepared = _functionBarPresentation.Prepare(
+            CreateFunctionBarRequest(selection));
+        if (prepared.Kind != FunctionBarPresentationResultKind.Ready)
+        {
+            Observe(FailCurrentAsync(prepared.Failure ?? CreateFailure(
+                selection.SessionId,
+                FailureCode.FunctionBarPresentationFailed,
+                "The Function Bar could not be prepared.")));
+            return;
+        }
+
+        var transition = _stateAuthority.RequestTransition(new(
+            WorkflowState.SelectionLocked,
+            WorkflowState.Editing,
+            "FunctionBarReady"));
+        if (!transition.IsSuccess)
+        {
+            _functionBarPresentation.Close(selection.SessionId);
+            Observe(FailCurrentAsync(transition.Failure ?? CreateFailure(
+                selection.SessionId,
+                FailureCode.InvalidStateTransition,
+                "The workflow could not enter Editing.")));
+            return;
+        }
+
+        var shown = _functionBarPresentation.Show(
+            selection.SessionId,
+            selection.CoordinateVersion,
+            selection.SelectionRevision);
+        if (shown.Kind != FunctionBarPresentationResultKind.Shown)
+        {
+            Observe(CancelCurrentAsync("FunctionBarShowFailed"));
+        }
+    }
+
+    private FunctionBarPresentationRequest CreateFunctionBarRequest(
+        SelectionVisualState selection) => new(
+        selection.SessionId,
+        selection.CoordinateVersion,
+        selection,
+        FunctionBarCommandAvailability.Stage6B,
+        this);
 
     private async ValueTask<CapturePresentationOutcome> HandleFreezingFailureAsync(
         CaptureRequest request,

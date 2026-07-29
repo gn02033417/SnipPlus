@@ -1,18 +1,21 @@
 ﻿using Microsoft.Graphics.Canvas;
 
+using SnipPlus.Contracts;
+
 namespace SnipPlus.Windows;
 
 public sealed class WindowsCapturePlatformResources : IDisposable
 {
-    public WindowsCapturePlatformResources()
+    public WindowsCapturePlatformResources(IFunctionBarPlacementService functionBarPlacementService)
     {
+        ArgumentNullException.ThrowIfNull(functionBarPlacementService);
         CanvasDevice = CanvasDevice.GetSharedDevice();
         TopologyProvider = new WindowsDisplayTopologyProvider();
         AdapterFactory = new WindowsDisplayCaptureAdapterFactory(CanvasDevice);
         FrameProvider = new WindowsFrozenDisplayFrameSetProvider(
             AdapterFactory,
             TopologyProvider);
-        OverlayCoordinator = new WindowsFrozenDisplayOverlayCoordinator();
+        OverlayCoordinator = new WindowsFrozenDisplayOverlayCoordinator(functionBarPlacementService);
     }
 
     public CanvasDevice CanvasDevice { get; }

@@ -65,8 +65,10 @@ public sealed class WorkflowStateAuthority
         WorkflowState.Selecting => to is WorkflowState.SelectionLocked
             or WorkflowState.Cancelled
             or WorkflowState.Failed,
-        WorkflowState.SelectionLocked => to is WorkflowState.Cancelled
+        WorkflowState.SelectionLocked => to is WorkflowState.Editing
+            or WorkflowState.Cancelled
             or WorkflowState.Failed,
+        WorkflowState.Editing => to == WorkflowState.Cancelled,
         WorkflowState.Cancelled => to == WorkflowState.ResidentReady,
         WorkflowState.Failed => to == WorkflowState.ResidentReady,
         _ => false

@@ -36,7 +36,7 @@ public partial class MainWindow : Window, IDisposable
         _captureRequestCoordinator = new CaptureRequestCoordinator(_stateAuthority);
         _captureRequestApplicationBoundary =
             new CaptureRequestApplicationBoundary(_captureRequestCoordinator);
-        _platformResources = new WindowsCapturePlatformResources();
+        _platformResources = new WindowsCapturePlatformResources(new FunctionBarPlacementService());
         var freezingCoordinator = new CaptureFreezingCoordinator(
             _captureRequestCoordinator,
             _platformResources.TopologyProvider,
@@ -45,7 +45,8 @@ public partial class MainWindow : Window, IDisposable
             freezingCoordinator,
             _platformResources.OverlayCoordinator,
             new WindowsMainWindowCaptureSourceExclusion(this),
-            _platformResources.AdapterFactory);
+            _platformResources.AdapterFactory,
+            _platformResources.OverlayCoordinator);
         _residentActivation = new ResidentActivationBoundary(
             isApplicationExiting: () => Volatile.Read(ref _shutdownStarted) != 0
                 || Program.IsApplicationExitStarted,
