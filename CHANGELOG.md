@@ -235,6 +235,15 @@ Detailed status and required actions are maintained in `PRD/PRD-TRACEABILITY-MAT
 - G／H：MainWindow X 後 `SnipPlus.App` process 消失，沒有 hidden resident process；停用後退出及重複 cleanup 沒有未處理例外。退出後未保留 SnipPlus 接收事件的 process。
 - Runtime verification 期間未啟動 Paint、Notepad、Snipping Tool 或其他外部 GUI fixture；未保存真實桌面截圖或 Clipboard payload。既存的 Windows overlay 曾短暫影響 UI hit-test，但未被啟動或操作。後續本機憑證 cleanup 曾意外開啟 certutil utility，已立即停止，未參與產品驗證。
 
+### Added — Stage 6B Editing and Function Bar Foundation (2026-07-29)
+
+- 新增 `WorkflowState.Editing` 與唯一 `WorkflowStateAuthority` 的 `SelectionLocked → Editing → Cancelled` 合法狀態邊界；Selection visual status 仍保持 `Locked`。
+- 新增 platform-neutral Function Bar command、placement、presentation、stale session／revision 與 cleanup contracts。Stage 6B 只啟用 Cancel；Complete、Save、Undo、Redo 保持 disabled，未接上 Clipboard、PNG 或其他 output。
+- 新增 Core physical placement service：依 Selection intersection、current pointer、穩定 DisplayId 選擇 anchor display；使用 physical Work Area、DPI、Below／Above／clamped placement 與邊界驗證。
+- Windows overlay 內以 hosted Canvas／Border 建立單一 Function Bar，量測 DIP 尺寸後轉成 physical pixels；調整 Selection 時 hide，revision 改變後 reposition／show，session 結束時冪等清理。不新增 top-level window、taskbar 或 Alt-Tab entry。
+- 新增 deterministic placement、state transition、Editing／Cancel、Function Bar availability、準備失敗清理與 Windows hosted-bar structure contract tests；所有測試使用 synthetic geometry，未啟動 GUI、WGC、Paint、Notepad、Settings、Clipboard 或 PNG。
+- Locked restore 成功；Release x64 solution build 成功（`0 warnings、0 errors`）；非互動測試 `126/126` 通過（`0 failures、0 skips`）；限定 Stage 6B C# format verify 與 `git diff --check` 通過。Stage 6A／6B packaged Windows runtime 尚未驗證，Stage 7 及後續功能未開始。
+
 ### Not Released
 
 - No release publication、Store deployment or release artifact submission has occurred。
