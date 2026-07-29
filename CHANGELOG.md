@@ -243,6 +243,7 @@ Detailed status and required actions are maintained in `PRD/PRD-TRACEABILITY-MAT
 - Windows overlay 內以 hosted Canvas／Border 建立單一 Function Bar，量測 DIP 尺寸後轉成 physical pixels；調整 Selection 時 hide，revision 改變後 reposition／show，session 結束時冪等清理。不新增 top-level window、taskbar 或 Alt-Tab entry。
 - 新增 deterministic placement、state transition、Editing／Cancel、Function Bar availability、準備失敗清理與 Windows hosted-bar structure contract tests；所有測試使用 synthetic geometry，未啟動 GUI、WGC、Paint、Notepad、Settings、Clipboard 或 PNG。
 - Locked restore 成功；Release x64 solution build 成功（`0 warnings、0 errors`）；非互動測試 `126/126` 通過（`0 failures、0 skips`）；限定 Stage 6B C# format verify 與 `git diff --check` 通過。Stage 6A／6B packaged Windows runtime 尚未驗證，Stage 7 及後續功能未開始。
+- Development MSIX 生成成功：`src/SnipPlus.App/AppPackages/SnipPlus.App_1.0.0.0_x64_Test/SnipPlus.App_1.0.0.0_x64.msix`；package manifest 保持 `AppListEntry="default"`、`graphicsCaptureProgrammatic`、`runFullTrust`，package 內 `SnipPlus.App.dll` 與 Release DLL SHA-256 均為 `ab60b0d7b22ecf8c1aa9d794298933a8a25f44efb83846396c5038c601c5e742`。Packaging 僅因缺少 `mspdbcmf.exe` 顯示 symbols warning，無 package error；本次未安裝、未啟動，不能視為 Windows Runtime evidence。
 
 ### Not Released
 
