@@ -194,6 +194,32 @@ public sealed class InitialSelectionCoordinatorTests
 
     [TestMethod]
     [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void OwnerReferenceMoveAllowsGapButNeverExceedsVirtualBounds()
+    {
+        using var session = CreateOwnerReferenceSession();
+        using var selection = new InitialSelectionCoordinator(session);
+        Lock(selection, session, new(1200, 1500), new(1900, 1800));
+
+        selection.PointerPressed(Input(session, 1550, 1650));
+        var right = selection.PointerReleased(Input(session, 2500, 2150));
+        Assert.AreEqual(SelectionInputResultKind.AdjustmentCommitted, right.Kind);
+        Assert.AreEqual(new PhysicalRect(1860, 2000, 2560, 2300),
+            right.State.NormalizedPhysicalBounds);
+
+        selection.PointerPressed(Input(session, 2210, 2150));
+        var left = selection.PointerReleased(Input(session, -5000, -5000));
+        Assert.AreEqual(SelectionInputResultKind.AdjustmentCommitted, left.Kind);
+        Assert.AreEqual(new PhysicalRect(-2560, 0, -1860, 300),
+            left.State.NormalizedPhysicalBounds);
+        Assert.IsTrue(left.State.NormalizedPhysicalBounds!.Value.Left >= -2560);
+        Assert.IsTrue(left.State.NormalizedPhysicalBounds!.Value.Top >= 0);
+        Assert.IsTrue(left.State.NormalizedPhysicalBounds!.Value.Right <= 2560);
+        Assert.IsTrue(left.State.NormalizedPhysicalBounds!.Value.Bottom <= 2520);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
     [TestCategory("Cancellation")]
     public void AdjustmentEscCancelsSessionAndDoesNotChangeWorkflowStateAuthority()
     {
@@ -276,6 +302,20 @@ public sealed class InitialSelectionCoordinatorTests
             {
                 Display("left", new(-100, -50, 0, 200)),
                 Display("right", new(0, -50, 200, 200))
+        }));
+    }
+
+    private static CaptureSessionContext CreateOwnerReferenceSession()
+    {
+        return CreateSession(new VirtualDesktopSnapshot(
+            "selection-owner-reference-v1",
+            new(-2560, 0, 2560, 2520),
+            new(-2560, 0),
+            new[]
+            {
+                Display("left", new(-2560, 0, 0, 1440)),
+                Display("primary", new(0, 0, 2560, 1440)),
+                Display("lower", new(0, 1440, 1920, 2520), 1.5)
             }));
     }
 
@@ -311,11 +351,14 @@ public sealed class InitialSelectionCoordinatorTests
         return session;
     }
 
-    private static DisplaySnapshot Display(string id, PhysicalRect bounds) => new(
+    private static DisplaySnapshot Display(
+        string id,
+        PhysicalRect bounds,
+        double dpiScale = 1) => new(
         id,
         bounds,
-        1,
-        1,
+        dpiScale,
+        dpiScale,
         "Landscape",
         new(bounds.Width, bounds.Height),
         $"surface:{id}");

@@ -154,4 +154,172 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
         Assert.IsTrue(converted);
         Assert.AreEqual(new PhysicalPixelSize(180, 60), arguments[2]);
     }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void FunctionBarUsesHighContrastButtonVisualPolicy()
+    {
+        var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("FunctionBarSurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(functionBarSurface);
+        var getStyle = functionBarSurface.GetMethod(
+            "GetButtonVisualStyle",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(getStyle);
+
+        var style = getStyle.Invoke(null, null)!;
+        var styleType = style.GetType();
+        var foreground = (global::Windows.UI.Color)styleType
+            .GetProperty("Foreground")!.GetValue(style)!;
+        var background = (global::Windows.UI.Color)styleType
+            .GetProperty("Background")!.GetValue(style)!;
+
+        Assert.AreEqual(255, foreground.A);
+        Assert.AreEqual(255, foreground.R);
+        Assert.AreEqual(255, foreground.G);
+        Assert.AreEqual(255, foreground.B);
+        Assert.AreEqual(255, background.A);
+        Assert.IsTrue(background.R < foreground.R);
+        Assert.IsTrue(background.G < foreground.G);
+        Assert.IsTrue(background.B < foreground.B);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void CancelCommandGateAcceptsOnlyOnePendingCancelAndCanReset()
+    {
+        var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("FunctionBarSurface", BindingFlags.NonPublic);
+        Assert.IsNotNull(functionBarSurface);
+        var gateType = functionBarSurface.GetNestedType(
+            "CancelCommandGate",
+            BindingFlags.NonPublic);
+        Assert.IsNotNull(gateType);
+
+        var gate = Activator.CreateInstance(
+            gateType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: Array.Empty<object>(),
+            culture: null)!;
+        var tryBegin = gateType.GetMethod("TryBegin")!;
+        var reset = gateType.GetMethod("Reset")!;
+
+        Assert.IsTrue((bool)tryBegin.Invoke(gate, null)!);
+        Assert.IsFalse((bool)tryBegin.Invoke(gate, null)!);
+        reset.Invoke(gate, null);
+        Assert.IsTrue((bool)tryBegin.Invoke(gate, null)!);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void SessionInputBoundaryNormalizesPointerIdsAndCommitsReleaseOnce()
+    {
+        var sessionId = Guid.NewGuid();
+        var sink = new RecordingSelectionInputSink(sessionId, "boundary-v1");
+        var boundaryType = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("SessionInputBoundary", BindingFlags.NonPublic);
+        Assert.IsNotNull(boundaryType);
+
+        var boundary = (ISelectionInputSink)Activator.CreateInstance(
+            boundaryType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: new object[] { sessionId, "boundary-v1", sink },
+            culture: null)!;
+
+        boundary.PointerPressed(Input(sessionId, "boundary-v1", 10, 100, 100));
+        boundary.PointerMoved(Input(sessionId, "boundary-v1", 42, 150, 150));
+
+        var nativeRelease = boundaryType.GetMethod("PointerReleasedFromNative")!;
+        var released = (SelectionInputResult)nativeRelease.Invoke(
+            boundary,
+            new object[] { new PhysicalPoint(200, 200) })!;
+        var duplicate = boundary.PointerReleased(
+            Input(sessionId, "boundary-v1", 77, 200, 200));
+
+        Assert.AreEqual(SelectionInputResultKind.Locked, released.Kind);
+        Assert.AreEqual(SelectionInputResultKind.Locked, duplicate.Kind);
+        Assert.AreEqual(1, sink.ReleaseCalls.Count);
+        Assert.AreEqual(10, sink.MovedCalls.Single().PointerId);
+        Assert.AreEqual(10, sink.ReleaseCalls.Single().PointerId);
+    }
+
+    private static SelectionPointerEvent Input(
+        Guid sessionId,
+        string coordinateVersion,
+        int pointerId,
+        int x,
+        int y) => new(
+            sessionId,
+            coordinateVersion,
+            pointerId,
+            new PhysicalPoint(x, y));
+
+    private sealed class RecordingSelectionInputSink : ISelectionInputSink
+    {
+        private SelectionVisualState _state;
+
+        public RecordingSelectionInputSink(Guid sessionId, string coordinateVersion)
+        {
+            _state = SelectionVisualState.Initial(sessionId, coordinateVersion);
+        }
+
+        public List<SelectionPointerEvent> MovedCalls { get; } = new();
+
+        public List<SelectionPointerEvent> ReleaseCalls { get; } = new();
+
+        public SelectionInputResult PointerPressed(SelectionPointerEvent input)
+        {
+            _state = _state with
+            {
+                SelectionRevision = _state.SelectionRevision + 1,
+                Status = SelectionStatus.Dragging,
+                InteractionMode = SelectionInteractionMode.InitialDragging,
+                ActivePointerId = input.PointerId,
+                CurrentPhysicalPoint = input.GlobalPhysicalPoint
+            };
+            return Result(SelectionInputResultKind.Dragging, "pressed");
+        }
+
+        public SelectionInputResult PointerMoved(SelectionPointerEvent input)
+        {
+            MovedCalls.Add(input);
+            _state = _state with { CurrentPhysicalPoint = input.GlobalPhysicalPoint };
+            return Result(SelectionInputResultKind.Dragging, "moved");
+        }
+
+        public SelectionInputResult PointerReleased(SelectionPointerEvent input)
+        {
+            ReleaseCalls.Add(input);
+            _state = _state with
+            {
+                SelectionRevision = _state.SelectionRevision + 1,
+                Status = SelectionStatus.Locked,
+                InteractionMode = SelectionInteractionMode.Locked,
+                ActivePointerId = null,
+                CurrentPhysicalPoint = input.GlobalPhysicalPoint
+            };
+            return Result(SelectionInputResultKind.Locked, "released");
+        }
+
+        public SelectionInputResult Escape(Guid sessionId, string coordinateVersion)
+        {
+            _state = _state with
+            {
+                Status = SelectionStatus.Cancelled,
+                InteractionMode = SelectionInteractionMode.Cancelled,
+                ActivePointerId = null
+            };
+            return Result(SelectionInputResultKind.Cancelled, "escaped");
+        }
+
+        private SelectionInputResult Result(
+            SelectionInputResultKind kind,
+            string message) => new(kind, _state, message);
+    }
 }

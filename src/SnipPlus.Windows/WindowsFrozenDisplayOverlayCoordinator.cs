@@ -1,5 +1,7 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.ComponentModel;
+using System.Runtime.InteropServices;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -38,6 +40,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var inputBoundary = new SessionInputBoundary(
+            request.Plan.SessionId,
+            request.Plan.CoordinateVersion,
+            request.InputSink);
         var surfaces = new List<OverlaySurface>(request.Plan.Displays.Count);
         try
         {
@@ -52,7 +58,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             foreach (var descriptor in request.Plan.Displays)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var surface = new OverlaySurface(descriptor, request.InputSink);
+                var surface = new OverlaySurface(descriptor, inputBoundary);
                 surfaces.Add(surface);
                 await surface.InitializeAsync(cancellationToken).ConfigureAwait(true);
             }
@@ -589,6 +595,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             Orientation = Orientation.Horizontal
         };
         private readonly IReadOnlyDictionary<FunctionBarCommand, Button> _buttons;
+        private readonly CancelCommandGate _cancelCommandGate = new();
         private FunctionBarPresentationRequest _request;
         private bool _disposed;
 
@@ -747,28 +754,239 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         private static Button CreateButton(string label)
         {
+            var visualStyle = GetButtonVisualStyle();
             var button = new Button
             {
                 Content = label,
                 Padding = new Thickness(8, 4, 8, 4),
                 Margin = new Thickness(2, 0, 2, 0),
+                Background = new SolidColorBrush(visualStyle.Background),
+                BorderBrush = new SolidColorBrush(visualStyle.Border),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Foreground = new SolidColorBrush(visualStyle.Foreground),
                 IsTabStop = true
             };
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
             return button;
         }
 
+        private static FunctionBarButtonVisualStyle GetButtonVisualStyle() =>
+            new(
+                ColorHelper.FromArgb(255, 255, 255, 255),
+                ColorHelper.FromArgb(255, 64, 64, 64),
+                ColorHelper.FromArgb(255, 176, 176, 176));
+
         private void OnCancelClicked(object sender, RoutedEventArgs args)
         {
-            _ = _request.CommandSink.Execute(new FunctionBarCommandRequest(
+            if (!_cancelCommandGate.TryBegin())
+            {
+                return;
+            }
+
+            var command = new FunctionBarCommandRequest(
                 _request.SessionId,
                 _request.CoordinateVersion,
                 _request.Selection.SelectionRevision,
-                FunctionBarCommand.Cancel));
+                FunctionBarCommand.Cancel);
+            _buttons[FunctionBarCommand.Cancel].IsEnabled = false;
+
+            var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+            if (dispatcherQueue is null
+                || !dispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_disposed)
+                    {
+                        return;
+                    }
+
+                    var result = _request.CommandSink.Execute(command);
+                    if (result.Kind != FunctionBarCommandResultKind.Accepted)
+                    {
+                        _cancelCommandGate.Reset();
+                        if (!_disposed)
+                        {
+                            _buttons[FunctionBarCommand.Cancel].IsEnabled = true;
+                        }
+                    }
+                }))
+            {
+                _cancelCommandGate.Reset();
+                _buttons[FunctionBarCommand.Cancel].IsEnabled = true;
+            }
+
         }
 
         private void OnPointerPressed(object sender, PointerRoutedEventArgs args) =>
             args.Handled = true;
+
+        private sealed class CancelCommandGate
+        {
+            private int _pending;
+
+            public bool TryBegin() => Interlocked.Exchange(ref _pending, 1) == 0;
+
+            public void Reset() => Volatile.Write(ref _pending, 0);
+        }
+
+        private readonly record struct FunctionBarButtonVisualStyle(
+            global::Windows.UI.Color Foreground,
+            global::Windows.UI.Color Background,
+            global::Windows.UI.Color Border);
+    }
+
+    private sealed class SessionInputBoundary : ISelectionInputSink
+    {
+        private readonly object _gate = new();
+        private readonly Guid _sessionId;
+        private readonly string _coordinateVersion;
+        private readonly ISelectionInputSink _inner;
+        private SelectionInputResult _lastResult;
+        private int? _activePointerId;
+        private bool _releaseConsumed;
+
+        public SessionInputBoundary(
+            Guid sessionId,
+            string coordinateVersion,
+            ISelectionInputSink inner)
+        {
+            _sessionId = sessionId;
+            _coordinateVersion = coordinateVersion
+                ?? throw new ArgumentNullException(nameof(coordinateVersion));
+            _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+            _lastResult = new SelectionInputResult(
+                SelectionInputResultKind.Ignored,
+                SelectionVisualState.Initial(sessionId, coordinateVersion),
+                "No Selection input has been accepted.");
+        }
+
+        public SelectionInputResult PointerPressed(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            lock (_gate)
+            {
+                if (_activePointerId is not null)
+                {
+                    return Ignored("Another Selection interaction is already active.");
+                }
+            }
+
+            var result = _inner.PointerPressed(input);
+            lock (_gate)
+            {
+                _lastResult = result;
+                if (IsActiveInteraction(result.State.InteractionMode))
+                {
+                    _activePointerId = result.State.ActivePointerId ?? input.PointerId;
+                    _releaseConsumed = false;
+                }
+            }
+
+            return result;
+        }
+
+        public SelectionInputResult PointerMoved(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            var result = _inner.PointerMoved(NormalizePointer(input));
+            lock (_gate)
+            {
+                _lastResult = result;
+            }
+
+            return result;
+        }
+
+        public SelectionInputResult PointerReleased(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            lock (_gate)
+            {
+                if (_releaseConsumed || _activePointerId is null)
+                {
+                    return _lastResult;
+                }
+
+                _releaseConsumed = true;
+            }
+
+            var result = _inner.PointerReleased(NormalizePointer(input));
+            lock (_gate)
+            {
+                _lastResult = result;
+                _activePointerId = null;
+            }
+
+            return result;
+        }
+
+        public SelectionInputResult PointerReleasedFromNative(PhysicalPoint point) =>
+            PointerReleased(new SelectionPointerEvent(
+                _sessionId,
+                _coordinateVersion,
+                GetActivePointerId(),
+                point));
+
+        public SelectionInputResult Escape(Guid sessionId, string coordinateVersion)
+        {
+            var result = _inner.Escape(sessionId, coordinateVersion);
+            lock (_gate)
+            {
+                _lastResult = result;
+                _activePointerId = null;
+                _releaseConsumed = true;
+            }
+
+            return result;
+        }
+
+        public static void NotifyCaptureChanged()
+        {
+            // Capture changes do not imply a mouse release. WM_LBUTTONUP or
+            // XAML PointerReleased remains the only commit boundary.
+        }
+
+        private SelectionPointerEvent NormalizePointer(SelectionPointerEvent input)
+        {
+            lock (_gate)
+            {
+                return _activePointerId is int pointerId
+                    ? input with { PointerId = pointerId }
+                    : input;
+            }
+        }
+
+        private int GetActivePointerId()
+        {
+            lock (_gate)
+            {
+                return _activePointerId ?? 0;
+            }
+        }
+
+        private SelectionInputResult Ignored(string message)
+        {
+            lock (_gate)
+            {
+                return new SelectionInputResult(
+                    SelectionInputResultKind.Ignored,
+                    _lastResult.State,
+                    message);
+            }
+        }
+
+        private static bool IsActiveInteraction(SelectionInteractionMode mode) => mode is
+            SelectionInteractionMode.InitialDragging
+            or SelectionInteractionMode.Moving
+            or SelectionInteractionMode.ResizingLeft
+            or SelectionInteractionMode.ResizingTop
+            or SelectionInteractionMode.ResizingRight
+            or SelectionInteractionMode.ResizingBottom
+            or SelectionInteractionMode.ResizingTopLeft
+            or SelectionInteractionMode.ResizingTopRight
+            or SelectionInteractionMode.ResizingBottomLeft
+            or SelectionInteractionMode.ResizingBottomRight
+            or SelectionInteractionMode.Reselecting;
     }
 
     private sealed class OverlaySurface : IDisposable
@@ -778,6 +996,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private const int SwHide = 0;
         private const nint WsExAppWindow = 0x00040000;
         private const nint WsExToolWindow = 0x00000080;
+        private const int GwlWndProc = -4;
+        private const uint WmLButtonUp = 0x0202;
+        private const uint WmCaptureChanged = 0x0215;
         private const uint SwpNoSize = 0x0001;
         private const uint SwpNoMove = 0x0002;
         private const uint SwpNoZOrder = 0x0004;
@@ -787,7 +1008,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private const double HandleVisualSizePixels = 8;
 
         private readonly FrozenDisplayOverlayDescriptor _descriptor;
-        private readonly ISelectionInputSink _inputSink;
+        private readonly SessionInputBoundary _inputBoundary;
         private readonly Window _window = new();
         private readonly Grid _root = new();
         private readonly Image _image = new();
@@ -818,6 +1039,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private FunctionBarSurface? _functionBar;
         private AppWindow? _appWindow;
         private nint _handle;
+        private nint _previousWindowProc;
+        private WindowProcDelegate? _windowProc;
+        private bool _nativeInputBoundaryInstalled;
         private double _rasterizationScale = 1;
         private bool _disposed;
 
@@ -831,10 +1055,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public OverlaySurface(
             FrozenDisplayOverlayDescriptor descriptor,
-            ISelectionInputSink inputSink)
+            SessionInputBoundary inputBoundary)
         {
             _descriptor = descriptor;
-            _inputSink = inputSink ?? throw new ArgumentNullException(nameof(inputSink));
+            _inputBoundary = inputBoundary
+                ?? throw new ArgumentNullException(nameof(inputBoundary));
             _image.Stretch = Stretch.Fill;
             _canvas.IsTabStop = true;
             _canvas.Background = new SolidColorBrush(ColorHelper.FromArgb(0, 0, 0, 0));
@@ -842,6 +1067,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _canvas.PointerPressed += OnPointerPressed;
             _canvas.PointerMoved += OnPointerMoved;
             _canvas.PointerReleased += OnPointerReleased;
+            _canvas.PointerCaptureLost += OnPointerCaptureLost;
             _canvas.KeyDown += OnKeyDown;
             _root.Children.Add(_image);
             _root.Children.Add(_canvas);
@@ -868,6 +1094,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             _handle = handle;
+            InstallNativeInputBoundary();
             _ = ShowWindow(handle, SwHide);
 
             _appWindow = AppWindow.GetFromWindowId(
@@ -1092,9 +1319,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _canvas.PointerPressed -= OnPointerPressed;
             _canvas.PointerMoved -= OnPointerMoved;
             _canvas.PointerReleased -= OnPointerReleased;
+            _canvas.PointerCaptureLost -= OnPointerCaptureLost;
             _canvas.KeyDown -= OnKeyDown;
             _canvas.Cursor = null;
             HideHandles();
+            RemoveNativeInputBoundary();
             try
             {
                 _appWindow?.Hide();
@@ -1130,7 +1359,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
             _canvas.Focus(FocusState.Pointer);
             var handle = WindowNative.GetWindowHandle(_window);
-            var result = _inputSink.PointerPressed(new SelectionPointerEvent(
+            var result = _inputBoundary.PointerPressed(new SelectionPointerEvent(
                 _descriptor.SessionId,
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
@@ -1152,7 +1381,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
-            _inputSink.PointerMoved(new SelectionPointerEvent(
+            _inputBoundary.PointerMoved(new SelectionPointerEvent(
                 _descriptor.SessionId,
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
@@ -1162,17 +1391,23 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         private void OnPointerReleased(object sender, PointerRoutedEventArgs args)
         {
-            _ = ReleaseCapture();
             if (_disposed || !TryGetGlobalPointer(out var point))
             {
                 return;
             }
 
-            _inputSink.PointerReleased(new SelectionPointerEvent(
+            _inputBoundary.PointerReleased(new SelectionPointerEvent(
                 _descriptor.SessionId,
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point));
+            _ = ReleaseCapture();
+            args.Handled = true;
+        }
+
+        private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs args)
+        {
+            SessionInputBoundary.NotifyCaptureChanged();
             args.Handled = true;
         }
 
@@ -1184,7 +1419,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 var coordinateVersion = _descriptor.CoordinateVersion;
                 _ = _canvas.DispatcherQueue.TryEnqueue(() =>
                 {
-                    _ = _inputSink.Escape(sessionId, coordinateVersion);
+                    _ = _inputBoundary.Escape(sessionId, coordinateVersion);
                 });
                 args.Handled = true;
             }
@@ -1379,11 +1614,71 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _ = surface._canvas.Focus(FocusState.Programmatic);
         }
 
+        private void InstallNativeInputBoundary()
+        {
+            _windowProc = WindowProc;
+            _previousWindowProc = SetWindowLongPtr(
+                _handle,
+                GwlWndProc,
+                Marshal.GetFunctionPointerForDelegate(_windowProc));
+            if (_previousWindowProc == 0)
+            {
+                _windowProc = null;
+                throw new Win32Exception(
+                    Marshal.GetLastWin32Error(),
+                    "The overlay native input boundary could not be installed.");
+            }
+
+            _nativeInputBoundaryInstalled = true;
+        }
+
+        private void RemoveNativeInputBoundary()
+        {
+            if (!_nativeInputBoundaryInstalled)
+            {
+                return;
+            }
+
+            _ = SetWindowLongPtr(_handle, GwlWndProc, _previousWindowProc);
+            _nativeInputBoundaryInstalled = false;
+            _previousWindowProc = 0;
+            _windowProc = null;
+        }
+
+        private nint WindowProc(
+            nint windowHandle,
+            uint message,
+            nint wParam,
+            nint lParam)
+        {
+            if (!_disposed)
+            {
+                if (message == WmLButtonUp
+                    && TryGetGlobalPointer(out var point))
+                {
+                    _inputBoundary.PointerReleasedFromNative(point);
+                }
+                else if (message == WmCaptureChanged)
+                {
+                    SessionInputBoundary.NotifyCaptureChanged();
+                }
+            }
+
+            return CallWindowProc(_previousWindowProc, windowHandle, message, wParam, lParam);
+        }
+
         [DllImport("user32.dll")]
         private static extern nint SetCapture(nint hWnd);
 
         [DllImport("user32.dll")]
         private static extern bool ReleaseCapture();
+
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        private delegate nint WindowProcDelegate(
+            nint hWnd,
+            uint message,
+            nint wParam,
+            nint lParam);
 
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out PointNative lpPoint);
@@ -1429,8 +1724,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
         private static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
 
-        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
         private static extern nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern nint CallWindowProc(
+            nint lpPrevWndFunc,
+            nint hWnd,
+            uint message,
+            nint wParam,
+            nint lParam);
 
         [StructLayout(LayoutKind.Sequential)]
         private readonly struct PointNative
