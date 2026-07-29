@@ -102,4 +102,56 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
             "_window",
             BindingFlags.Instance | BindingFlags.NonPublic));
     }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void FunctionBarVisibilityPolicyKeepsPreparationLayoutParticipatingButNonInteractive()
+    {
+        var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("FunctionBarSurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(functionBarSurface);
+        var getVisibilityState = functionBarSurface.GetMethod(
+            "GetVisibilityState",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(getVisibilityState);
+
+        var hidden = getVisibilityState.Invoke(null, new object[] { false })!;
+        var shown = getVisibilityState.Invoke(null, new object[] { true })!;
+        var stateType = hidden.GetType();
+
+        Assert.IsTrue((bool)stateType.GetProperty("IsLayoutParticipating")!.GetValue(hidden)!);
+        Assert.AreEqual(0d, (double)stateType.GetProperty("Opacity")!.GetValue(hidden)!);
+        Assert.IsFalse((bool)stateType.GetProperty("IsHitTestVisible")!.GetValue(hidden)!);
+        Assert.IsTrue((bool)stateType.GetProperty("IsLayoutParticipating")!.GetValue(shown)!);
+        Assert.AreEqual(1d, (double)stateType.GetProperty("Opacity")!.GetValue(shown)!);
+        Assert.IsTrue((bool)stateType.GetProperty("IsHitTestVisible")!.GetValue(shown)!);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void FunctionBarMeasurementConvertsDipToPhysicalPixelsDeterministically()
+    {
+        var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("FunctionBarSurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(functionBarSurface);
+        var convert = functionBarSurface.GetMethod(
+            "TryConvertToPhysicalSize",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(convert);
+
+        var arguments = new object?[]
+        {
+            new global::Windows.Foundation.Size(120, 40),
+            1.5,
+            null
+        };
+        var converted = (bool)convert.Invoke(null, arguments)!;
+
+        Assert.IsTrue(converted);
+        Assert.AreEqual(new PhysicalPixelSize(180, 60), arguments[2]);
+    }
 }

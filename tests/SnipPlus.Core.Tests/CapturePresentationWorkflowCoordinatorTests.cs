@@ -172,6 +172,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.AreEqual(SelectionStatus.Locked, workflow.CurrentSelection!.Status);
         Assert.AreEqual(1, functionBar.PrepareCalls);
         Assert.AreEqual(1, functionBar.ShowCalls);
+        Assert.AreEqual(0, overlay.CloseCalls);
 
         foreach (var command in new[]
         {
@@ -214,12 +215,12 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         var functionBar = new FakeFunctionBarPresentationCoordinator
         {
             PreparationFailure = Failure.Create(
-                FailureCode.FunctionBarPlacementFailed,
+                FailureCode.BarMeasurementFailed,
                 FailureCategory.Resource,
                 FailureRecoverability.RetryNewIntent,
                 "test-function-bar",
                 request.RequestId,
-                "synthetic placement failure")
+                "synthetic measurement failure")
         };
         using var workflow = CreateWorkflow(requests, provider, overlay, functionBar);
 
@@ -233,6 +234,8 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
 
         Assert.AreEqual(WorkflowState.ResidentReady, authority.CurrentState);
         Assert.AreEqual(1, functionBar.PrepareCalls);
+        Assert.AreEqual(FailureCode.BarMeasurementFailed, functionBar.PreparationFailure!.Code);
+        Assert.AreEqual(1, overlay.CloseCalls);
         Assert.IsTrue(provider.LastSession?.IsDisposed ?? false);
     }
 

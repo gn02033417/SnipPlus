@@ -583,16 +583,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
     private sealed class FunctionBarSurface : IDisposable
     {
         private readonly OverlaySurface _owner;
-        private readonly Border _root = new()
-        {
-            Background = new SolidColorBrush(ColorHelper.FromArgb(245, 32, 32, 32)),
-            BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(255, 128, 128, 128)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(6),
-            Visibility = Visibility.Collapsed,
-            IsHitTestVisible = true
-        };
+        private readonly Border _root = CreateRoot();
         private readonly StackPanel _panel = new()
         {
             Orientation = Orientation.Horizontal
@@ -642,30 +633,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         public bool TryMeasurePhysicalSize(out PhysicalPixelSize size)
         {
             size = default;
-            if (_disposed || _owner.RasterizationScale <= 0)
+            if (_disposed)
             {
                 return false;
             }
 
             _root.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            var desired = _root.DesiredSize;
-            if (!double.IsFinite(desired.Width)
-                || !double.IsFinite(desired.Height)
-                || desired.Width <= 0
-                || desired.Height <= 0)
-            {
-                return false;
-            }
-
-            var width = (int)Math.Ceiling(desired.Width * _owner.RasterizationScale);
-            var height = (int)Math.Ceiling(desired.Height * _owner.RasterizationScale);
-            if (width <= 0 || height <= 0)
-            {
-                return false;
-            }
-
-            size = new PhysicalPixelSize(width, height);
-            return true;
+            return TryConvertToPhysicalSize(
+                _root.DesiredSize,
+                _owner.RasterizationScale,
+                out size);
         }
 
         public void ApplyPlacement(FunctionBarPlacementResult placement)
@@ -682,7 +659,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         {
             if (!_disposed)
             {
-                _root.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                ApplyVisibility(_root, visible);
             }
         }
 
@@ -697,9 +674,75 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _buttons[FunctionBarCommand.Cancel].Click -= OnCancelClicked;
             _root.PointerPressed -= OnPointerPressed;
             _owner.RemoveFunctionBar(this);
+            _root.Opacity = 0;
+            _root.IsHitTestVisible = false;
             _root.Visibility = Visibility.Collapsed;
             _panel.Children.Clear();
             _root.Child = null;
+        }
+
+        private static Border CreateRoot()
+        {
+            var state = GetVisibilityState(visible: false);
+            return new Border
+            {
+                Background = new SolidColorBrush(ColorHelper.FromArgb(245, 32, 32, 32)),
+                BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(255, 128, 128, 128)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(6),
+                Visibility = state.IsLayoutParticipating
+                    ? Visibility.Visible
+                    : Visibility.Collapsed,
+                Opacity = state.Opacity,
+                IsHitTestVisible = state.IsHitTestVisible
+            };
+        }
+
+        private static void ApplyVisibility(Border root, bool visible)
+        {
+            var state = GetVisibilityState(visible);
+            root.Visibility = state.IsLayoutParticipating
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            root.Opacity = state.Opacity;
+            root.IsHitTestVisible = state.IsHitTestVisible;
+        }
+
+        private static FunctionBarVisibilityState GetVisibilityState(bool visible) => visible
+            ? new FunctionBarVisibilityState(true, 1, true)
+            : new FunctionBarVisibilityState(true, 0, false);
+
+        private readonly record struct FunctionBarVisibilityState(
+            bool IsLayoutParticipating,
+            double Opacity,
+            bool IsHitTestVisible);
+
+        private static bool TryConvertToPhysicalSize(
+            Size desired,
+            double rasterizationScale,
+            out PhysicalPixelSize size)
+        {
+            size = default;
+            if (!double.IsFinite(rasterizationScale)
+                || rasterizationScale <= 0
+                || !double.IsFinite(desired.Width)
+                || !double.IsFinite(desired.Height)
+                || desired.Width <= 0
+                || desired.Height <= 0)
+            {
+                return false;
+            }
+
+            var width = (int)Math.Ceiling(desired.Width * rasterizationScale);
+            var height = (int)Math.Ceiling(desired.Height * rasterizationScale);
+            if (width <= 0 || height <= 0)
+            {
+                return false;
+            }
+
+            size = new PhysicalPixelSize(width, height);
+            return true;
         }
 
         private static Button CreateButton(string label)
