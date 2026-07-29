@@ -505,7 +505,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator : IAllDisplayOverlayP
         {
             if (args.Key == global::Windows.System.VirtualKey.Escape)
             {
-                _inputSink.Escape(_descriptor.SessionId, _descriptor.CoordinateVersion);
+                var sessionId = _descriptor.SessionId;
+                var coordinateVersion = _descriptor.CoordinateVersion;
+                _ = _canvas.DispatcherQueue.TryEnqueue(() =>
+                {
+                    _ = _inputSink.Escape(sessionId, coordinateVersion);
+                });
                 args.Handled = true;
             }
         }

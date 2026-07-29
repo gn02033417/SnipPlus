@@ -161,6 +161,15 @@ escap:Capability`，已改為 Windows manifest schema 要求的 `uap11:Capabilit
 - For manual acceptance, `Package.appxmanifest` changed `uap:VisualElements AppListEntry` from `none` to `default`. The rebuilt and reinstalled package is `Ok` and is now registered in Windows `StartApps` as `SnipPlus.App_26728c12bvz0c!App`.
 - The Development MSIX is prepared for Repository owner manual acceptance. No SnipPlus GUI, Paint, Notepad, Snipping Tool or other external GUI was launched in this correction; no desktop screenshot, frozen frame or Clipboard payload was saved. Fifth Slice status is `Implementation and automated verification passed; Repository owner manual acceptance pending`; Selection adjustment, Function Bar, Annotation, Clipboard, PNG and the sixth Slice remain unstarted.
 
+### Corrected — Stage 5 Esc Resident Lifecycle Boundary (2026-07-29)
+
+- Repository owner manual acceptance confirmed the three-display Frozen Overlay、mask、single system Crosshair、single／cross-display initial Selection、`SelectionLocked` without output and the secondary Start Capture entry. It found two failures: Esc terminated the SnipPlus process, and PrintScreen could not be re-used from another application after that termination.
+- Root cause identified in the Windows overlay input path: `OnKeyDown` synchronously entered the Core cancellation boundary while the focused overlay was still handling `KeyDown`; the existing cleanup then synchronously called `Window.Close()` on the overlay windows. Esc now queues the same `ISelectionInputSink.Escape` boundary through the overlay `DispatcherQueue`, so the key callback returns before session cleanup closes the overlays. No PrintScreen registration architecture or capture workflow was rewritten.
+- Added deterministic Core coverage that repeated Esc／late cancellation is safe, returns to `ResidentReady`, disposes the cancelled Session once and accepts a subsequent PrintScreen request.
+- `dotnet restore SnipPlus.sln --locked-mode` succeeded; Release x64 build succeeded with `0 warnings、0 errors`; non-interactive tests `97/97` passed with `0` failures and `0` skips; changed-file-only format verification and `git diff --check` passed.
+- The corrected source is ready for a new Development MSIX and Repository owner re-acceptance of five items: background-focus PrintScreen, Esc overlay-only cleanup with resident process, no MainWindow reopening, post-cancel background-focus PrintScreen and MainWindow X full exit. No post-fix packaged runtime has been claimed yet; no Paint、Notepad、Snipping Tool or other external GUI was launched, and no desktop screenshot、frozen frame or Clipboard payload was saved.
+- Stage 5 remains `Implementation and automated verification passed; Repository owner five-item manual re-acceptance pending`; Selection adjustment, Function Bar, Annotation, Clipboard, PNG and the sixth Slice remain unstarted.
+
 ### Windows Runtime Verification — Blocked (2026-07-27)
 
 - Windows 11 x64、三個顯示器環境；只啟動已存在的 SnipPlus packaged runtime，未啟動外部 GUI。

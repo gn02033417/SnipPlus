@@ -100,6 +100,42 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.IsTrue(ready.Session.IsDisposed);
     }
 
+    [TestMethod]
+    [TestCategory("Cancellation")]
+    public async Task EscapeCleanupLeavesWorkflowReadyForTheNextPrintScreenRequest()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var firstRequest = CaptureRequest.FromPrintScreen(
+            new PrintScreenReceivedEventArgs(Guid.NewGuid(), DateTimeOffset.UnixEpoch));
+        Assert.IsTrue(requests.Submit(firstRequest).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        using var workflow = CreateWorkflow(requests, provider, overlay);
+
+        var firstResult = await workflow.StartAsync(firstRequest, CancellationToken.None);
+        var firstReady = (CapturePresentationOutcome.SelectingReady)firstResult;
+
+        await workflow.CancelCurrentAsync("Escape");
+        await workflow.CancelCurrentAsync("LateEscape");
+
+        Assert.AreEqual(WorkflowState.ResidentReady, authority.CurrentState);
+        Assert.AreEqual(1, overlay.CloseCalls);
+        Assert.IsTrue(firstReady.Session.IsDisposed);
+
+        var secondRequest = CaptureRequest.FromPrintScreen(
+            new PrintScreenReceivedEventArgs(Guid.NewGuid(), DateTimeOffset.UnixEpoch.AddSeconds(1)));
+        var accepted = requests.Submit(secondRequest);
+
+        Assert.IsTrue(accepted.IsAccepted);
+        var secondResult = await workflow.StartAsync(secondRequest, CancellationToken.None);
+        Assert.IsInstanceOfType<CapturePresentationOutcome.SelectingReady>(secondResult);
+
+        await workflow.CancelCurrentAsync("test");
+        Assert.AreEqual(WorkflowState.ResidentReady, authority.CurrentState);
+        Assert.AreEqual(2, overlay.CloseCalls);
+    }
+
     private static CapturePresentationWorkflowCoordinator CreateWorkflow(
         CaptureRequestCoordinator requests,
         FakeAllDisplayProvider provider,
