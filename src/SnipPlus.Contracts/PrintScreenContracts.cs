@@ -18,7 +18,9 @@ public sealed record PrintScreenTakeoverResult(
     PrintScreenTakeoverFailureCode FailureCode,
     string UserMessage)
 {
-    public static PrintScreenTakeoverResult Enabled(bool stateChanged, string message = "PrintScreen takeover enabled.") =>
+    public static PrintScreenTakeoverResult Enabled(
+        bool stateChanged,
+        string message = PrintScreenTakeoverCompatibility.RegisteredStatus) =>
         new(true, true, stateChanged, PrintScreenTakeoverFailureCode.None, message);
 
     public static PrintScreenTakeoverResult Disabled(bool stateChanged, string message = "PrintScreen takeover disabled.") =>

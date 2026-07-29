@@ -21,6 +21,13 @@
                     IsThreeState="False" />
                 <TextBlock x:Name="StatusText" VerticalAlignment="Center" Text="Ready" />
             </StackPanel>
+            <TextBlock
+                x:Name="PrintScreenCompatibilityNoticeText"
+                TextWrapping="Wrap" />
+            <Button
+                x:Name="OpenWindowsKeyboardSettingsButton"
+                AutomationProperties.Name="Open Windows keyboard settings"
+                Click="OpenWindowsKeyboardSettingsButton_Click" />
         </StackPanel>
 
         <Grid Grid.Row="1" Padding="24">

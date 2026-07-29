@@ -16,6 +16,7 @@ public partial class MainWindow : Window, IDisposable
     private readonly WindowsCapturePlatformResources _platformResources;
     private readonly CapturePresentationWorkflowCoordinator _capturePresentation;
     private readonly ResidentActivationBoundary _residentActivation;
+    private readonly ISettingsLauncher _settingsLauncher;
     private bool _updatingTakeoverSetting;
     private int _shutdownStarted;
     private int _disposed;
@@ -23,10 +24,14 @@ public partial class MainWindow : Window, IDisposable
     public MainWindow(
         ICaptureService? unusedCaptureService = null,
         IPrintScreenTakeover? printScreenTakeover = null,
-        IPrintScreenTakeoverSettingsStore? settingsStore = null)
+        IPrintScreenTakeoverSettingsStore? settingsStore = null,
+        ISettingsLauncher? settingsLauncher = null)
     {
         _ = unusedCaptureService;
         InitializeComponent();
+        _settingsLauncher = settingsLauncher ?? new WindowsSettingsLauncher();
+        PrintScreenCompatibilityNoticeText.Text = PrintScreenTakeoverCompatibility.Notice;
+        OpenWindowsKeyboardSettingsButton.Content = PrintScreenTakeoverCompatibility.OpenKeyboardSettingsLabel;
 
         _captureRequestCoordinator = new CaptureRequestCoordinator(_stateAuthority);
         _captureRequestApplicationBoundary =
@@ -70,6 +75,12 @@ public partial class MainWindow : Window, IDisposable
 
         var requestedState = PrintScreenTakeoverCheckBox.IsChecked == true;
         ApplyTakeoverResult(_residentLifecycle.SetTakeoverEnabled(requestedState));
+    }
+
+    private async void OpenWindowsKeyboardSettingsButton_Click(object sender, RoutedEventArgs args)
+    {
+        var result = await _settingsLauncher.OpenKeyboardSettingsAsync();
+        SetStatus(result.UserMessage);
     }
 
     private void OnPrintScreenReceived(object? sender, PrintScreenReceivedEventArgs args)
