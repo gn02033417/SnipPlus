@@ -245,6 +245,15 @@ Detailed status and required actions are maintained in `PRD/PRD-TRACEABILITY-MAT
 - Locked restore 成功；Release x64 solution build 成功（`0 warnings、0 errors`）；非互動測試 `126/126` 通過（`0 failures、0 skips`）；限定 Stage 6B C# format verify 與 `git diff --check` 通過。Stage 6A／6B packaged Windows runtime 尚未驗證，Stage 7 及後續功能未開始。
 - Development MSIX 生成成功：`src/SnipPlus.App/AppPackages/SnipPlus.App_1.0.0.0_x64_Test/SnipPlus.App_1.0.0.0_x64.msix`；package manifest 保持 `AppListEntry="default"`、`graphicsCaptureProgrammatic`、`runFullTrust`，package 內 `SnipPlus.App.dll` 與 Release DLL SHA-256 均為 `ab60b0d7b22ecf8c1aa9d794298933a8a25f44efb83846396c5038c601c5e742`。Packaging 僅因缺少 `mspdbcmf.exe` 顯示 symbols warning，無 package error；本次未安裝、未啟動，不能視為 Windows Runtime evidence。
 
+### Corrected — Stage 6B Initial Selection Release and Function Bar Preparation (2026-07-29)
+
+- Repository owner Stage 6 manual acceptance failed at the initial Selection release: the three Frozen Overlays appeared and the initial Selection could be dragged, but all Overlays closed immediately after mouse release and the Function Bar was not visible. Stage 7 was not started.
+- The source-level failure path is confirmed as `FunctionBarSurface` creating its root with `Visibility.Collapsed` before `TryMeasurePhysicalSize`; a zero `DesiredSize` returns typed `FailureCode.BarMeasurementFailed`, `PrepareEditing` calls `FailCurrentAsync`, and the required session cleanup closes all Overlays. No new interactive runtime trace was collected during this correction; this is the deterministic path matching the owner observation.
+- Function Bar preparation now keeps the hosted root layout-participating with `Visibility.Visible`, `Opacity=0` and `IsHitTestVisible=false`; the measured DIP size is deterministically converted using the anchor display rasterization scale. Show／Hide switches only opacity and hit testing, and actual close／dispose remains the only path that collapses and removes the root.
+- Added deterministic visibility-policy and DIP-to-physical measurement tests, strengthened the valid Selection release assertion to require no Overlay cleanup, and added typed `BarMeasurementFailed` cleanup coverage. Complete、Save、Undo、Redo、Clipboard、PNG and Annotation remain outside this correction.
+- Locked restore succeeded; Release x64 solution build succeeded with `0 warnings、0 errors`; non-interactive tests `128/128` passed with `0` failures and `0` skips; the three modified C# files passed limited `dotnet format --verify-no-changes`; `git diff --check` passed.
+- Stage 6 status is `Implementation and automated verification passed; Repository owner re-acceptance pending`. Stage 7 has not started. No SnipPlus GUI、Paint、Notepad、Snipping Tool、WGC、Clipboard or PNG runtime was started or saved during this correction.
+
 ### Not Released
 
 - No release publication、Store deployment or release artifact submission has occurred。
