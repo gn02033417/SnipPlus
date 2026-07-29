@@ -193,6 +193,15 @@ escap:Capability`，已改為 Windows manifest schema 要求的 `uap11:Capabilit
 - Locked restore succeeded; Release x64 solution build succeeded with `0 warnings、0 errors`; non-interactive tests `106/106` passed with `0` failures and `0` skips; limited changed-C# format verification and `git diff --check` passed. The added tests cover the compatibility notice／status, official URI boundary, success, typed launch failure and exception failure without opening the Settings GUI.
 - Stage 5 is `Repository owner manual acceptance passed for the Owner Reference environment, with the documented Windows PrintScreen compatibility prerequisite`. Stage 6 has not started.
 
+### Verified — Stage 6A SelectionLocked Adjustment Static Slice (2026-07-29)
+
+- Added platform-neutral `SelectionInteractionMode`、`SelectionHitTestKind` and `SelectionHitTesting` contracts for moving、four-edge／four-corner resize and outside-drag reselection. The selection coordinator preserves `SelectionStatus.Locked` and the sole `COMP-001` `WorkflowStateAuthority` state while applying immutable physical geometry revisions.
+- Locked Selection adjustments clamp moves to the Virtual Desktop bounds、normalize resize geometry、flip the effective handle when an edge or corner crosses its opposite side、reject zero／invalid geometry and restore the previous locked bounds on invalid release. Escape cancels the active session through the existing cleanup boundary.
+- Windows overlay presentation now declares eight logical handles, maps handle placement to each display's physical bounds and rasterization scale, avoids placing handles in topology gaps and maps the system cursor to the current hit-test mode. No Function Bar、Editing、Annotation、Undo／Redo、Complete、Clipboard、PNG or Save behavior was added.
+- Added deterministic contract、move／resize／reselection／rollback／pointer-ownership、COMP-001 preservation and Windows handle／cursor mapping tests. Synthetic mixed-DPI／negative-coordinate physical input remains platform-neutral; no real desktop pixels or Clipboard payload were saved.
+- Locked restore succeeded; Release x64 solution build succeeded with `0 warnings、0 errors`; non-interactive tests `115/115` passed with `0` failures and `0` skips; limited Stage 6A C# format verification and `git diff --check` passed. No GUI、MSIX、Interactive or Manual verification was run.
+- Stage 6A is `static implementation and deterministic verification passed; packaged Windows runtime verification pending`. Stage 6B and later slices have not started.
+
 ### Windows Runtime Verification — Blocked (2026-07-27)
 
 - Windows 11 x64、三個顯示器環境；只啟動已存在的 SnipPlus packaged runtime，未啟動外部 GUI。
