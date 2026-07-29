@@ -24,7 +24,7 @@
   <Applications>
     <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        AppListEntry="none"
+        AppListEntry="default"
         DisplayName="SnipPlus"
         Description="SnipPlus"
         BackgroundColor="#2563EB"
