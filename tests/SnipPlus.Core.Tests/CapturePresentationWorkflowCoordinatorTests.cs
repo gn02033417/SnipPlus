@@ -38,6 +38,16 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.AreEqual(WorkflowState.SelectionLocked, authority.CurrentState);
         Assert.AreEqual(0, overlay.CloseCalls);
 
+        var replacementStart = input.PointerPressed(Input(ready.Session, 20, 10));
+        var replacementPreview = input.PointerMoved(Input(ready.Session, 22, 12));
+        var replacement = input.PointerReleased(Input(ready.Session, 22, 12));
+
+        Assert.AreEqual(SelectionInputResultKind.Reselecting, replacementStart.Kind);
+        Assert.AreEqual(SelectionInputResultKind.Reselecting, replacementPreview.Kind);
+        Assert.AreEqual(SelectionInputResultKind.AdjustmentCommitted, replacement.Kind);
+        Assert.AreEqual(WorkflowState.SelectionLocked, authority.CurrentState);
+        Assert.AreEqual(new PhysicalRect(20, 10, 22, 12), replacement.State.NormalizedPhysicalBounds);
+
         await workflow.CancelCurrentAsync("test");
 
         Assert.AreEqual(WorkflowState.ResidentReady, authority.CurrentState);
@@ -159,12 +169,12 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
 
     private static VirtualDesktopSnapshot CreateSnapshot() => new(
         "presentation-v1",
-        new(-4, 0, 4, 2),
-        new(-4, 0),
+        new(-40, 0, 40, 20),
+        new(-40, 0),
         new[]
         {
-            Display("left", new(-4, 0, -2, 2)),
-            Display("right", new(0, 0, 4, 2))
+            Display("left", new(-40, 0, -20, 20)),
+            Display("right", new(0, 0, 40, 20))
         });
 
     private static DisplaySnapshot Display(string id, PhysicalRect bounds) => new(
