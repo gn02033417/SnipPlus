@@ -254,6 +254,16 @@ Detailed status and required actions are maintained in `PRD/PRD-TRACEABILITY-MAT
 - Locked restore succeeded; Release x64 solution build succeeded with `0 warnings、0 errors`; non-interactive tests `128/128` passed with `0` failures and `0` skips; the three modified C# files passed limited `dotnet format --verify-no-changes`; `git diff --check` passed.
 - Stage 6 status is `Implementation and automated verification passed; Repository owner re-acceptance pending`. Stage 7 has not started. No SnipPlus GUI、Paint、Notepad、Snipping Tool、WGC、Clipboard or PNG runtime was started or saved during this correction.
 
+### Corrected — Stage 6 Cross-display Move Release, Cancel and Function Bar Contrast (2026-07-29)
+
+- Repository owner Stage 6 acceptance remains failed only for cross-display Selection move release、Function Bar Cancel、Function Bar text contrast and the required distinction between legal Physical Gap coverage and Virtual Desktop outer-boundary clamping. All other reported Stage 6 checks remain recorded as passed; Stage 7 has not started.
+- The cross-display release path now has one session-owned input boundary shared by every Overlay. It normalizes PointerId across top-level Overlay windows, keeps one active Selection interaction, treats `PointerCaptureLost`／`WM_CAPTURECHANGED` as capture notifications rather than releases, and uses session-scoped `WM_LBUTTONUP` plus XAML `PointerReleased` as one deduplicated commit boundary. A duplicate or late release is ignored without a second Core commit.
+- Function Bar Cancel now snapshots the session／coordinate／revision request, disables the Cancel button through the pending dispatch gate and queues the command through the Overlay UI `DispatcherQueue` after the Button routed event returns. This prevents synchronous Function Bar／Overlay cleanup reentrancy; the existing Core `CancelCurrentAsync` remains the sole cleanup path.
+- Function Bar buttons now use a shared high-contrast visual policy: white foreground, dark background and visible border. `IsEnabled=false` remains the command availability authority for Complete／Save／Undo／Redo; no output or Annotation command was added.
+- Owner Reference boundary evidence now includes a 150% lower-display physical `1920 × 1080` scenario that can retain a Selection across the display-to-gap boundary while deterministic move clamping keeps the rectangle within `(-2560,0)–(2560,2520)`. No clamp change was needed because the existing Core Virtual Desktop clamp already preserves Selection size and constrains all four outer edges.
+- Added deterministic tests for cross-window PointerId normalization、native/XAML release deduplication、Cancel single-dispatch gating、high-contrast visual policy and Owner Reference Physical Gap／Virtual Bounds behavior. The non-interactive suite is `132/132` passed with `0` failures and `0` skips.
+- Locked restore succeeded; Release x64 build succeeded with `0` warnings and `0` errors; the three modified C# files passed limited `dotnet format --verify-no-changes`; `git diff --check` passed. A new clean-commit Development MSIX and post-fix packaged manual re-acceptance remain pending; no Stage 7 work started.
+
 ### Not Released
 
 - No release publication、Store deployment or release artifact submission has occurred。
