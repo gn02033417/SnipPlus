@@ -27,6 +27,18 @@ public sealed class WinRtClipboardDeliveryAdapterTests
         "Dispose"
     };
 
+    private static readonly string[] RuntimePayloadDiagnosticEvents =
+    {
+        "RuntimeInitializationBefore",
+        "RuntimeInitializationAfter",
+        "DataPackageBefore",
+        "DataPackageAfter",
+        "SetContentBefore",
+        "SetContentAfter",
+        "FlushBefore",
+        "FlushAfter"
+    };
+
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Clipboard")]
@@ -169,6 +181,7 @@ public sealed class WinRtClipboardDeliveryAdapterTests
         using var image = CreateImage();
         var calls = new List<string>();
         var initializer = new FakeClipboardRuntimeInitializer(calls);
+        var trace = new FakeCompleteExecutionTraceSink();
         var adapter = new WinRtClipboardDeliveryAdapter(
             (_, _) =>
             {
@@ -176,6 +189,7 @@ public sealed class WinRtClipboardDeliveryAdapterTests
                 return true;
             },
             () => calls.Add("Flush"),
+            traceSink: trace,
             runtimeInitializer: initializer);
 
         var result = await adapter.DeliverAsync(
@@ -186,6 +200,17 @@ public sealed class WinRtClipboardDeliveryAdapterTests
         CollectionAssert.AreEqual(RuntimeInitializationCallOrder, calls);
         Assert.AreEqual(1, initializer.EnterCount);
         Assert.AreEqual(1, initializer.DisposeCount);
+        var diagnosticEvents = trace.Entries
+            .Where(entry => entry.DiagnosticEvent is not null)
+            .Select(entry => entry.DiagnosticEvent)
+            .ToArray();
+        CollectionAssert.IsSubsetOf(RuntimePayloadDiagnosticEvents, diagnosticEvents);
+        var payloadEvents = diagnosticEvents
+            .Where(RuntimePayloadDiagnosticEvents.Contains)
+            .ToArray();
+        CollectionAssert.AreEqual(
+            RuntimePayloadDiagnosticEvents,
+            payloadEvents);
     }
 
     [TestMethod]

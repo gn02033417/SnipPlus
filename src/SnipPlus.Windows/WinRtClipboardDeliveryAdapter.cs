@@ -98,23 +98,8 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
                 try
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    pngStream.Seek(0);
-
-                    var package = new DataPackage
-                    {
-                        RequestedOperation = DataPackageOperation.Copy
-                    };
-                    package.SetBitmap(RandomAccessStreamReference.CreateFromStream(pngStream));
-
-                    var options = new ClipboardContentOptions
-                    {
-                        IsAllowedInHistory = request.HistoryAllowed,
-                        IsRoamable = request.RoamingAllowed
-                    };
-
                     if (!await PublishOnRequiredThreadAsync(
-                        package,
-                        options,
+                        pngStream,
                         request,
                         attempt,
                         cancellationToken))
@@ -219,8 +204,7 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
     }
 
     private async ValueTask<bool> PublishOnRequiredThreadAsync(
-        DataPackage package,
-        ClipboardContentOptions options,
+        InMemoryRandomAccessStream pngStream,
         ClipboardDeliveryRequest request,
         int attempt,
         CancellationToken cancellationToken)
@@ -237,7 +221,7 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
                 diagnosticEvent: "DirectPath",
                 dispatcherAvailable: _dispatcher is not null,
                 dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
-            return PublishDirect(package, options, request, attempt, cancellationToken);
+            return PublishDirect(pngStream, request, attempt, cancellationToken);
         }
 
         Trace(
@@ -266,7 +250,7 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
                 try
                 {
                     completion.TrySetResult(
-                        PublishDirect(package, options, request, attempt, cancellationToken));
+                        PublishDirect(pngStream, request, attempt, cancellationToken));
                 }
                 catch (Exception exception)
                 {
@@ -317,8 +301,7 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
     }
 
     private bool PublishDirect(
-        DataPackage package,
-        ClipboardContentOptions options,
+        InMemoryRandomAccessStream pngStream,
         ClipboardDeliveryRequest request,
         int attempt,
         CancellationToken cancellationToken)
@@ -362,18 +345,64 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
                 diagnosticEvent: "RuntimeInitializationAfter",
                 dispatcherAvailable: _dispatcher is not null,
                 dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
-            return PublishWithInitializedRuntime(package, options, request, attempt, cancellationToken);
+            return PublishWithInitializedRuntime(pngStream, request, attempt, cancellationToken);
         }
     }
 
     private bool PublishWithInitializedRuntime(
-        DataPackage package,
-        ClipboardContentOptions options,
+        InMemoryRandomAccessStream pngStream,
         ClipboardDeliveryRequest request,
         int attempt,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        Trace(
+            request,
+            CompleteExecutionStage.ClipboardPublishing,
+            attempt: attempt,
+            component: nameof(Clipboard),
+            diagnosticEvent: "DataPackageBefore",
+            dispatcherAvailable: _dispatcher is not null,
+            dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
+        DataPackage package;
+        ClipboardContentOptions options;
+        try
+        {
+            pngStream.Seek(0);
+            package = new DataPackage
+            {
+                RequestedOperation = DataPackageOperation.Copy
+            };
+            package.SetBitmap(RandomAccessStreamReference.CreateFromStream(pngStream));
+            options = new ClipboardContentOptions
+            {
+                IsAllowedInHistory = request.HistoryAllowed,
+                IsRoamable = request.RoamingAllowed
+            };
+        }
+        catch (Exception exception)
+        {
+            Trace(
+                request,
+                CompleteExecutionStage.ClipboardFailed,
+                attempt: attempt,
+                component: nameof(Clipboard),
+                diagnosticEvent: "DataPackageException",
+                dispatcherAvailable: _dispatcher is not null,
+                dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess,
+                nativeCode: exception.HResult,
+                exceptionType: exception.GetType().FullName);
+            throw;
+        }
+
+        Trace(
+            request,
+            CompleteExecutionStage.ClipboardPublishing,
+            attempt: attempt,
+            component: nameof(Clipboard),
+            diagnosticEvent: "DataPackageAfter",
+            dispatcherAvailable: _dispatcher is not null,
+            dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
         Trace(
             request,
             CompleteExecutionStage.ClipboardPublishing,

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed — Stage 6C Clipboard Payload Runtime Boundary (2026-07-30)
+
+- The MTA correction reached `RuntimeInitializationAfter`, but the next packaged trace still failed at `Clipboard.SetContentWithOptions()` with `0x800401F0 (CO_E_NOTINITIALIZED)`; `Flush()` was not reached.
+- Moved `InMemoryRandomAccessStream.Seek`、`DataPackage`、`RandomAccessStreamReference`、`SetBitmap` and `ClipboardContentOptions` creation into the same dispatcher／`RoInitialize(RO_INIT_MULTITHREADED)` scope as `SetContent`／`Flush`.
+- Added deterministic payload-boundary trace ordering coverage. Release x64 build remains `0 warnings／0 errors` and non-interactive tests remain `142/142`; the new signed package still requires one packaged Complete retry.
+
 ### Corrected — Stage 6C Clipboard Runtime Apartment Mode (2026-07-30)
 
 - The first post-fix packaged trace showed `RuntimeInitializationException` with `0x80010106 (RPC_E_CHANGED_MODE)` before `SetContent`; the current dispatcher thread was already using a different apartment mode.
