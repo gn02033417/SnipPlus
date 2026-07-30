@@ -675,6 +675,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         };
         private readonly IReadOnlyDictionary<FunctionBarCommand, Button> _buttons;
         private readonly IReadOnlyDictionary<EditingToolKind, RadioButton> _toolButtons;
+        private readonly IReadOnlyDictionary<ArrowLineEndStyle, RadioButton> _arrowLineModeButtons;
         private readonly CancelCommandGate _cancelCommandGate = new();
         private readonly CancelCommandGate _completeCommandGate = new();
         private FunctionBarPresentationRequest _request;
@@ -697,17 +698,31 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons = new Dictionary<EditingToolKind, RadioButton>
             {
                 [EditingToolKind.Selection] = CreateToolButton("Selection"),
-                [EditingToolKind.Rectangle] = CreateToolButton("Rectangle")
+                [EditingToolKind.Rectangle] = CreateToolButton("Rectangle"),
+                [EditingToolKind.ArrowLine] = CreateToolButton("Arrow / Line")
+            };
+            _arrowLineModeButtons = new Dictionary<ArrowLineEndStyle, RadioButton>
+            {
+                [ArrowLineEndStyle.Arrow] = CreateModeButton("Arrow"),
+                [ArrowLineEndStyle.None] = CreateModeButton("Line")
             };
             _buttons[FunctionBarCommand.Complete].Click += OnCompleteClicked;
             _buttons[FunctionBarCommand.Cancel].Click += OnCancelClicked;
             _toolButtons[EditingToolKind.Selection].Click += OnSelectionToolClicked;
             _toolButtons[EditingToolKind.Rectangle].Click += OnRectangleToolClicked;
+            _toolButtons[EditingToolKind.ArrowLine].Click += OnArrowLineToolClicked;
+            _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click += OnArrowModeClicked;
+            _arrowLineModeButtons[ArrowLineEndStyle.None].Click += OnLineModeClicked;
             _root.PointerPressed += OnPointerPressed;
             _panel.Children.Add(_feedbackText);
             foreach (var toolButton in _toolButtons.Values)
             {
                 _panel.Children.Add(toolButton);
+            }
+
+            foreach (var modeButton in _arrowLineModeButtons.Values)
+            {
+                _panel.Children.Add(modeButton);
             }
 
             foreach (var button in _buttons.Values)
@@ -751,6 +766,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             {
                 pair.Value.IsChecked = pair.Key == request.ActiveTool;
                 pair.Value.IsEnabled = request.ToolSelectionSink is not null;
+            }
+
+            foreach (var pair in _arrowLineModeButtons)
+            {
+                pair.Value.IsChecked = pair.Key == request.ActiveArrowLineEndStyle;
+                pair.Value.IsEnabled = request.ToolSelectionSink is not null
+                    && request.ActiveTool == EditingToolKind.ArrowLine;
             }
         }
 
@@ -817,6 +839,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _buttons[FunctionBarCommand.Cancel].Click -= OnCancelClicked;
             _toolButtons[EditingToolKind.Selection].Click -= OnSelectionToolClicked;
             _toolButtons[EditingToolKind.Rectangle].Click -= OnRectangleToolClicked;
+            _toolButtons[EditingToolKind.ArrowLine].Click -= OnArrowLineToolClicked;
+            _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click -= OnArrowModeClicked;
+            _arrowLineModeButtons[ArrowLineEndStyle.None].Click -= OnLineModeClicked;
             _root.PointerPressed -= OnPointerPressed;
             _owner.RemoveFunctionBar(this);
             _root.Opacity = 0;
@@ -925,6 +950,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return button;
         }
 
+        private static RadioButton CreateModeButton(string label)
+        {
+            var button = CreateToolButton(label);
+            button.GroupName = "SnipPlusArrowLineMode";
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                button,
+                $"Arrow or line mode {label}");
+            return button;
+        }
+
         private static FunctionBarButtonVisualStyle GetButtonVisualStyle() =>
             new(
                 ColorHelper.FromArgb(255, 255, 255, 255),
@@ -1018,7 +1053,18 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private void OnRectangleToolClicked(object sender, RoutedEventArgs args) =>
             SelectTool(EditingToolKind.Rectangle);
 
-        private void SelectTool(EditingToolKind tool)
+        private void OnArrowLineToolClicked(object sender, RoutedEventArgs args) =>
+            SelectTool(EditingToolKind.ArrowLine, _request.ActiveArrowLineEndStyle);
+
+        private void OnArrowModeClicked(object sender, RoutedEventArgs args) =>
+            SelectTool(EditingToolKind.ArrowLine, ArrowLineEndStyle.Arrow);
+
+        private void OnLineModeClicked(object sender, RoutedEventArgs args) =>
+            SelectTool(EditingToolKind.ArrowLine, ArrowLineEndStyle.None);
+
+        private void SelectTool(
+            EditingToolKind tool,
+            ArrowLineEndStyle arrowLineEndStyle = ArrowLineEndStyle.Arrow)
         {
             var sink = _request.ToolSelectionSink;
             if (_disposed || sink is null)
@@ -1031,7 +1077,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _request.CoordinateVersion,
                 _request.Selection.SelectionRevision,
                 _request.AnnotationRevision,
-                tool));
+                tool)
+            {
+                RequestedArrowLineEndStyle = arrowLineEndStyle
+            });
             if (result.Kind != EditingToolSelectionResultKind.Selected)
             {
                 Update(_request);
@@ -1065,9 +1114,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly IEditingInputRouter? _editingRouter;
         private SelectionInputResult _lastResult;
         private RectanglePointerResult _lastRectangleResult;
+        private ArrowLinePointerResult _lastArrowLineResult;
         private int? _activePointerId;
         private int? _rectangleSelectionRevision;
         private AnnotationRevision? _rectangleAnnotationRevision;
+        private int? _arrowLineSelectionRevision;
+        private AnnotationRevision? _arrowLineAnnotationRevision;
         private bool _releaseConsumed;
 
         public SessionInputBoundary(
@@ -1105,10 +1157,26 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 null,
                 null,
                 "No Rectangle input has been accepted.");
+            _lastArrowLineResult = new ArrowLinePointerResult(
+                ArrowLinePointerResultKind.NoActiveDraft,
+                editingRouter?.ActiveTool ?? EditingToolKind.Selection,
+                editingRouter?.ActiveArrowLineEndStyle ?? ArrowLineEndStyle.Arrow,
+                sessionId,
+                coordinateVersion,
+                editingRouter?.CurrentSelectionRevision ?? 0,
+                editingRouter?.CurrentAnnotationRevision ?? AnnotationRevision.Initial,
+                null,
+                null,
+                null,
+                null,
+                "No Arrow or line input has been accepted.");
         }
 
         public bool UsesRectangleTool =>
             _editingRouter?.ActiveTool == EditingToolKind.Rectangle;
+
+        public bool UsesArrowLineTool =>
+            _editingRouter?.ActiveTool == EditingToolKind.ArrowLine;
 
         public SelectionInputResult PointerPressed(SelectionPointerEvent input)
         {
@@ -1171,6 +1239,42 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return result;
         }
 
+        public ArrowLinePointerResult PointerPressedArrowLine(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastArrowLineResult;
+            }
+
+            lock (_gate)
+            {
+                if (_activePointerId is not null)
+                {
+                    return _lastArrowLineResult with
+                    {
+                        Kind = ArrowLinePointerResultKind.PointerMismatch,
+                        Message = "Another pointer interaction is already active."
+                    };
+                }
+            }
+
+            var result = _editingRouter.PointerPressed(ToArrowLineInput(input));
+            lock (_gate)
+            {
+                _lastArrowLineResult = result;
+                if (result.Kind == ArrowLinePointerResultKind.DraftStarted)
+                {
+                    _activePointerId = input.PointerId;
+                    _arrowLineSelectionRevision = _editingRouter.CurrentSelectionRevision;
+                    _arrowLineAnnotationRevision = _editingRouter.CurrentAnnotationRevision;
+                    _releaseConsumed = false;
+                }
+            }
+
+            return result;
+        }
+
         public SelectionInputResult PointerMoved(SelectionPointerEvent input)
         {
             ArgumentNullException.ThrowIfNull(input);
@@ -1196,6 +1300,24 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             lock (_gate)
             {
                 _lastRectangleResult = result;
+            }
+
+            return result;
+        }
+
+        public ArrowLinePointerResult PointerMovedArrowLine(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastArrowLineResult;
+            }
+
+            var result = _editingRouter.PointerMoved(
+                ToArrowLineInput(NormalizePointer(input)));
+            lock (_gate)
+            {
+                _lastArrowLineResult = result;
             }
 
             return result;
@@ -1255,6 +1377,37 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return result;
         }
 
+        public ArrowLinePointerResult PointerReleasedArrowLine(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastArrowLineResult;
+            }
+
+            lock (_gate)
+            {
+                if (_releaseConsumed || _activePointerId is null)
+                {
+                    return _lastArrowLineResult;
+                }
+
+                _releaseConsumed = true;
+            }
+
+            var result = _editingRouter.PointerReleased(
+                ToArrowLineInput(NormalizePointer(input)));
+            lock (_gate)
+            {
+                _lastArrowLineResult = result;
+                _activePointerId = null;
+                _arrowLineSelectionRevision = null;
+                _arrowLineAnnotationRevision = null;
+            }
+
+            return result;
+        }
+
         public SelectionInputResult PointerReleasedFromNative(PhysicalPoint point) =>
             PointerReleased(new SelectionPointerEvent(
                 _sessionId,
@@ -1264,6 +1417,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public RectanglePointerResult PointerReleasedRectangleFromNative(PhysicalPoint point) =>
             PointerReleasedRectangle(new SelectionPointerEvent(
+                _sessionId,
+                _coordinateVersion,
+                GetActivePointerId(),
+                point));
+
+        public ArrowLinePointerResult PointerReleasedArrowLineFromNative(PhysicalPoint point) =>
+            PointerReleasedArrowLine(new SelectionPointerEvent(
                 _sessionId,
                 _coordinateVersion,
                 GetActivePointerId(),
@@ -1279,6 +1439,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _releaseConsumed = true;
                 _rectangleSelectionRevision = null;
                 _rectangleAnnotationRevision = null;
+                _arrowLineSelectionRevision = null;
+                _arrowLineAnnotationRevision = null;
                 _lastRectangleResult = _editingRouter is null
                     ? _lastRectangleResult
                     : _lastRectangleResult with
@@ -1286,6 +1448,15 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                         Kind = RectanglePointerResultKind.Cancelled,
                         ActiveTool = _editingRouter.ActiveTool,
                         Message = "Rectangle input cancelled with the capture session."
+                    };
+                _lastArrowLineResult = _editingRouter is null
+                    ? _lastArrowLineResult
+                    : _lastArrowLineResult with
+                    {
+                        Kind = ArrowLinePointerResultKind.Cancelled,
+                        ActiveTool = _editingRouter.ActiveTool,
+                        ActiveEndStyle = _editingRouter.ActiveArrowLineEndStyle,
+                        Message = "Arrow or line input cancelled with the capture session."
                     };
             }
 
@@ -1316,6 +1487,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     ?? _editingRouter?.CurrentSelectionRevision
                     ?? 0,
                 _rectangleAnnotationRevision
+                    ?? _editingRouter?.CurrentAnnotationRevision
+                    ?? AnnotationRevision.Initial,
+                input.PointerId,
+                input.GlobalPhysicalPoint);
+
+        private ArrowLinePointerEvent ToArrowLineInput(SelectionPointerEvent input) =>
+            new(
+                input.SessionId,
+                input.CoordinateVersion,
+                _arrowLineSelectionRevision
+                    ?? _editingRouter?.CurrentSelectionRevision
+                    ?? 0,
+                _arrowLineAnnotationRevision
                     ?? _editingRouter?.CurrentAnnotationRevision
                     ?? AnnotationRevision.Initial,
                 input.PointerId,
@@ -1390,6 +1574,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             Visibility = Visibility.Collapsed
         };
         private readonly List<Rectangle> _annotationPreviews = new();
+        private readonly List<Line> _arrowLinePreviews = new();
         private readonly IReadOnlyDictionary<SelectionHitTestKind, Rectangle> _handles =
             new Dictionary<SelectionHitTestKind, Rectangle>
             {
@@ -1688,13 +1873,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             var selection = snapshot.SelectionPhysicalBounds;
             foreach (var annotationObject in snapshot.Document.Objects)
             {
-                if (annotationObject.ToolKind != AnnotationToolKind.Rectangle
-                    || annotationObject.Content is not RectangleAnnotationContent content)
+                if (annotationObject.ToolKind == AnnotationToolKind.Rectangle
+                    && annotationObject.Content is RectangleAnnotationContent content)
                 {
-                    continue;
+                    AddAnnotationPreview(annotationObject.Geometry, content.Style, selection);
                 }
-
-                AddAnnotationPreview(annotationObject.Geometry, content.Style, selection);
+                else if (annotationObject.ToolKind == AnnotationToolKind.ArrowLine
+                    && annotationObject.Content is ArrowLineAnnotationContent arrowLineContent)
+                {
+                    AddArrowLinePreview(arrowLineContent.Segment, arrowLineContent.Style, selection);
+                }
             }
 
             if (snapshot.DraftPhysicalBounds is PhysicalRect draft
@@ -1706,9 +1894,21 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     selection);
             }
 
-            _canvas.Cursor = snapshot.ActiveTool == EditingToolKind.Rectangle
+            if (snapshot.DraftArrowLineSegment is PhysicalLineSegment draftArrowLine)
+            {
+                AddArrowLinePreview(
+                    draftArrowLine,
+                    ArrowLineAnnotationStyle.Default with
+                    {
+                        EndStyle = snapshot.ActiveArrowLineEndStyle
+                    },
+                    selection);
+            }
+
+            _canvas.Cursor = snapshot.ActiveTool is EditingToolKind.Rectangle
+                or EditingToolKind.ArrowLine
                 ? InputSystemCursor.Create(InputSystemCursorShape.Cross)
-                : _canvas.Cursor;
+                : InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         }
 
         private void AddAnnotationPreview(
@@ -1753,6 +1953,95 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _canvas.Children.Add(rectangle);
         }
 
+        private void AddArrowLinePreview(
+            PhysicalLineSegment geometry,
+            ArrowLineAnnotationStyle style,
+            PhysicalRect? selection)
+        {
+            var visibleBounds = _descriptor.PhysicalBoundsInVirtualDesktop;
+            if (selection is PhysicalRect selectionBounds)
+            {
+                visibleBounds = visibleBounds.Intersection(selectionBounds);
+            }
+
+            if (!visibleBounds.IsPositive
+                || !TryClipLine(geometry, visibleBounds, out var start, out var end))
+            {
+                return;
+            }
+
+            AddLinePreview(start, end, style);
+            if (style.EndStyle == ArrowLineEndStyle.Arrow
+                && Contains(visibleBounds, geometry.End))
+            {
+                AddArrowHeadPreview(geometry, style, visibleBounds);
+            }
+        }
+
+        private void AddLinePreview(
+            PhysicalPoint start,
+            PhysicalPoint end,
+            ArrowLineAnnotationStyle style)
+        {
+            var line = new Line
+            {
+                X1 = (start.X - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                    / _rasterizationScale,
+                Y1 = (start.Y - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                    / _rasterizationScale,
+                X2 = (end.X - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                    / _rasterizationScale,
+                Y2 = (end.Y - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                    / _rasterizationScale,
+                Stroke = new SolidColorBrush(ColorHelper.FromArgb(
+                    style.StrokeColor.A,
+                    style.StrokeColor.R,
+                    style.StrokeColor.G,
+                    style.StrokeColor.B)),
+                StrokeThickness = style.StrokeThickness / _rasterizationScale,
+                IsHitTestVisible = false,
+                Visibility = Visibility.Visible
+            };
+            _arrowLinePreviews.Add(line);
+            _canvas.Children.Add(line);
+        }
+
+        private void AddArrowHeadPreview(
+            PhysicalLineSegment geometry,
+            ArrowLineAnnotationStyle style,
+            PhysicalRect visibleBounds)
+        {
+            var dx = geometry.End.X - geometry.Start.X;
+            var dy = geometry.End.Y - geometry.Start.Y;
+            var length = Math.Sqrt((double)(dx * dx) + (double)(dy * dy));
+            if (length <= 0)
+            {
+                return;
+            }
+
+            var size = Math.Max(6, style.StrokeThickness * 4);
+            var ux = dx / length;
+            var uy = dy / length;
+            var baseX = geometry.End.X - ux * size;
+            var baseY = geometry.End.Y - uy * size;
+            var sin = 0.5;
+            var left = new PhysicalPoint(
+                (int)Math.Round(baseX * 1 + (uy * size * sin), MidpointRounding.AwayFromZero),
+                (int)Math.Round(baseY * 1 - (ux * size * sin), MidpointRounding.AwayFromZero));
+            var right = new PhysicalPoint(
+                (int)Math.Round(baseX * 1 - (uy * size * sin), MidpointRounding.AwayFromZero),
+                (int)Math.Round(baseY * 1 + (ux * size * sin), MidpointRounding.AwayFromZero));
+            if (Contains(visibleBounds, left))
+            {
+                AddLinePreview(geometry.End, left, style);
+            }
+
+            if (Contains(visibleBounds, right))
+            {
+                AddLinePreview(geometry.End, right, style);
+            }
+        }
+
         private void ClearAnnotationPreviews()
         {
             foreach (var preview in _annotationPreviews)
@@ -1761,6 +2050,90 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             _annotationPreviews.Clear();
+            foreach (var preview in _arrowLinePreviews)
+            {
+                _canvas.Children.Remove(preview);
+            }
+
+            _arrowLinePreviews.Clear();
+        }
+
+        private static bool Contains(PhysicalRect bounds, PhysicalPoint point) =>
+            point.X >= bounds.Left
+            && point.X <= bounds.Right
+            && point.Y >= bounds.Top
+            && point.Y <= bounds.Bottom;
+
+        private static bool TryClipLine(
+            PhysicalLineSegment segment,
+            PhysicalRect bounds,
+            out PhysicalPoint start,
+            out PhysicalPoint end)
+        {
+            start = default;
+            end = default;
+            if (!segment.IsPositive || !bounds.IsPositive)
+            {
+                return false;
+            }
+
+            var x0 = (double)segment.Start.X;
+            var y0 = (double)segment.Start.Y;
+            var dx = segment.End.X - x0;
+            var dy = segment.End.Y - y0;
+            var t0 = 0d;
+            var t1 = 1d;
+            if (!Clip(-dx, x0 - bounds.Left, ref t0, ref t1)
+                || !Clip(dx, bounds.Right - x0, ref t0, ref t1)
+                || !Clip(-dy, y0 - bounds.Top, ref t0, ref t1)
+                || !Clip(dy, bounds.Bottom - y0, ref t0, ref t1))
+            {
+                return false;
+            }
+
+            start = new PhysicalPoint(
+                (int)Math.Round(x0 + t0 * dx, MidpointRounding.AwayFromZero),
+                (int)Math.Round(y0 + t0 * dy, MidpointRounding.AwayFromZero));
+            end = new PhysicalPoint(
+                (int)Math.Round(x0 + t1 * dx, MidpointRounding.AwayFromZero),
+                (int)Math.Round(y0 + t1 * dy, MidpointRounding.AwayFromZero));
+            return start != end;
+        }
+
+        private static bool Clip(double p, double q, ref double t0, ref double t1)
+        {
+            if (p == 0)
+            {
+                return q >= 0;
+            }
+
+            var ratio = q / p;
+            if (p < 0)
+            {
+                if (ratio > t1)
+                {
+                    return false;
+                }
+
+                if (ratio > t0)
+                {
+                    t0 = ratio;
+                }
+            }
+            else
+            {
+                if (ratio < t0)
+                {
+                    return false;
+                }
+
+                if (ratio < t1)
+                {
+                    t1 = ratio;
+                }
+            }
+
+            return true;
         }
 
         public void Dispose()
@@ -1822,7 +2195,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point);
-            var capturesPointer = _inputBoundary.UsesRectangleTool
+            var capturesPointer = _inputBoundary.UsesArrowLineTool
+                ? _inputBoundary.PointerPressedArrowLine(pointer).Kind
+                    == ArrowLinePointerResultKind.DraftStarted
+                : _inputBoundary.UsesRectangleTool
                 ? _inputBoundary.PointerPressedRectangle(pointer).Kind
                     == RectanglePointerResultKind.DraftStarted
                 : _inputBoundary.PointerPressed(pointer).Kind is SelectionInputResultKind.Dragging
@@ -1848,7 +2224,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point);
-            if (_inputBoundary.UsesRectangleTool)
+            if (_inputBoundary.UsesArrowLineTool)
+            {
+                _inputBoundary.PointerMovedArrowLine(pointer);
+            }
+            else if (_inputBoundary.UsesRectangleTool)
             {
                 _inputBoundary.PointerMovedRectangle(pointer);
             }
@@ -1871,7 +2251,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point);
-            if (_inputBoundary.UsesRectangleTool)
+            if (_inputBoundary.UsesArrowLineTool)
+            {
+                _inputBoundary.PointerReleasedArrowLine(pointer);
+            }
+            else if (_inputBoundary.UsesRectangleTool)
             {
                 _inputBoundary.PointerReleasedRectangle(pointer);
             }
@@ -2134,7 +2518,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 if (message == WmLButtonUp
                     && TryGetGlobalPointer(out var point))
                 {
-                    if (_inputBoundary.UsesRectangleTool)
+                    if (_inputBoundary.UsesArrowLineTool)
+                    {
+                        _inputBoundary.PointerReleasedArrowLineFromNative(point);
+                    }
+                    else if (_inputBoundary.UsesRectangleTool)
                     {
                         _inputBoundary.PointerReleasedRectangleFromNative(point);
                     }

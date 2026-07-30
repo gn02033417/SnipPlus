@@ -3,7 +3,8 @@
 public enum EditingToolKind
 {
     Selection,
-    Rectangle
+    Rectangle,
+    ArrowLine
 }
 
 public readonly record struct ArgbColor(byte A, byte R, byte G, byte B)
@@ -11,6 +12,37 @@ public readonly record struct ArgbColor(byte A, byte R, byte G, byte B)
     public bool IsVisible => A > 0;
 
     public static ArgbColor Red => new(255, 220, 60, 60);
+}
+
+public interface IAnnotationContent
+{
+}
+
+public enum ArrowLineEndStyle
+{
+    Arrow,
+    None
+}
+
+public readonly record struct PhysicalLineSegment(PhysicalPoint Start, PhysicalPoint End)
+{
+    public bool IsPositive => Start != End;
+
+    public PhysicalRect Bounds
+    {
+        get
+        {
+            var left = Math.Min(Start.X, End.X);
+            var top = Math.Min(Start.Y, End.Y);
+            var right = Math.Max(Start.X, End.X);
+            var bottom = Math.Max(Start.Y, End.Y);
+            return new PhysicalRect(
+                left,
+                top,
+                right > left ? right : right + 1,
+                bottom > top ? bottom : bottom + 1);
+        }
+    }
 }
 
 public sealed record RectangleAnnotationStyle
@@ -42,7 +74,7 @@ public sealed record RectangleAnnotationStyle
     public static RectangleAnnotationStyle Default => new(ArgbColor.Red, 2);
 }
 
-public sealed record RectangleAnnotationContent
+public sealed record RectangleAnnotationContent : IAnnotationContent
 {
     public RectangleAnnotationContent(RectangleAnnotationStyle style)
     {
@@ -52,12 +84,80 @@ public sealed record RectangleAnnotationContent
     public RectangleAnnotationStyle Style { get; }
 }
 
+public sealed record ArrowLineAnnotationStyle
+{
+    public ArrowLineAnnotationStyle(
+        ArgbColor strokeColor,
+        int strokeThickness,
+        ArrowLineEndStyle endStyle)
+    {
+        if (!strokeColor.IsVisible)
+        {
+            throw new ArgumentException(
+                "Arrow or line stroke color must have a visible alpha channel.",
+                nameof(strokeColor));
+        }
+
+        if (strokeThickness is < 1 or > 64)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(strokeThickness),
+                "Arrow or line stroke thickness must be between 1 and 64 physical pixels.");
+        }
+
+        if (!Enum.IsDefined(endStyle))
+        {
+            throw new ArgumentOutOfRangeException(nameof(endStyle));
+        }
+
+        StrokeColor = strokeColor;
+        StrokeThickness = strokeThickness;
+        EndStyle = endStyle;
+    }
+
+    public ArgbColor StrokeColor { get; }
+
+    public int StrokeThickness { get; }
+
+    public ArrowLineEndStyle EndStyle { get; init; }
+
+    public static ArrowLineAnnotationStyle Default => new(
+        ArgbColor.Red,
+        2,
+        ArrowLineEndStyle.Arrow);
+}
+
+public sealed record ArrowLineAnnotationContent : IAnnotationContent
+{
+    public ArrowLineAnnotationContent(
+        PhysicalLineSegment segment,
+        ArrowLineAnnotationStyle style)
+    {
+        if (!segment.IsPositive)
+        {
+            throw new ArgumentException(
+                "Arrow or line geometry must have distinct endpoints.",
+                nameof(segment));
+        }
+
+        Segment = segment;
+        Style = style ?? throw new ArgumentNullException(nameof(style));
+    }
+
+    public PhysicalLineSegment Segment { get; }
+
+    public ArrowLineAnnotationStyle Style { get; }
+}
+
 public sealed record EditingToolSelectionRequest(
     Guid SessionId,
     string CoordinateVersion,
     int SelectionRevision,
     AnnotationRevision ExpectedAnnotationRevision,
-    EditingToolKind Tool);
+    EditingToolKind Tool)
+{
+    public ArrowLineEndStyle RequestedArrowLineEndStyle { get; init; } = ArrowLineEndStyle.Arrow;
+}
 
 public enum EditingToolSelectionResultKind
 {
@@ -77,7 +177,10 @@ public sealed record EditingToolSelectionResult(
     int SelectionRevision,
     AnnotationRevision AnnotationRevision,
     Failure? Failure,
-    string Message);
+    string Message)
+{
+    public ArrowLineEndStyle ActiveArrowLineEndStyle { get; init; } = ArrowLineEndStyle.Arrow;
+}
 
 public sealed record RectanglePointerEvent(
     Guid SessionId,
@@ -116,6 +219,44 @@ public sealed record RectanglePointerResult(
     Failure? Failure,
     string Message);
 
+public sealed record ArrowLinePointerEvent(
+    Guid SessionId,
+    string CoordinateVersion,
+    int SelectionRevision,
+    AnnotationRevision ExpectedAnnotationRevision,
+    int PointerId,
+    PhysicalPoint GlobalPhysicalPoint);
+
+public enum ArrowLinePointerResultKind
+{
+    DraftStarted,
+    DraftUpdated,
+    Committed,
+    IgnoredOutsideSelection,
+    InvalidGeometry,
+    StaleSession,
+    StaleSelectionRevision,
+    StaleAnnotationRevision,
+    PointerMismatch,
+    NoActiveDraft,
+    Cancelled,
+    Failed
+}
+
+public sealed record ArrowLinePointerResult(
+    ArrowLinePointerResultKind Kind,
+    EditingToolKind ActiveTool,
+    ArrowLineEndStyle ActiveEndStyle,
+    Guid SessionId,
+    string CoordinateVersion,
+    int SelectionRevision,
+    AnnotationRevision AnnotationRevision,
+    PhysicalLineSegment? DraftSegment,
+    AnnotationObject? CommittedObject,
+    AnnotationDocument? Document,
+    Failure? Failure,
+    string Message);
+
 public sealed record AnnotationPresentationSnapshot(
     Guid SessionId,
     string CoordinateVersion,
@@ -124,7 +265,12 @@ public sealed record AnnotationPresentationSnapshot(
     PhysicalRect? SelectionPhysicalBounds,
     EditingToolKind ActiveTool,
     PhysicalRect? DraftPhysicalBounds,
-    AnnotationDocument Document);
+    AnnotationDocument Document)
+{
+    public ArrowLineEndStyle ActiveArrowLineEndStyle { get; init; } = ArrowLineEndStyle.Arrow;
+
+    public PhysicalLineSegment? DraftArrowLineSegment { get; init; }
+}
 
 public interface IEditingToolSelectionSink
 {
@@ -140,9 +286,19 @@ public interface IAnnotationPointerInputSink
     RectanglePointerResult PointerReleased(RectanglePointerEvent input);
 }
 
+public interface IArrowLinePointerInputSink
+{
+    ArrowLinePointerResult PointerPressed(ArrowLinePointerEvent input);
+
+    ArrowLinePointerResult PointerMoved(ArrowLinePointerEvent input);
+
+    ArrowLinePointerResult PointerReleased(ArrowLinePointerEvent input);
+}
+
 public interface IEditingInputRouter :
     ISelectionInputSink,
     IAnnotationPointerInputSink,
+    IArrowLinePointerInputSink,
     IEditingToolSelectionSink
 {
     EditingToolKind ActiveTool { get; }
@@ -150,4 +306,6 @@ public interface IEditingInputRouter :
     int CurrentSelectionRevision { get; }
 
     AnnotationRevision CurrentAnnotationRevision { get; }
+
+    ArrowLineEndStyle ActiveArrowLineEndStyle { get; }
 }

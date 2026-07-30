@@ -108,6 +108,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
     public AnnotationRevision CurrentAnnotationRevision =>
         _annotationEditing.CurrentAnnotationRevision;
 
+    public ArrowLineEndStyle ActiveArrowLineEndStyle =>
+        _annotationEditing.ActiveArrowLineEndStyle;
+
     public AnnotationMutationResult AddAnnotationObject(AddAnnotationObjectRequest request) =>
         _annotationDocuments.Add(request);
 
@@ -358,6 +361,33 @@ public sealed class CapturePresentationWorkflowCoordinator :
     public RectanglePointerResult PointerReleased(RectanglePointerEvent input)
     {
         var result = ForwardRectangleInput(
+            input,
+            static (editing, value, selection) => editing.PointerReleased(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public ArrowLinePointerResult PointerPressed(ArrowLinePointerEvent input)
+    {
+        var result = ForwardArrowLineInput(
+            input,
+            static (editing, value, selection) => editing.PointerPressed(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public ArrowLinePointerResult PointerMoved(ArrowLinePointerEvent input)
+    {
+        var result = ForwardArrowLineInput(
+            input,
+            static (editing, value, selection) => editing.PointerMoved(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public ArrowLinePointerResult PointerReleased(ArrowLinePointerEvent input)
+    {
+        var result = ForwardArrowLineInput(
             input,
             static (editing, value, selection) => editing.PointerReleased(value, selection));
         ApplyAnnotationPresentation();
@@ -784,6 +814,34 @@ public sealed class CapturePresentationWorkflowCoordinator :
             : handler(_annotationEditing, input, selection.State);
     }
 
+    private ArrowLinePointerResult ForwardArrowLineInput(
+        ArrowLinePointerEvent input,
+        Func<AnnotationEditingCoordinator, ArrowLinePointerEvent, SelectionVisualState, ArrowLinePointerResult> handler)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        InitialSelectionCoordinator? selection;
+        lock (_gate)
+        {
+            selection = _inputEnabled ? _selectionCoordinator : null;
+        }
+
+        return selection is null
+            ? new ArrowLinePointerResult(
+                ArrowLinePointerResultKind.StaleSession,
+                _annotationEditing.ActiveTool,
+                _annotationEditing.ActiveArrowLineEndStyle,
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision,
+                CurrentAnnotationRevision,
+                null,
+                null,
+                CurrentAnnotationDocument,
+                null,
+                "Arrow or line input was ignored until the capture session was ready.")
+            : handler(_annotationEditing, input, selection.State);
+    }
+
     private void ApplyAnnotationPresentation()
     {
         var selection = CurrentSelection;
@@ -918,6 +976,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         {
             ActiveTool = _annotationEditing.ActiveTool,
             AnnotationRevision = _annotationEditing.CurrentAnnotationRevision,
+            ActiveArrowLineEndStyle = _annotationEditing.ActiveArrowLineEndStyle,
             ToolSelectionSink = this
         };
 

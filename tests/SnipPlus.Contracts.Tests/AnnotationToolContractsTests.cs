@@ -11,7 +11,7 @@ public sealed class AnnotationToolContractsTests
     public void EditingToolsKeepSelectionOutsideAnnotationToolKinds()
     {
         CollectionAssert.AreEquivalent(
-            new[] { EditingToolKind.Selection, EditingToolKind.Rectangle },
+            new[] { EditingToolKind.Selection, EditingToolKind.Rectangle, EditingToolKind.ArrowLine },
             Enum.GetValues<EditingToolKind>());
         Assert.IsFalse(Enum.IsDefined(AnnotationToolKind.Rectangle.GetType(), "Selection"));
     }
@@ -59,6 +59,37 @@ public sealed class AnnotationToolContractsTests
         Assert.AreSame(document, snapshot.Document);
         Assert.AreEqual(EditingToolKind.Rectangle, snapshot.ActiveTool);
         Assert.AreEqual(new PhysicalRect(3, 4, 8, 9), snapshot.DraftPhysicalBounds);
+    }
+
+    [TestMethod]
+    [TestCategory("Contract")]
+    public void ArrowLineContentKeepsEndpointsAndEndStyle()
+    {
+        var segment = new PhysicalLineSegment(
+            new PhysicalPoint(40, 30),
+            new PhysicalPoint(10, 20));
+        var style = new ArrowLineAnnotationStyle(
+            ArgbColor.Red,
+            3,
+            ArrowLineEndStyle.None);
+        var content = new ArrowLineAnnotationContent(segment, style);
+        var annotationObject = new AnnotationObject(
+            AnnotationObjectId.New(),
+            Guid.NewGuid(),
+            AnnotationToolKind.ArrowLine,
+            segment.Bounds,
+            0,
+            content);
+
+        Assert.AreEqual(segment, content.Segment);
+        Assert.AreEqual(ArrowLineEndStyle.None, content.Style.EndStyle);
+        Assert.AreSame(content, annotationObject.Content);
+        Assert.AreEqual(segment.Bounds, annotationObject.Geometry);
+        Assert.AreEqual(
+            new PhysicalRect(10, 30, 40, 31),
+            new PhysicalLineSegment(
+                new PhysicalPoint(10, 30),
+                new PhysicalPoint(40, 30)).Bounds);
     }
 
     [TestMethod]

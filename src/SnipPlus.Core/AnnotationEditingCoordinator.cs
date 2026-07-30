@@ -7,9 +7,19 @@ public interface IRectangleAnnotationStylePolicy
     RectangleAnnotationStyle GetDefaultStyle();
 }
 
+public interface IArrowLineAnnotationStylePolicy
+{
+    ArrowLineAnnotationStyle GetDefaultStyle();
+}
+
 public sealed class DefaultRectangleAnnotationStylePolicy : IRectangleAnnotationStylePolicy
 {
     public RectangleAnnotationStyle GetDefaultStyle() => RectangleAnnotationStyle.Default;
+}
+
+public sealed class DefaultArrowLineAnnotationStylePolicy : IArrowLineAnnotationStylePolicy
+{
+    public ArrowLineAnnotationStyle GetDefaultStyle() => ArrowLineAnnotationStyle.Default;
 }
 
 public sealed class AnnotationEditingCoordinator
@@ -18,20 +28,25 @@ public sealed class AnnotationEditingCoordinator
     private readonly AnnotationDocumentCoordinator _documents;
     private readonly Func<AnnotationObjectId> _objectIdFactory;
     private readonly IRectangleAnnotationStylePolicy _stylePolicy;
+    private readonly IArrowLineAnnotationStylePolicy _arrowLineStylePolicy;
     private Guid? _sessionId;
     private string _coordinateVersion = string.Empty;
     private EditingToolKind _activeTool = EditingToolKind.Selection;
+    private ArrowLineEndStyle _arrowLineEndStyle = ArrowLineEndStyle.Arrow;
     private int _selectionRevision;
     private RectangleDraft? _draft;
+    private ArrowLineDraft? _arrowLineDraft;
 
     public AnnotationEditingCoordinator(
         AnnotationDocumentCoordinator documents,
         Func<AnnotationObjectId>? objectIdFactory = null,
-        IRectangleAnnotationStylePolicy? stylePolicy = null)
+        IRectangleAnnotationStylePolicy? stylePolicy = null,
+        IArrowLineAnnotationStylePolicy? arrowLineStylePolicy = null)
     {
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
         _objectIdFactory = objectIdFactory ?? AnnotationObjectId.New;
         _stylePolicy = stylePolicy ?? new DefaultRectangleAnnotationStylePolicy();
+        _arrowLineStylePolicy = arrowLineStylePolicy ?? new DefaultArrowLineAnnotationStylePolicy();
     }
 
     public EditingToolKind ActiveTool
@@ -59,6 +74,17 @@ public sealed class AnnotationEditingCoordinator
     public AnnotationRevision CurrentAnnotationRevision =>
         _documents.Current?.Revision ?? AnnotationRevision.Initial;
 
+    public ArrowLineEndStyle ActiveArrowLineEndStyle
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _arrowLineEndStyle;
+            }
+        }
+    }
+
     public void BeginSession(SelectionVisualState selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
@@ -69,7 +95,9 @@ public sealed class AnnotationEditingCoordinator
             _coordinateVersion = selection.CoordinateVersion;
             _selectionRevision = selection.SelectionRevision;
             _activeTool = EditingToolKind.Selection;
+            _arrowLineEndStyle = ArrowLineEndStyle.Arrow;
             _draft = null;
+            _arrowLineDraft = null;
         }
     }
 
@@ -144,7 +172,13 @@ public sealed class AnnotationEditingCoordinator
             }
 
             _activeTool = request.Tool;
+            if (request.Tool == EditingToolKind.ArrowLine)
+            {
+                _arrowLineEndStyle = request.RequestedArrowLineEndStyle;
+            }
+
             _draft = null;
+            _arrowLineDraft = null;
             return new EditingToolSelectionResult(
                 EditingToolSelectionResultKind.Selected,
                 _activeTool,
@@ -153,7 +187,10 @@ public sealed class AnnotationEditingCoordinator
                 selection.SelectionRevision,
                 currentRevision,
                 null,
-                $"The {_activeTool} editing tool is active.");
+                $"The {_activeTool} editing tool is active.")
+            {
+                ActiveArrowLineEndStyle = _arrowLineEndStyle
+            };
         }
     }
 
@@ -453,6 +490,309 @@ public sealed class AnnotationEditingCoordinator
         }
     }
 
+    public ArrowLinePointerResult PointerPressed(
+        ArrowLinePointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateArrowLine(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_activeTool != EditingToolKind.ArrowLine)
+            {
+                return FailedArrowLine(
+                    input,
+                    "Arrow or line input was received while another editing tool is active.");
+            }
+
+            if (_arrowLineDraft is not null)
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.PointerMismatch,
+                    input,
+                    _arrowLineDraft.Segment,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Another Arrow or line draft is already active.");
+            }
+
+            if (selection.Status != SelectionStatus.Locked
+                || selection.InteractionMode != SelectionInteractionMode.Locked
+                || selection.NormalizedPhysicalBounds is not PhysicalRect bounds
+                || !bounds.IsPositive)
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.InvalidGeometry,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Arrow or line creation requires a valid locked Selection.");
+            }
+
+            if (!Contains(bounds, input.GlobalPhysicalPoint))
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.IgnoredOutsideSelection,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Arrow or line creation starts only inside the current Selection.");
+            }
+
+            var segment = new PhysicalLineSegment(
+                input.GlobalPhysicalPoint,
+                input.GlobalPhysicalPoint);
+            _arrowLineDraft = new ArrowLineDraft(input.PointerId, segment);
+            return ArrowLineResult(
+                ArrowLinePointerResultKind.DraftStarted,
+                input,
+                segment,
+                null,
+                _documents.Current,
+                null,
+                "Arrow or line draft started.");
+        }
+    }
+
+    public ArrowLinePointerResult PointerMoved(
+        ArrowLinePointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateArrowLine(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_arrowLineDraft is null)
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.NoActiveDraft,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "No Arrow or line draft is active.");
+            }
+
+            if (_arrowLineDraft.PointerId != input.PointerId)
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.PointerMismatch,
+                    input,
+                    _arrowLineDraft.Segment,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Arrow or line pointer input belongs to another pointer.");
+            }
+
+            var segment = new PhysicalLineSegment(
+                _arrowLineDraft.Segment.Start,
+                input.GlobalPhysicalPoint);
+            _arrowLineDraft = _arrowLineDraft with { Segment = segment };
+            return ArrowLineResult(
+                segment.IsPositive
+                    ? ArrowLinePointerResultKind.DraftUpdated
+                    : ArrowLinePointerResultKind.InvalidGeometry,
+                input,
+                segment,
+                null,
+                _documents.Current,
+                null,
+                segment.IsPositive
+                    ? "Arrow or line draft updated."
+                    : "Arrow or line draft geometry is not positive yet.");
+        }
+    }
+
+    public ArrowLinePointerResult PointerReleased(
+        ArrowLinePointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateArrowLine(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_arrowLineDraft is null)
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.NoActiveDraft,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "No Arrow or line draft is active.");
+            }
+
+            if (_arrowLineDraft.PointerId != input.PointerId)
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.PointerMismatch,
+                    input,
+                    _arrowLineDraft.Segment,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Arrow or line pointer input belongs to another pointer.");
+            }
+
+            var segment = new PhysicalLineSegment(
+                _arrowLineDraft.Segment.Start,
+                input.GlobalPhysicalPoint);
+            _arrowLineDraft = null;
+            if (!segment.IsPositive)
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.InvalidGeometry,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Arrow or line geometry must have distinct endpoints.");
+            }
+
+            var document = _documents.Current;
+            if (document is null)
+            {
+                return FailedArrowLine(input, "The Annotation Document is unavailable for Arrow or line commit.");
+            }
+
+            var zOrder = document.Objects.Count == 0
+                ? 0
+                : document.Objects.Max(annotationObject => annotationObject.ZOrder);
+            if (zOrder == int.MaxValue)
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.Failed,
+                    input,
+                    null,
+                    null,
+                    document,
+                    Failure.Create(
+                        FailureCode.AnnotationZOrderOverflow,
+                        FailureCategory.Validation,
+                        FailureRecoverability.RetrySameIntent,
+                        nameof(AnnotationEditingCoordinator),
+                        input.SessionId,
+                        "The next Arrow or line annotation Z-order would overflow."),
+                    "The next Arrow or line annotation Z-order would overflow.");
+            }
+
+            AnnotationObject annotationObject;
+            try
+            {
+                var defaultStyle = _arrowLineStylePolicy.GetDefaultStyle();
+                annotationObject = new AnnotationObject(
+                    _objectIdFactory(),
+                    input.SessionId,
+                    AnnotationToolKind.ArrowLine,
+                    segment.Bounds,
+                    document.Objects.Count == 0 ? 0 : zOrder + 1,
+                    new ArrowLineAnnotationContent(segment, defaultStyle with
+                    {
+                        EndStyle = _arrowLineEndStyle
+                    }));
+            }
+            catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.Failed,
+                    input,
+                    null,
+                    null,
+                    document,
+                    Failure.Create(
+                        FailureCode.AnnotationZOrderOverflow,
+                        FailureCategory.Validation,
+                        FailureRecoverability.RetrySameIntent,
+                        nameof(AnnotationEditingCoordinator),
+                        input.SessionId,
+                        exception.Message),
+                    "The Arrow or line annotation could not be created.");
+            }
+
+            var mutation = _documents.Add(new AddAnnotationObjectRequest(
+                input.SessionId,
+                input.ExpectedAnnotationRevision,
+                annotationObject));
+            if (mutation is AnnotationMutationResult.Succeeded succeeded)
+            {
+                return ArrowLineResult(
+                    ArrowLinePointerResultKind.Committed,
+                    input,
+                    null,
+                    annotationObject,
+                    succeeded.Document,
+                    null,
+                    "Arrow or line annotation committed.");
+            }
+
+            return ArrowLineResult(
+                ArrowLinePointerResultKind.Failed,
+                input,
+                null,
+                null,
+                mutation.CurrentDocument,
+                Failure.Create(
+                    FailureCode.StaleAnnotationRevision,
+                    FailureCategory.Session,
+                    FailureRecoverability.RetrySameIntent,
+                    nameof(AnnotationEditingCoordinator),
+                    input.SessionId,
+                    "The Annotation Document changed before the Arrow or line commit."),
+                "The Arrow or line annotation could not be committed because the Annotation Document is stale.");
+        }
+    }
+
+    public ArrowLinePointerResult CancelArrowLineDraft(Guid sessionId, string coordinateVersion)
+    {
+        lock (_gate)
+        {
+            var document = _documents.Current;
+            var input = new ArrowLinePointerEvent(
+                sessionId,
+                coordinateVersion,
+                _selectionRevision,
+                document?.Revision ?? AnnotationRevision.Initial,
+                _arrowLineDraft?.PointerId ?? 0,
+                _arrowLineDraft?.Segment.End ?? default);
+            _arrowLineDraft = null;
+            return ArrowLineResult(
+                ArrowLinePointerResultKind.Cancelled,
+                input,
+                null,
+                null,
+                document,
+                null,
+                "Arrow or line draft cancelled.");
+        }
+    }
+
     public AnnotationPresentationSnapshot CreatePresentationSnapshot(SelectionVisualState selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
@@ -470,7 +810,11 @@ public sealed class AnnotationEditingCoordinator
                     : null,
                 _activeTool,
                 _draft?.Bounds,
-                document);
+                document)
+            {
+                ActiveArrowLineEndStyle = _arrowLineEndStyle,
+                DraftArrowLineSegment = _arrowLineDraft?.Segment
+            };
         }
     }
 
@@ -486,8 +830,81 @@ public sealed class AnnotationEditingCoordinator
                 _coordinateVersion = string.Empty;
                 _selectionRevision = 0;
                 _activeTool = EditingToolKind.Selection;
+                _arrowLineEndStyle = ArrowLineEndStyle.Arrow;
+                _arrowLineDraft = null;
             }
         }
+    }
+
+    private ArrowLinePointerResult? ValidateArrowLine(
+        ArrowLinePointerEvent input,
+        SelectionVisualState selection)
+    {
+        if (input.PointerId <= 0)
+        {
+            return ArrowLineResult(
+                ArrowLinePointerResultKind.PointerMismatch,
+                input,
+                _arrowLineDraft?.Segment,
+                null,
+                _documents.Current,
+                null,
+                "Arrow or line input must contain a positive pointer identifier.");
+        }
+
+        if (!IsCurrentSession(input.SessionId, input.CoordinateVersion))
+        {
+            return ArrowLineResult(
+                ArrowLinePointerResultKind.StaleSession,
+                input,
+                _arrowLineDraft?.Segment,
+                null,
+                _documents.Current,
+                null,
+                "Arrow or line input belongs to a stale capture session.");
+        }
+
+        if (input.SelectionRevision != selection.SelectionRevision)
+        {
+            return ArrowLineResult(
+                ArrowLinePointerResultKind.StaleSelectionRevision,
+                input,
+                _arrowLineDraft?.Segment,
+                null,
+                _documents.Current,
+                null,
+                "Arrow or line input belongs to a stale Selection revision.");
+        }
+
+        var currentRevision = _documents.Current?.Revision ?? AnnotationRevision.Initial;
+        if (input.ExpectedAnnotationRevision != currentRevision)
+        {
+            return ArrowLineResult(
+                ArrowLinePointerResultKind.StaleAnnotationRevision,
+                input,
+                _arrowLineDraft?.Segment,
+                null,
+                _documents.Current,
+                null,
+                "Arrow or line input belongs to a stale Annotation revision.");
+        }
+
+        if (selection.Status != SelectionStatus.Locked
+            || selection.InteractionMode != SelectionInteractionMode.Locked
+            || selection.NormalizedPhysicalBounds is not PhysicalRect selectionBounds
+            || !selectionBounds.IsPositive)
+        {
+            return ArrowLineResult(
+                ArrowLinePointerResultKind.InvalidGeometry,
+                input,
+                _arrowLineDraft?.Segment,
+                null,
+                _documents.Current,
+                null,
+                "Arrow or line input requires a valid locked Selection boundary.");
+        }
+
+        return null;
     }
 
     private RectanglePointerResult? Validate(
@@ -600,6 +1017,44 @@ public sealed class AnnotationEditingCoordinator
         failure,
         message);
 
+    private ArrowLinePointerResult FailedArrowLine(
+        ArrowLinePointerEvent input,
+        string message) => ArrowLineResult(
+        ArrowLinePointerResultKind.Failed,
+        input,
+        _arrowLineDraft?.Segment,
+        null,
+        _documents.Current,
+        Failure.Create(
+            FailureCode.InvalidStateTransition,
+            FailureCategory.Validation,
+            FailureRecoverability.RetrySameIntent,
+            nameof(AnnotationEditingCoordinator),
+            input.SessionId,
+            message),
+        message);
+
+    private ArrowLinePointerResult ArrowLineResult(
+        ArrowLinePointerResultKind kind,
+        ArrowLinePointerEvent input,
+        PhysicalLineSegment? draft,
+        AnnotationObject? committedObject,
+        AnnotationDocument? document,
+        Failure? failure,
+        string message) => new(
+        kind,
+        _activeTool,
+        _arrowLineEndStyle,
+        input.SessionId,
+        input.CoordinateVersion,
+        input.SelectionRevision,
+        document?.Revision ?? AnnotationRevision.Initial,
+        draft,
+        committedObject,
+        document,
+        failure,
+        message);
+
     private EditingToolSelectionResult ToolResult(
         EditingToolSelectionResultKind kind,
         EditingToolSelectionRequest request,
@@ -612,7 +1067,10 @@ public sealed class AnnotationEditingCoordinator
         request.SelectionRevision,
         _documents.Current?.Revision ?? AnnotationRevision.Initial,
         failure,
-        message);
+        message)
+        {
+            ActiveArrowLineEndStyle = _arrowLineEndStyle
+        };
 
     private static bool Contains(PhysicalRect bounds, PhysicalPoint point) =>
         point.X >= bounds.Left
@@ -641,4 +1099,6 @@ public sealed class AnnotationEditingCoordinator
 
         public PhysicalRect Bounds { get; init; } = new(Start.X, Start.Y, Start.X, Start.Y);
     }
+
+    private sealed record ArrowLineDraft(int PointerId, PhysicalLineSegment Segment);
 }

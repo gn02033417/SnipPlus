@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added — Stage 7C Pointer-driven Arrow／Line Creation (2026-07-31)
+
+- Added platform-neutral `ArrowLine` editing-tool selection, immutable Arrow／Line end-style／color／thickness contracts, physical line-segment content, revision-aware pointer requests／outcomes and presentation snapshot state. `Arrow` and no-arrow `Line` are one tool with an explicit end-style mode.
+- Added Core-owned Arrow／Line draft／commit routing through `AnnotationEditingCoordinator` and `CapturePresentationWorkflowCoordinator`; pointer release commits one immutable `ArrowLine` object with exact Frozen Virtual Desktop endpoints, deterministic object identity／Z-order and stale-session／Selection／Annotation revision rejection.
+- Added Function Bar `Arrow / Line` selection plus `Arrow`／`Line` mode controls. Windows overlays render committed and draft line segments per display, clip them to the current Selection／display intersection, and draw an arrowhead only for Arrow mode without creating additional top-level windows.
+- Added deterministic Contracts／Core／Workflow／Windows clipping coverage. Locked restore and Release x64 build succeeded with `0` warnings／`0` errors; non-interactive tests `178/178` passed with `0` failures／`0` skips. No MSIX、Publish、install、GUI、Interactive／Manual runtime verification or real desktop／Clipboard payload was used in this slice.
+
 ### Added — Stage 7B Pointer-driven Rectangle Creation (2026-07-31)
 
 - Added platform-neutral `EditingToolKind.Selection`／`Rectangle`, immutable typed Rectangle style／content, tool-selection requests, revision-aware Rectangle pointer requests／outcomes and immutable annotation presentation snapshots. Selection remains outside `AnnotationToolKind`.

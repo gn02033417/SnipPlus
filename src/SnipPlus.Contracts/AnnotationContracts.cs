@@ -58,7 +58,7 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
         AnnotationToolKind toolKind,
         PhysicalRect geometry,
         int zOrder,
-        RectangleAnnotationContent? content = null)
+        IAnnotationContent? content = null)
     {
         if (!objectId.IsValid)
         {
@@ -84,10 +84,41 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
         {
             content ??= new RectangleAnnotationContent(RectangleAnnotationStyle.Default);
         }
+        else if (toolKind == AnnotationToolKind.ArrowLine)
+        {
+            content ??= new ArrowLineAnnotationContent(
+                new PhysicalLineSegment(
+                    new PhysicalPoint(geometry.Left, geometry.Top),
+                    new PhysicalPoint(geometry.Right, geometry.Bottom)),
+                ArrowLineAnnotationStyle.Default);
+        }
         else if (content is not null)
         {
             throw new ArgumentException(
-                "Only Rectangle annotation objects can carry Rectangle content.",
+                "Only supported annotation objects can carry annotation content.",
+                nameof(content));
+        }
+
+        if (toolKind == AnnotationToolKind.Rectangle
+            && content is not RectangleAnnotationContent)
+        {
+            throw new ArgumentException(
+                "Rectangle annotation objects require Rectangle content.",
+                nameof(content));
+        }
+
+        if (toolKind == AnnotationToolKind.ArrowLine
+            && content is not ArrowLineAnnotationContent)
+        {
+            throw new ArgumentException(
+                "ArrowLine annotation objects require ArrowLine content.",
+                nameof(content));
+        }
+        else if (toolKind == AnnotationToolKind.ArrowLine
+            && ((ArrowLineAnnotationContent)content!).Segment.Bounds != geometry)
+        {
+            throw new ArgumentException(
+                "ArrowLine content bounds must match annotation geometry.",
                 nameof(content));
         }
 
@@ -109,7 +140,7 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
 
     public int ZOrder { get; }
 
-    public RectangleAnnotationContent? Content { get; }
+    public IAnnotationContent? Content { get; }
 
     public bool Equals(AnnotationObject? other) => other is not null
         && ObjectId == other.ObjectId

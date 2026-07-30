@@ -238,6 +238,63 @@ public sealed class AnnotationEditingCoordinatorTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Annotation")]
+    public void ArrowLineReleaseCommitsExactSegmentAndSelectedEndStyle()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectArrowLine(editing, sessionId, selection, ArrowLineEndStyle.None);
+        var start = ArrowInput(
+            sessionId,
+            selection,
+            new PhysicalPoint(60, 60),
+            pointerId: 9);
+        var end = ArrowInput(
+            sessionId,
+            selection,
+            new PhysicalPoint(20, 30),
+            pointerId: 9);
+
+        var started = editing.PointerPressed(start, selection);
+        var moved = editing.PointerMoved(end, selection);
+        var committed = editing.PointerReleased(end, selection);
+        var content = (ArrowLineAnnotationContent)committed.CommittedObject!.Content!;
+
+        Assert.AreEqual(ArrowLinePointerResultKind.DraftStarted, started.Kind);
+        Assert.AreEqual(ArrowLinePointerResultKind.DraftUpdated, moved.Kind);
+        Assert.AreEqual(ArrowLinePointerResultKind.Committed, committed.Kind);
+        Assert.AreEqual(
+            new PhysicalLineSegment(new PhysicalPoint(60, 60), new PhysicalPoint(20, 30)),
+            content.Segment);
+        Assert.AreEqual(ArrowLineEndStyle.None, content.Style.EndStyle);
+        Assert.AreEqual(new PhysicalRect(20, 30, 60, 60), committed.CommittedObject.Geometry);
+        Assert.AreEqual(1, editing.CurrentAnnotationRevision.Value);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void ArrowLineDraftDoesNotMutateDocumentAndStaleReleaseIsRejected()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectArrowLine(editing, sessionId, selection, ArrowLineEndStyle.Arrow);
+        editing.PointerPressed(
+            ArrowInput(sessionId, selection, new PhysicalPoint(10, 10)),
+            selection);
+
+        var stale = editing.PointerReleased(
+            ArrowInput(
+                sessionId,
+                selection with { SelectionRevision = selection.SelectionRevision + 1 },
+                new PhysicalPoint(20, 20)),
+            selection);
+
+        Assert.AreEqual(ArrowLinePointerResultKind.StaleSelectionRevision, stale.Kind);
+        Assert.IsEmpty(editing.CreatePresentationSnapshot(selection).Document.Objects);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
     public void CancelDraftLeavesDocumentEmptyAndNewSessionStartsClean()
     {
         var editing = CreateEditing(out var sessionId, out var selection);
@@ -301,6 +358,28 @@ public sealed class AnnotationEditingCoordinatorTests
         Assert.AreEqual(EditingToolSelectionResultKind.Selected, result.Kind);
     }
 
+    private static void SelectArrowLine(
+        AnnotationEditingCoordinator editing,
+        Guid sessionId,
+        SelectionVisualState selection,
+        ArrowLineEndStyle endStyle)
+    {
+        var result = editing.SelectTool(
+            new EditingToolSelectionRequest(
+                sessionId,
+                selection.CoordinateVersion,
+                selection.SelectionRevision,
+                AnnotationRevision.Initial,
+                EditingToolKind.ArrowLine)
+            {
+                RequestedArrowLineEndStyle = endStyle
+            },
+            WorkflowState.Editing,
+            selection);
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, result.Kind);
+        Assert.AreEqual(endStyle, result.ActiveArrowLineEndStyle);
+    }
+
     private static RectanglePointerResult Commit(
         AnnotationEditingCoordinator editing,
         Guid sessionId,
@@ -332,6 +411,19 @@ public sealed class AnnotationEditingCoordinatorTests
     }
 
     private static RectanglePointerEvent Input(
+        Guid sessionId,
+        SelectionVisualState selection,
+        PhysicalPoint point,
+        int pointerId = 1,
+        AnnotationRevision? annotationRevision = null) => new(
+        sessionId,
+        selection.CoordinateVersion,
+        selection.SelectionRevision,
+        annotationRevision ?? AnnotationRevision.Initial,
+        pointerId,
+        point);
+
+    private static ArrowLinePointerEvent ArrowInput(
         Guid sessionId,
         SelectionVisualState selection,
         PhysicalPoint point,

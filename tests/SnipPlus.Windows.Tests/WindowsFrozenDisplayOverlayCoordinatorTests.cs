@@ -108,6 +108,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
         Assert.AreEqual(
             typeof(IReadOnlyDictionary<EditingToolKind, Microsoft.UI.Xaml.Controls.RadioButton>),
             toolButtons.FieldType);
+        Assert.IsNotNull(functionBarSurface.GetField(
+            "_arrowLineModeButtons",
+            BindingFlags.Instance | BindingFlags.NonPublic));
     }
 
     [TestMethod]
@@ -209,10 +212,50 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
         Assert.AreEqual(
             typeof(List<Microsoft.UI.Xaml.Shapes.Rectangle>),
             previewField.FieldType);
+        var arrowLinePreviewField = overlaySurface.GetField(
+            "_arrowLinePreviews",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.IsNotNull(arrowLinePreviewField);
+        Assert.AreEqual(
+            typeof(List<Microsoft.UI.Xaml.Shapes.Line>),
+            arrowLinePreviewField.FieldType);
         var apply = overlaySurface.GetMethod(
             "ApplyAnnotation",
             BindingFlags.Instance | BindingFlags.Public);
         Assert.IsNotNull(apply);
+        var clip = overlaySurface.GetMethod(
+            "TryClipLine",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(clip);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void ArrowLinePreviewClipsPhysicalSegmentToDisplaySelectionBounds()
+    {
+        var overlaySurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("OverlaySurface", BindingFlags.NonPublic);
+        Assert.IsNotNull(overlaySurface);
+        var clip = overlaySurface.GetMethod(
+            "TryClipLine",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(clip);
+
+        var arguments = new object?[]
+        {
+            new PhysicalLineSegment(
+                new PhysicalPoint(-10, 10),
+                new PhysicalPoint(30, 10)),
+            new PhysicalRect(0, 0, 20, 20),
+            null,
+            null
+        };
+        var clipped = (bool)clip.Invoke(null, arguments)!;
+
+        Assert.IsTrue(clipped);
+        Assert.AreEqual(new PhysicalPoint(0, 10), arguments[2]);
+        Assert.AreEqual(new PhysicalPoint(20, 10), arguments[3]);
     }
 
     [TestMethod]

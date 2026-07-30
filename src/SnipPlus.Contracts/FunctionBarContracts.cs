@@ -136,6 +136,8 @@ public sealed record FunctionBarPresentationRequest(
 
     public AnnotationRevision AnnotationRevision { get; init; } = AnnotationRevision.Initial;
 
+    public ArrowLineEndStyle ActiveArrowLineEndStyle { get; init; } = ArrowLineEndStyle.Arrow;
+
     public IEditingToolSelectionSink? ToolSelectionSink { get; init; }
 }
 

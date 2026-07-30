@@ -611,6 +611,65 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         await workflow.CancelCurrentAsync("test");
     }
 
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public async Task ArrowLineToolRoutesPointerInputAndPreservesLineMode()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        using var workflow = CreateWorkflow(requests, provider, overlay, functionBar);
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        LockSelection(overlay.InputSink!, ready.Session);
+        var selection = workflow.CurrentSelection!;
+        var selected = workflow.SelectTool(
+            new EditingToolSelectionRequest(
+                ready.Session.SessionId,
+                ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+                selection.SelectionRevision,
+                workflow.CurrentAnnotationDocument!.Revision,
+                EditingToolKind.ArrowLine)
+            {
+                RequestedArrowLineEndStyle = ArrowLineEndStyle.None
+            });
+
+        var start = new ArrowLinePointerEvent(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            selection.SelectionRevision,
+            workflow.CurrentAnnotationDocument!.Revision,
+            11,
+            new PhysicalPoint(-2, 1));
+        var moved = start with { GlobalPhysicalPoint = new PhysicalPoint(2, 4) };
+        var draftStarted = workflow.PointerPressed(start);
+        var draftUpdated = workflow.PointerMoved(moved);
+        var committed = workflow.PointerReleased(moved);
+        var content = (ArrowLineAnnotationContent)committed.CommittedObject!.Content!;
+
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, selected.Kind);
+        Assert.AreEqual(ArrowLineEndStyle.None, selected.ActiveArrowLineEndStyle);
+        Assert.AreEqual(ArrowLinePointerResultKind.DraftStarted, draftStarted.Kind);
+        Assert.AreEqual(ArrowLinePointerResultKind.DraftUpdated, draftUpdated.Kind);
+        Assert.AreEqual(ArrowLinePointerResultKind.Committed, committed.Kind);
+        Assert.AreEqual(new PhysicalLineSegment(
+            new PhysicalPoint(-2, 1),
+            new PhysicalPoint(2, 4)), content.Segment);
+        Assert.AreEqual(EditingToolKind.ArrowLine, workflow.ActiveTool);
+        Assert.AreEqual(ArrowLineEndStyle.None, workflow.ActiveArrowLineEndStyle);
+        Assert.AreEqual(EditingToolKind.ArrowLine, overlay.LastAnnotationSnapshot!.ActiveTool);
+        Assert.AreEqual(ArrowLineEndStyle.None, overlay.LastAnnotationSnapshot.ActiveArrowLineEndStyle);
+        Assert.AreEqual(EditingToolKind.ArrowLine, functionBar.LastRequest!.ActiveTool);
+
+        await workflow.CancelCurrentAsync("test");
+    }
+
     private static CapturePresentationWorkflowCoordinator CreateWorkflow(
         CaptureRequestCoordinator requests,
         FakeAllDisplayProvider provider,
