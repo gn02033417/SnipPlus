@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using SnipPlus.Contracts;
 using SnipPlus.Core;
@@ -36,7 +37,9 @@ public partial class MainWindow : Window, IDisposable
         _captureRequestCoordinator = new CaptureRequestCoordinator(_stateAuthority);
         _captureRequestApplicationBoundary =
             new CaptureRequestApplicationBoundary(_captureRequestCoordinator);
-        _platformResources = new WindowsCapturePlatformResources(new FunctionBarPlacementService());
+        _platformResources = new WindowsCapturePlatformResources(
+            new FunctionBarPlacementService(),
+            DispatcherQueue.GetForCurrentThread());
         var freezingCoordinator = new CaptureFreezingCoordinator(
             _captureRequestCoordinator,
             _platformResources.TopologyProvider,

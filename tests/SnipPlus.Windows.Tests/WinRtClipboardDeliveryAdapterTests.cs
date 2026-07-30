@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SnipPlus.Contracts;
 using SnipPlus.Windows;
 using Windows.ApplicationModel.DataTransfer;
@@ -97,6 +97,90 @@ public sealed class WinRtClipboardDeliveryAdapterTests
         Assert.AreEqual("CancellationToken", cancelled.CancellationOrigin);
         Assert.AreEqual(1, attempts);
         Assert.AreEqual(0, flushes);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Clipboard")]
+    public async Task ClipboardPublicationUsesDispatcherWhenCallerLacksThreadAccess()
+    {
+        using var image = CreateImage();
+        var dispatches = 0;
+        var publications = 0;
+        var flushes = 0;
+        var dispatcher = new FakeClipboardDeliveryDispatcher(
+            hasThreadAccess: false,
+            callback =>
+            {
+                dispatches++;
+                _ = callback();
+                return true;
+            });
+        var adapter = new WinRtClipboardDeliveryAdapter(
+            (_, _) =>
+            {
+                publications++;
+                return true;
+            },
+            () => flushes++,
+            dispatcher: dispatcher);
+
+        var result = await adapter.DeliverAsync(
+            CreateRequest(image, maximumAttempts: 1, retryBudget: TimeSpan.Zero),
+            CancellationToken.None);
+
+        Assert.IsInstanceOfType<ClipboardDeliveryResult.Delivered>(result);
+        Assert.AreEqual(1, dispatches);
+        Assert.AreEqual(1, publications);
+        Assert.AreEqual(1, flushes);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Clipboard")]
+    public async Task UnavailableClipboardDispatcherReturnsTypedFailureWithoutPublishing()
+    {
+        using var image = CreateImage();
+        var publications = 0;
+        var flushes = 0;
+        var dispatcher = new FakeClipboardDeliveryDispatcher(
+            hasThreadAccess: false,
+            _ => false);
+        var adapter = new WinRtClipboardDeliveryAdapter(
+            (_, _) =>
+            {
+                publications++;
+                return true;
+            },
+            () => flushes++,
+            dispatcher: dispatcher);
+
+        var result = await adapter.DeliverAsync(
+            CreateRequest(image, maximumAttempts: 1, retryBudget: TimeSpan.Zero),
+            CancellationToken.None);
+
+        var failure = result as ClipboardDeliveryResult.TerminalFailure;
+        Assert.IsNotNull(failure);
+        Assert.AreEqual(FailureCode.ClipboardPublicationRejected, failure.Failure.Code);
+        Assert.AreEqual(0, publications);
+        Assert.AreEqual(0, flushes);
+    }
+
+    private sealed class FakeClipboardDeliveryDispatcher : IClipboardDeliveryDispatcher
+    {
+        private readonly Func<Func<Task>, bool> _tryEnqueue;
+
+        public FakeClipboardDeliveryDispatcher(
+            bool hasThreadAccess,
+            Func<Func<Task>, bool> tryEnqueue)
+        {
+            HasThreadAccess = hasThreadAccess;
+            _tryEnqueue = tryEnqueue;
+        }
+
+        public bool HasThreadAccess { get; }
+
+        public bool TryEnqueue(Func<Task> callback) => _tryEnqueue(callback);
     }
 
     private static ClipboardDeliveryRequest CreateRequest(

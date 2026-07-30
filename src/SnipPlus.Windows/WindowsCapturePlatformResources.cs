@@ -1,12 +1,15 @@
 ﻿using Microsoft.Graphics.Canvas;
 
+using Microsoft.UI.Dispatching;
 using SnipPlus.Contracts;
 
 namespace SnipPlus.Windows;
 
 public sealed class WindowsCapturePlatformResources : IDisposable
 {
-    public WindowsCapturePlatformResources(IFunctionBarPlacementService functionBarPlacementService)
+    public WindowsCapturePlatformResources(
+        IFunctionBarPlacementService functionBarPlacementService,
+        DispatcherQueue? dispatcherQueue = null)
     {
         ArgumentNullException.ThrowIfNull(functionBarPlacementService);
         CanvasDevice = CanvasDevice.GetSharedDevice();
@@ -18,7 +21,12 @@ public sealed class WindowsCapturePlatformResources : IDisposable
         OverlayCoordinator = new WindowsFrozenDisplayOverlayCoordinator(functionBarPlacementService);
         FinalRenderer = new WindowsFrozenDisplayFrameSetRenderer();
         CompleteExecutionTrace = new WindowsCompleteExecutionTraceSink();
-        ClipboardDelivery = new WinRtClipboardDeliveryAdapter(traceSink: CompleteExecutionTrace);
+        var clipboardDispatcher = dispatcherQueue is null
+            ? null
+            : new DispatcherQueueClipboardDeliveryDispatcher(dispatcherQueue);
+        ClipboardDelivery = new WinRtClipboardDeliveryAdapter(
+            traceSink: CompleteExecutionTrace,
+            dispatcher: clipboardDispatcher);
     }
 
     public CanvasDevice CanvasDevice { get; }

@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Fixed — Stage 6C Clipboard COM Dispatcher Boundary (2026-07-30)
+
+- Packaged `stage6c-complete-failure.jsonl` 已確認 Render、結果驗證與 PNG encoding 成功，Clipboard publication 以 `0x800401F0` (`CO_E_NOTINITIALIZED`) 失敗；根因是 WinRT Clipboard 呼叫在未初始化 COM 的 workflow thread 執行，不是 crop、render 或 PNG 內容錯誤。
+- `SnipPlus.Windows` 新增 `IClipboardDeliveryDispatcher`／`DispatcherQueueClipboardDeliveryDispatcher`；`MainWindow` 將 WinUI `DispatcherQueue` 注入 Clipboard adapter，確保 `DataPackage` publication 與必要的 `Clipboard.Flush()` 在 UI／COM dispatcher boundary 執行。既有 bounded retry、cancellation、Clipboard History／roaming 禁用與 typed failure 不變，未以假成功取代失敗。
+- 新增 dispatcher unavailable 與 caller 不具 thread access 的 deterministic tests；Release x64 build 0 warnings／0 errors、非互動 tests `141/141` 通過，限定範圍 C# format verify 與 `git diff --check` 通過。
+- 修正後尚未重新執行 Repository owner 的 packaged Complete／實際貼上驗收；Stage 6C 仍為 `Partial／post-fix packaged Clipboard verification pending`。未啟動 Paint、Notepad 或其他外部 GUI，未保存桌面截圖或 Clipboard payload，Stage 7 未開始。
+
 ### Corrected — Stage 6C Complete Failure Trace and Recovery (2026-07-30)
 
 - Repository owner 使用已確認一致的 Release／MSIX／Installed `SnipPlus.App.dll` Artifact 重現了 Complete 後 Function Bar 立即消失、Overlay 保留、Clipboard 不變，且移動 Pointer 後 Function Bar 才重新出現的問題；本次不再把 Artifact mismatch 或先前偶發的 startup crash 當作 Complete 根因。

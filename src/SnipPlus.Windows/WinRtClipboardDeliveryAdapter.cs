@@ -14,22 +14,78 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
     private readonly Func<DataPackage, ClipboardContentOptions, bool> _setContent;
     private readonly Action _flush;
     private readonly ICompleteExecutionTraceSink _trace;
+    private readonly IClipboardDeliveryDispatcher? _dispatcher;
 
     public WinRtClipboardDeliveryAdapter(
         Func<DataPackage, ClipboardContentOptions, bool>? setContent = null,
         Action? flush = null,
-        ICompleteExecutionTraceSink? traceSink = null)
+        ICompleteExecutionTraceSink? traceSink = null,
+        IClipboardDeliveryDispatcher? dispatcher = null)
     {
         _setContent = setContent ?? Clipboard.SetContentWithOptions;
         _flush = flush ?? Clipboard.Flush;
         _trace = traceSink ?? NoOpCompleteExecutionTraceSink.Instance;
+        _dispatcher = dispatcher;
     }
 
-    public async ValueTask<ClipboardDeliveryResult> DeliverAsync(
+    public ValueTask<ClipboardDeliveryResult> DeliverAsync(
         ClipboardDeliveryRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (_dispatcher is not null && !_dispatcher.HasThreadAccess)
+        {
+            return DeliverOnDispatcherAsync(request, cancellationToken);
+        }
+
+        return DeliverCoreAsync(request, cancellationToken);
+    }
+
+    private async ValueTask<ClipboardDeliveryResult> DeliverOnDispatcherAsync(
+        ClipboardDeliveryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<ClipboardDeliveryResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            if (!_dispatcher!.TryEnqueue(async () =>
+            {
+                try
+                {
+                    completion.TrySetResult(
+                        await DeliverCoreAsync(request, cancellationToken));
+                }
+                catch (OperationCanceledException)
+                {
+                    completion.TrySetResult(Cancelled(request));
+                }
+                catch (Exception exception)
+                {
+                    completion.TrySetResult(DispatcherFailure(request, exception));
+                }
+            }))
+            {
+                return DispatcherFailure(
+                    request,
+                    new InvalidOperationException("Clipboard dispatcher is unavailable."));
+            }
+        }
+        catch (Exception exception)
+        {
+            return DispatcherFailure(request, exception);
+        }
+
+        return await completion.Task;
+    }
+
+    private async ValueTask<ClipboardDeliveryResult> DeliverCoreAsync(
+        ClipboardDeliveryRequest request,
+        CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
 
         if (request.ImageResult is not SoftwareBitmapImageResult imageResult)
@@ -200,6 +256,22 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
 
             throw new InvalidOperationException("Clipboard retry loop terminated unexpectedly.");
         }
+    }
+
+    private ClipboardDeliveryResult.TerminalFailure DispatcherFailure(
+        ClipboardDeliveryRequest request,
+        Exception exception)
+    {
+        var failure = Failure.Create(
+            FailureCode.ClipboardPublicationRejected,
+            FailureCategory.IO,
+            FailureRecoverability.TerminalForSession,
+            "WinRtClipboardDeliveryAdapter.Dispatcher",
+            request.DeliveryId,
+            exception.Message,
+            nativeCode: exception.HResult);
+        Trace(request, CompleteExecutionStage.ClipboardFailed, failure, component: nameof(_dispatcher));
+        return TerminalFailure(request, failure);
     }
 
     private static bool IsContention(Exception exception) => exception switch
