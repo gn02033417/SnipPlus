@@ -21,6 +21,7 @@ public abstract record CapturePresentationOutcome
 
 public sealed class CapturePresentationWorkflowCoordinator :
     ISelectionInputSink,
+    IEditingInputRouter,
     IFunctionBarCommandSink,
     IDisposable
 {
@@ -36,6 +37,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private readonly Action<string>? _feedback;
     private readonly ICompleteExecutionTraceSink _trace;
     private readonly AnnotationDocumentCoordinator _annotationDocuments;
+    private readonly AnnotationEditingCoordinator _annotationEditing;
     private CaptureSessionContext? _activeSession;
     private InitialSelectionCoordinator? _selectionCoordinator;
     private CancellationTokenSource? _sessionCancellation;
@@ -69,6 +71,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         _feedback = feedback;
         _trace = traceSink ?? NoOpCompleteExecutionTraceSink.Instance;
         _annotationDocuments = annotationDocuments ?? new AnnotationDocumentCoordinator();
+        _annotationEditing = new AnnotationEditingCoordinator(_annotationDocuments);
     }
 
     public WorkflowState CurrentState => _stateAuthority.CurrentState;
@@ -96,6 +99,14 @@ public sealed class CapturePresentationWorkflowCoordinator :
     }
 
     public AnnotationDocument? CurrentAnnotationDocument => _annotationDocuments.Current;
+
+    public EditingToolKind ActiveTool => _annotationEditing.ActiveTool;
+
+    public int CurrentSelectionRevision =>
+        _selectionCoordinator?.State.SelectionRevision ?? -1;
+
+    public AnnotationRevision CurrentAnnotationRevision =>
+        _annotationEditing.CurrentAnnotationRevision;
 
     public AnnotationMutationResult AddAnnotationObject(AddAnnotationObjectRequest request) =>
         _annotationDocuments.Add(request);
@@ -230,7 +241,10 @@ public sealed class CapturePresentationWorkflowCoordinator :
 
             var presentation = await _overlayCoordinator
                 .PresentAsync(
-                    new FrozenDisplayOverlayPresentationRequest(plan, this),
+                    new FrozenDisplayOverlayPresentationRequest(plan, this)
+                    {
+                        EditingInputRouter = this
+                    },
                     token)
                 .ConfigureAwait(true);
             if (presentation is not FrozenDisplayOverlayPresentationOutcome.Ready)
@@ -260,6 +274,8 @@ public sealed class CapturePresentationWorkflowCoordinator :
             }
 
             _overlayCoordinator.ApplySelection(selection.State);
+            _overlayCoordinator.ApplyAnnotation(
+                _annotationEditing.CreatePresentationSnapshot(selection.State));
             return new CapturePresentationOutcome.SelectingReady(
                 ready.Session,
                 selection.State);
@@ -298,7 +314,8 @@ public sealed class CapturePresentationWorkflowCoordinator :
         var result = ForwardSelectionInput(
             input,
             static (selection, value) => selection.PointerReleased(value));
-        if (result.Kind == SelectionInputResultKind.Locked)
+        if (result.Kind == SelectionInputResultKind.Locked
+            && ActiveTool == EditingToolKind.Selection)
         {
             var transition = _stateAuthority.RequestTransition(new(
                 WorkflowState.Selecting,
@@ -314,6 +331,84 @@ public sealed class CapturePresentationWorkflowCoordinator :
             else if (_functionBarPresentation is not null)
             {
                 PrepareEditing(result.State);
+            }
+        }
+
+        return result;
+    }
+
+    public RectanglePointerResult PointerPressed(RectanglePointerEvent input)
+    {
+        var result = ForwardRectangleInput(
+            input,
+            static (editing, value, selection) => editing.PointerPressed(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public RectanglePointerResult PointerMoved(RectanglePointerEvent input)
+    {
+        var result = ForwardRectangleInput(
+            input,
+            static (editing, value, selection) => editing.PointerMoved(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public RectanglePointerResult PointerReleased(RectanglePointerEvent input)
+    {
+        var result = ForwardRectangleInput(
+            input,
+            static (editing, value, selection) => editing.PointerReleased(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public EditingToolSelectionResult SelectTool(EditingToolSelectionRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        InitialSelectionCoordinator? selection;
+        lock (_gate)
+        {
+            selection = _selectionCoordinator;
+        }
+
+        if (selection is null)
+        {
+            return new EditingToolSelectionResult(
+                EditingToolSelectionResultKind.StaleSession,
+                ActiveTool,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                CurrentAnnotationRevision,
+                null,
+                "The editing tool request belongs to a stale capture session.");
+        }
+
+        var result = _annotationEditing.SelectTool(
+            request,
+            _stateAuthority.CurrentState,
+            selection.State);
+        if (result.Kind == EditingToolSelectionResultKind.Selected)
+        {
+            _overlayCoordinator.ApplySelection(selection.State);
+            _overlayCoordinator.ApplyAnnotation(
+                _annotationEditing.CreatePresentationSnapshot(selection.State));
+            var repositioned = _functionBarPresentation?.Reposition(
+                CreateFunctionBarRequest(selection.State));
+            if (repositioned is not null
+                && repositioned.Kind != FunctionBarPresentationResultKind.Ready)
+            {
+                return result with
+                {
+                    Kind = EditingToolSelectionResultKind.Failed,
+                    Failure = CreateFailure(
+                        request.SessionId,
+                        FailureCode.FunctionBarPresentationFailed,
+                        "The Function Bar could not reflect the selected editing tool."),
+                    Message = "The Function Bar could not reflect the selected editing tool."
+                };
             }
         }
 
@@ -421,6 +516,27 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 currentSelection.SelectionRevision,
                 null,
                 "The capture session cancellation was accepted.");
+        }
+
+        var annotationDocument = _annotationDocuments.Current;
+        if (annotationDocument is not null && annotationDocument.Objects.Count > 0)
+        {
+            var failure = CreateFailure(
+                request.SessionId,
+                FailureCode.AnnotationOutputNotSupported,
+                "Complete does not render non-empty Annotation Documents in this slice.");
+            _functionBarPresentation?.ShowFeedback(
+                session.SessionId,
+                session.VirtualDesktopSnapshot.CoordinateVersion,
+                currentSelection.SelectionRevision,
+                "Rectangle annotations are retained; Complete output is not available in this slice.");
+            return new FunctionBarCommandResult(
+                request.Command,
+                FunctionBarCommandResultKind.AnnotationOutputNotSupported,
+                _stateAuthority.CurrentState,
+                currentSelection.SelectionRevision,
+                failure,
+                "Rectangle annotations are retained; Complete output is not available in this slice.");
         }
 
         if (_finalRenderer is null
@@ -561,6 +677,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         if (session is not null)
         {
             _annotationDocuments.ClearSession(session.SessionId);
+            _annotationEditing.ClearSession(session.SessionId);
             _functionBarPresentation?.Close(session.SessionId);
             await _overlayCoordinator
                 .CloseAsync(session.SessionId, CancellationToken.None)
@@ -602,6 +719,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         if (session is not null)
         {
             _annotationDocuments.ClearSession(session.SessionId);
+            _annotationEditing.ClearSession(session.SessionId);
             _functionBarPresentation?.Close(session.SessionId);
             Observe(_overlayCoordinator.CloseAsync(session.SessionId, CancellationToken.None));
             _freezingCoordinator.ReleaseSession(session);
@@ -623,7 +741,10 @@ public sealed class CapturePresentationWorkflowCoordinator :
         InitialSelectionCoordinator? selection;
         lock (_gate)
         {
-            selection = _inputEnabled ? _selectionCoordinator : null;
+            selection = _inputEnabled
+                && _annotationEditing.ActiveTool == EditingToolKind.Selection
+                ? _selectionCoordinator
+                : null;
         }
 
         return selection is null
@@ -636,9 +757,49 @@ public sealed class CapturePresentationWorkflowCoordinator :
             : handler(selection, input);
     }
 
+    private RectanglePointerResult ForwardRectangleInput(
+        RectanglePointerEvent input,
+        Func<AnnotationEditingCoordinator, RectanglePointerEvent, SelectionVisualState, RectanglePointerResult> handler)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        InitialSelectionCoordinator? selection;
+        lock (_gate)
+        {
+            selection = _inputEnabled ? _selectionCoordinator : null;
+        }
+
+        return selection is null
+            ? new RectanglePointerResult(
+                RectanglePointerResultKind.StaleSession,
+                _annotationEditing.ActiveTool,
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision,
+                CurrentAnnotationRevision,
+                null,
+                null,
+                CurrentAnnotationDocument,
+                null,
+                "Rectangle input was ignored until the capture session was ready.")
+            : handler(_annotationEditing, input, selection.State);
+    }
+
+    private void ApplyAnnotationPresentation()
+    {
+        var selection = CurrentSelection;
+        if (selection is not null)
+        {
+            _overlayCoordinator.ApplyAnnotation(
+                _annotationEditing.CreatePresentationSnapshot(selection));
+        }
+    }
+
     private void OnSelectionStateChanged(SelectionVisualState state)
     {
+        _annotationEditing.UpdateSelection(state);
         _overlayCoordinator.ApplySelection(state);
+        _overlayCoordinator.ApplyAnnotation(
+            _annotationEditing.CreatePresentationSnapshot(state));
 
         if (_functionBarPresentation is null
             || _stateAuthority.CurrentState != WorkflowState.Editing)
@@ -732,6 +893,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
         }
 
         _annotationDocuments.BeginSession(selection.SessionId);
+        _annotationEditing.BeginSession(selection);
+        _overlayCoordinator.ApplyAnnotation(
+            _annotationEditing.CreatePresentationSnapshot(selection));
 
         var shown = _functionBarPresentation.Show(
             selection.SessionId,
@@ -750,7 +914,12 @@ public sealed class CapturePresentationWorkflowCoordinator :
         selection.CoordinateVersion,
         selection,
         availability ?? FunctionBarCommandAvailability.Stage6C,
-        this);
+        this)
+        {
+            ActiveTool = _annotationEditing.ActiveTool,
+            AnnotationRevision = _annotationEditing.CurrentAnnotationRevision,
+            ToolSelectionSink = this
+        };
 
     private async ValueTask CompleteAsync(
         CaptureSessionContext session,
@@ -1160,6 +1329,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
                         GetCaptureFailureMessage(failure));
                 }
             }
+
+            _overlayCoordinator.ApplyAnnotation(
+                _annotationEditing.CreatePresentationSnapshot(selection));
         }
     }
 
@@ -1192,6 +1364,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         finally
         {
             _annotationDocuments.ClearSession(session.SessionId);
+            _annotationEditing.ClearSession(session.SessionId);
             _freezingCoordinator.ReleaseSession(session);
             session.Dispose();
             selection?.Dispose();
@@ -1301,6 +1474,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         if (session is not null)
         {
             _annotationDocuments.ClearSession(session.SessionId);
+            _annotationEditing.ClearSession(session.SessionId);
             try
             {
                 await _overlayCoordinator
@@ -1334,6 +1508,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
             .CloseAsync(session.SessionId, CancellationToken.None)
             .ConfigureAwait(true);
         _annotationDocuments.ClearSession(session.SessionId);
+        _annotationEditing.ClearSession(session.SessionId);
         _freezingCoordinator.ReleaseSession(session);
         session.Cancel();
         MoveToResidentReady(WorkflowState.Cancelled, origin);

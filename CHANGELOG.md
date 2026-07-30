@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added — Stage 7B Pointer-driven Rectangle Creation (2026-07-31)
+
+- Added platform-neutral `EditingToolKind.Selection`／`Rectangle`, immutable typed Rectangle style／content, tool-selection requests, revision-aware Rectangle pointer requests／outcomes and immutable annotation presentation snapshots. Selection remains outside `AnnotationToolKind`.
+- Added Core-owned `AnnotationEditingCoordinator`: Editing starts in Selection mode; Rectangle press／move／release validates Session／CoordinateVersion／SelectionRevision／AnnotationRevision／PointerId／Selection bounds, keeps a session-owned draft without mutating the document, normalizes reverse physical coordinates, commits one Rectangle object with deterministic Core-owned ID／Z-order／default style and clears the draft. Stale、outside、invalid、pointer-mismatch、no-draft and overflow cases are typed outcomes; selection adjustment changes clipping only.
+- Added Function Bar Selection／Rectangle RadioButton controls with accessible names and non-color-only selected state. Windows per-display overlays render committed and draft Rectangle previews using physical display intersection and Selection clipping only; underlying Annotation geometry remains unchanged and no new top-level window is created.
+- Added Stage 6C safety coverage: an empty Annotation Document keeps the existing Complete／render／Clipboard path, while a non-empty document stays in Editing with typed feedback and does not execute base-only render or Clipboard delivery. No Annotation-aware final output was claimed.
+- Locked restore and Release x64 build succeeded with `0` warnings／`0` errors; non-interactive tests `173/173` passed with `0` failures／`0` skips. No MSIX、Publish、install、GUI、Interactive／Manual runtime verification or real desktop／Clipboard payload was used in this slice. Limited formatting verification and final Git evidence are recorded after this entry is committed.
+
 ### Added — Stage 7A Annotation Document Foundation (2026-07-30)
 
 - Added platform-neutral `AnnotationObjectId`、`AnnotationRevision`、accepted `AnnotationToolKind` values、physical-pixel `AnnotationObject` geometry and immutable `AnnotationDocument` contracts. Object collections are read-only、session-bound and deterministically ordered by Z-order.

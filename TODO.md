@@ -49,7 +49,7 @@ Work in order. Do not begin a later item while an earlier prerequisite is unreso
 - [ ] Show non-blocking commit progress after `300 ms`.
 - [ ] Record and restore the pre-capture foreground application without reopening MainWindow.
 - [x] Implement the Annotation document and object identity／revision model.
-- [ ] Implement pointer-driven Rectangle.
+- [x] Implement pointer-driven Rectangle creation／draft preview／commit; object editing、other tools、annotation-aware final render and runtime acceptance remain incomplete, so FR-017 is still `Partial`.
 - [ ] Implement pointer-driven Arrow／Line.
 - [ ] Implement pointer-driven semi-transparent Highlighter.
 - [ ] Implement Text with Microsoft JhengHei、color、font size、bold、Windows editing and Chinese IME.

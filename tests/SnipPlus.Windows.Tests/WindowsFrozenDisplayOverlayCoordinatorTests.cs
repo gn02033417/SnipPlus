@@ -101,6 +101,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
         Assert.IsNull(functionBarSurface.GetField(
             "_window",
             BindingFlags.Instance | BindingFlags.NonPublic));
+        var toolButtons = functionBarSurface.GetField(
+            "_toolButtons",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.IsNotNull(toolButtons);
+        Assert.AreEqual(
+            typeof(IReadOnlyDictionary<EditingToolKind, Microsoft.UI.Xaml.Controls.RadioButton>),
+            toolButtons.FieldType);
     }
 
     [TestMethod]
@@ -184,6 +191,61 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
         Assert.IsTrue(background.R < foreground.R);
         Assert.IsTrue(background.G < foreground.G);
         Assert.IsTrue(background.B < foreground.B);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void AnnotationPreviewIsOwnedByEachOverlayAndUsesPresentationSnapshot()
+    {
+        var overlaySurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("OverlaySurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(overlaySurface);
+        var previewField = overlaySurface.GetField(
+            "_annotationPreviews",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.IsNotNull(previewField);
+        Assert.AreEqual(
+            typeof(List<Microsoft.UI.Xaml.Shapes.Rectangle>),
+            previewField.FieldType);
+        var apply = overlaySurface.GetMethod(
+            "ApplyAnnotation",
+            BindingFlags.Instance | BindingFlags.Public);
+        Assert.IsNotNull(apply);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void OverlayPresentationSnapshotKeepsDraftAndCommittedGeometrySeparate()
+    {
+        var sessionId = Guid.NewGuid();
+        var document = new AnnotationDocument(
+            sessionId,
+            new AnnotationRevision(1),
+            new[]
+            {
+                new AnnotationObject(
+                    AnnotationObjectId.New(),
+                    sessionId,
+                    AnnotationToolKind.Rectangle,
+                    new PhysicalRect(-10, 10, 20, 30),
+                    0)
+            });
+        var snapshot = new AnnotationPresentationSnapshot(
+            sessionId,
+            "windows-v1",
+            4,
+            document.Revision,
+            new PhysicalRect(0, 0, 10, 20),
+            EditingToolKind.Rectangle,
+            new PhysicalRect(2, 3, 8, 9),
+            document);
+
+        Assert.AreEqual(1, snapshot.Document.Objects.Count);
+        Assert.AreEqual(new PhysicalRect(2, 3, 8, 9), snapshot.DraftPhysicalBounds);
+        Assert.AreEqual(new PhysicalRect(0, 0, 10, 20), snapshot.SelectionPhysicalBounds);
     }
 
     [TestMethod]

@@ -1,0 +1,346 @@
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SnipPlus.Contracts;
+using SnipPlus.Core;
+
+namespace SnipPlus.Core.Tests;
+
+[TestClass]
+public sealed class AnnotationEditingCoordinatorTests
+{
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void EditingStartsInSelectionMode()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+
+        Assert.AreEqual(EditingToolKind.Selection, editing.ActiveTool);
+        Assert.AreEqual(selection.SelectionRevision, editing.CurrentSelectionRevision);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CreatePresentationSnapshot(selection).AnnotationRevision);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void ToolSelectionRequiresCurrentSessionAndRevisions()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        var request = new EditingToolSelectionRequest(
+            sessionId,
+            "annotation-v1",
+            selection.SelectionRevision,
+            AnnotationRevision.Initial,
+            EditingToolKind.Rectangle);
+
+        var selected = editing.SelectTool(request, WorkflowState.Editing, selection);
+        var staleSelection = editing.SelectTool(
+            request with { SelectionRevision = selection.SelectionRevision + 1 },
+            WorkflowState.Editing,
+            selection);
+        var staleSession = editing.SelectTool(
+            request with { SessionId = Guid.NewGuid() },
+            WorkflowState.Editing,
+            selection);
+        var staleAnnotation = editing.SelectTool(
+            request with { ExpectedAnnotationRevision = new AnnotationRevision(1) },
+            WorkflowState.Editing,
+            selection);
+
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, selected.Kind);
+        Assert.AreEqual(EditingToolKind.Rectangle, editing.ActiveTool);
+        Assert.AreEqual(EditingToolSelectionResultKind.StaleSelectionRevision, staleSelection.Kind);
+        Assert.AreEqual(EditingToolSelectionResultKind.StaleSession, staleSession.Kind);
+        Assert.AreEqual(EditingToolSelectionResultKind.StaleAnnotationRevision, staleAnnotation.Kind);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void PressOutsideSelectionIsIgnoredAndDoesNotCreateDraftOrRevision()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectRectangle(editing, sessionId, selection);
+        var input = Input(sessionId, selection, new PhysicalPoint(99, 99));
+
+        var result = editing.PointerPressed(input, selection);
+
+        Assert.AreEqual(RectanglePointerResultKind.IgnoredOutsideSelection, result.Kind);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+        Assert.IsEmpty(result.Document!.Objects);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void ReverseDragCreatesOneNormalizedDraftWithoutDocumentMutation()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectRectangle(editing, sessionId, selection);
+        var start = Input(sessionId, selection, new PhysicalPoint(40, 40), pointerId: 7);
+        var end = Input(sessionId, selection, new PhysicalPoint(10, 20), pointerId: 7);
+
+        var started = editing.PointerPressed(start, selection);
+        var moved = editing.PointerMoved(end, selection);
+
+        Assert.AreEqual(RectanglePointerResultKind.DraftStarted, started.Kind);
+        Assert.AreEqual(RectanglePointerResultKind.DraftUpdated, moved.Kind);
+        Assert.AreEqual(new PhysicalRect(10, 20, 40, 40), moved.DraftPhysicalBounds);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+        Assert.IsEmpty(moved.Document!.Objects);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void PointerMismatchAndStaleRequestsDoNotMutateDraft()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectRectangle(editing, sessionId, selection);
+        var first = Input(sessionId, selection, new PhysicalPoint(10, 10), pointerId: 1);
+        editing.PointerPressed(first, selection);
+
+        var mismatch = editing.PointerMoved(
+            Input(sessionId, selection, new PhysicalPoint(20, 20), pointerId: 2),
+            selection);
+        var stale = editing.PointerMoved(
+            first with
+            {
+                SelectionRevision = selection.SelectionRevision + 1,
+                GlobalPhysicalPoint = new PhysicalPoint(20, 20)
+            },
+            selection);
+
+        Assert.AreEqual(RectanglePointerResultKind.PointerMismatch, mismatch.Kind);
+        Assert.AreEqual(RectanglePointerResultKind.StaleSelectionRevision, stale.Kind);
+        Assert.AreEqual(new PhysicalRect(10, 10, 10, 10), mismatch.DraftPhysicalBounds);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void ValidReleaseCommitsExactlyOnceWithDeterministicIdAndTopmostZOrder()
+    {
+        var firstId = new AnnotationObjectId(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+        var secondId = new AnnotationObjectId(Guid.Parse("00000000-0000-0000-0000-000000000002"));
+        var ids = new Queue<AnnotationObjectId>(new[] { firstId, secondId });
+        var editing = CreateEditing(out var sessionId, out var selection, () => ids.Dequeue());
+        SelectRectangle(editing, sessionId, selection);
+
+        var first = Commit(editing, sessionId, selection, new PhysicalPoint(10, 10), new PhysicalPoint(20, 30), 3);
+        var secondSelection = selection with { SelectionRevision = selection.SelectionRevision + 2 };
+        editing.UpdateSelection(secondSelection);
+        var second = Commit(editing, sessionId, secondSelection, new PhysicalPoint(15, 15), new PhysicalPoint(25, 35), 4);
+
+        Assert.AreEqual(RectanglePointerResultKind.Committed, first.Kind);
+        Assert.AreEqual(RectanglePointerResultKind.Committed, second.Kind);
+        Assert.AreEqual(2, editing.CreatePresentationSnapshot(secondSelection).Document.Objects.Count);
+        Assert.AreEqual(firstId, first.CommittedObject!.ObjectId);
+        Assert.AreEqual(secondId, second.CommittedObject!.ObjectId);
+        Assert.AreEqual(0, first.CommittedObject.ZOrder);
+        Assert.AreEqual(1, second.CommittedObject.ZOrder);
+        Assert.AreEqual(2, editing.CurrentAnnotationRevision.Value);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void ZeroSizeReleaseClearsDraftWithoutRevisionOrObject()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectRectangle(editing, sessionId, selection);
+        var point = new PhysicalPoint(10, 10);
+        editing.PointerPressed(Input(sessionId, selection, point), selection);
+        var result = editing.PointerReleased(Input(sessionId, selection, point), selection);
+        var noDraft = editing.PointerMoved(
+            Input(sessionId, selection, new PhysicalPoint(11, 11)),
+            selection);
+
+        Assert.AreEqual(RectanglePointerResultKind.InvalidGeometry, result.Kind);
+        Assert.AreEqual(RectanglePointerResultKind.NoActiveDraft, noDraft.Kind);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+        Assert.IsEmpty(result.Document!.Objects);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void NonPositivePointerIdIsRejectedWithoutMutation()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectRectangle(editing, sessionId, selection);
+        var result = editing.PointerPressed(
+            Input(sessionId, selection, new PhysicalPoint(10, 10), pointerId: 0),
+            selection);
+
+        Assert.AreEqual(RectanglePointerResultKind.PointerMismatch, result.Kind);
+        Assert.IsEmpty(result.Document!.Objects);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void SwitchingToolDiscardsDraftButDoesNotChangeDocument()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectRectangle(editing, sessionId, selection);
+        editing.PointerPressed(
+            Input(sessionId, selection, new PhysicalPoint(10, 10)),
+            selection);
+
+        var switched = editing.SelectTool(
+            new EditingToolSelectionRequest(
+                sessionId,
+                "annotation-v1",
+                selection.SelectionRevision,
+                AnnotationRevision.Initial,
+                EditingToolKind.Selection),
+            WorkflowState.Editing,
+            selection);
+        var snapshot = editing.CreatePresentationSnapshot(selection);
+
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, switched.Kind);
+        Assert.AreEqual(EditingToolKind.Selection, snapshot.ActiveTool);
+        Assert.IsNull(snapshot.DraftPhysicalBounds);
+        Assert.IsEmpty(snapshot.Document.Objects);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void SelectionRevisionChangesOnlyClipPresentationAndRetainCommittedGeometry()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectRectangle(editing, sessionId, selection);
+        var committed = Commit(
+            editing,
+            sessionId,
+            selection,
+            new PhysicalPoint(10, 10),
+            new PhysicalPoint(20, 30),
+            1);
+        var adjusted = selection with
+        {
+            SelectionRevision = selection.SelectionRevision + 2,
+            NormalizedPhysicalBounds = new PhysicalRect(0, 0, 15, 15)
+        };
+        editing.UpdateSelection(adjusted);
+        var snapshot = editing.CreatePresentationSnapshot(adjusted);
+
+        Assert.AreEqual(RectanglePointerResultKind.Committed, committed.Kind);
+        Assert.AreEqual(committed.CommittedObject!.Geometry, snapshot.Document.Objects.Single().Geometry);
+        Assert.AreEqual(committed.CommittedObject.ZOrder, snapshot.Document.Objects.Single().ZOrder);
+        Assert.AreEqual(adjusted.NormalizedPhysicalBounds, snapshot.SelectionPhysicalBounds);
+        Assert.AreEqual(1, snapshot.AnnotationRevision.Value);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void CancelDraftLeavesDocumentEmptyAndNewSessionStartsClean()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectRectangle(editing, sessionId, selection);
+        editing.PointerPressed(
+            Input(sessionId, selection, new PhysicalPoint(10, 10)),
+            selection);
+
+        var cancelled = editing.CancelDraft(sessionId, "annotation-v1");
+        editing.ClearSession(sessionId);
+        var nextSession = Guid.NewGuid();
+        var nextSelection = LockedSelection(nextSession, 2);
+        editing.BeginSession(nextSelection);
+        var snapshot = editing.CreatePresentationSnapshot(nextSelection);
+
+        Assert.AreEqual(RectanglePointerResultKind.Cancelled, cancelled.Kind);
+        Assert.IsEmpty(snapshot.Document.Objects);
+        Assert.AreEqual(AnnotationRevision.Initial, snapshot.AnnotationRevision);
+        Assert.AreEqual(EditingToolKind.Selection, snapshot.ActiveTool);
+    }
+
+    private static AnnotationEditingCoordinator CreateEditing(
+        out Guid sessionId,
+        out SelectionVisualState selection,
+        Func<AnnotationObjectId>? objectIdFactory = null)
+    {
+        sessionId = Guid.NewGuid();
+        selection = LockedSelection(sessionId, 4);
+        var documents = new AnnotationDocumentCoordinator();
+        var editing = new AnnotationEditingCoordinator(documents, objectIdFactory);
+        editing.BeginSession(selection);
+        return editing;
+    }
+
+    private static SelectionVisualState LockedSelection(Guid sessionId, int revision) => new()
+    {
+        SessionId = sessionId,
+        CoordinateVersion = "annotation-v1",
+        SelectionRevision = revision,
+        Status = SelectionStatus.Locked,
+        InteractionMode = SelectionInteractionMode.Locked,
+        IsGeometryValid = true,
+        NormalizedPhysicalBounds = new PhysicalRect(0, 0, 80, 80),
+        CurrentPhysicalPoint = new PhysicalPoint(1, 1)
+    };
+
+    private static void SelectRectangle(
+        AnnotationEditingCoordinator editing,
+        Guid sessionId,
+        SelectionVisualState selection)
+    {
+        var result = editing.SelectTool(
+            new EditingToolSelectionRequest(
+                sessionId,
+                selection.CoordinateVersion,
+                selection.SelectionRevision,
+                AnnotationRevision.Initial,
+                EditingToolKind.Rectangle),
+            WorkflowState.Editing,
+            selection);
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, result.Kind);
+    }
+
+    private static RectanglePointerResult Commit(
+        AnnotationEditingCoordinator editing,
+        Guid sessionId,
+        SelectionVisualState selection,
+        PhysicalPoint start,
+        PhysicalPoint end,
+        int pointerId)
+    {
+        editing.PointerPressed(Input(
+            sessionId,
+            selection,
+            start,
+            pointerId,
+            editing.CurrentAnnotationRevision), selection);
+        editing.PointerMoved(Input(
+            sessionId,
+            selection,
+            end,
+            pointerId,
+            editing.CurrentAnnotationRevision),
+            selection);
+        return editing.PointerReleased(Input(
+            sessionId,
+            selection,
+            end,
+            pointerId,
+            editing.CurrentAnnotationRevision),
+            selection);
+    }
+
+    private static RectanglePointerEvent Input(
+        Guid sessionId,
+        SelectionVisualState selection,
+        PhysicalPoint point,
+        int pointerId = 1,
+        AnnotationRevision? annotationRevision = null) => new(
+        sessionId,
+        selection.CoordinateVersion,
+        selection.SelectionRevision,
+        annotationRevision ?? AnnotationRevision.Initial,
+        pointerId,
+        point);
+}

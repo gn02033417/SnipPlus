@@ -106,7 +106,10 @@ public sealed record FrozenDisplayOverlayPlan(
 
 public sealed record FrozenDisplayOverlayPresentationRequest(
     FrozenDisplayOverlayPlan Plan,
-    ISelectionInputSink InputSink);
+    ISelectionInputSink InputSink)
+{
+    public IEditingInputRouter? EditingInputRouter { get; init; }
+}
 
 public abstract record FrozenDisplayOverlayPresentationOutcome
 {
@@ -128,6 +131,8 @@ public interface IAllDisplayOverlayPresentationCoordinator : IDisposable
         CancellationToken cancellationToken);
 
     void ApplySelection(SelectionVisualState state);
+
+    void ApplyAnnotation(AnnotationPresentationSnapshot snapshot);
 
     ValueTask CloseAsync(Guid sessionId, CancellationToken cancellationToken);
 }

@@ -225,7 +225,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Rendering")]
-    public async Task FinalRenderFailureReturnsToEditingAndRetainsFrozenSession()
+    public async Task NonEmptyAnnotationDocumentBlocksBaseCompleteAndRetainsEditing()
     {
         var authority = new WorkflowStateAuthority();
         using var requests = new CaptureRequestCoordinator(authority);
@@ -259,37 +259,28 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             ready.Session.SessionId,
             workflow.CurrentAnnotationDocument!.Revision,
             retainedObject)) as AnnotationMutationResult.Succeeded)!.Document;
-        renderer.Outcome = new FrozenDisplayFrameSetRenderOutcome.Failed(Failure.Create(
-            FailureCode.RenderingFailed,
-            FailureCategory.Resource,
-            FailureRecoverability.RetrySameIntent,
-            "test-renderer",
-            ready.Session.SessionId,
-            "synthetic renderer failure"));
-
         var accepted = workflow.Execute(new FunctionBarCommandRequest(
             ready.Session.SessionId,
             ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
             workflow.CurrentSelection!.SelectionRevision,
             FunctionBarCommand.Complete));
 
-        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, accepted.Kind);
-        await WaitForAsync(() => renderer.Calls == 1);
+        Assert.AreEqual(FunctionBarCommandResultKind.AnnotationOutputNotSupported, accepted.Kind);
+        await Task.Yield();
         Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
+        Assert.AreEqual(0, renderer.Calls);
         Assert.AreEqual(0, clipboard.Calls);
         Assert.AreEqual(0, overlay.CloseCalls);
         Assert.IsFalse(ready.Session.IsDisposed);
         Assert.IsNotNull(workflow.CurrentAnnotationDocument);
         Assert.AreEqual(retainedDocument.Revision, workflow.CurrentAnnotationDocument!.Revision);
         Assert.AreEqual(retainedObject.ObjectId, workflow.CurrentAnnotationDocument.Objects.Single().ObjectId);
-        Assert.IsTrue(functionBar.ShowCalls >= 2);
         Assert.AreEqual(1, functionBar.FeedbackCalls);
-        Assert.AreEqual("無法產生截圖影像，請再試一次。", functionBar.LastFeedback);
+        Assert.AreEqual(
+            "Rectangle annotations are retained; Complete output is not available in this slice.",
+            functionBar.LastFeedback);
         Assert.AreEqual(FunctionBarCommandAvailability.Stage6C, functionBar.LastRequest!.Availability);
-        Assert.IsTrue(trace.Entries.Any(entry => entry.CompleteStage == CompleteExecutionStage.Rendering));
-        var renderFailure = trace.Entries.Last(entry => entry.CompleteStage == CompleteExecutionStage.RenderFailed);
-        Assert.AreEqual(FailureCode.RenderingFailed, renderFailure.FailureCode);
-        Assert.AreEqual(nameof(IFrozenDisplayFrameSetRenderer), renderFailure.Component);
+        Assert.IsFalse(trace.Entries.Any(entry => entry.CompleteStage == CompleteExecutionStage.Rendering));
         await workflow.CancelCurrentAsync("test");
     }
 
@@ -568,6 +559,58 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.IsNull(workflow.CurrentAnnotationDocument);
     }
 
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public async Task RectangleToolRoutesPointerInputToCoreAndCommitsOneObject()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        using var workflow = CreateWorkflow(requests, provider, overlay, functionBar);
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        LockSelection(overlay.InputSink!, ready.Session);
+        var selection = workflow.CurrentSelection!;
+        var selected = workflow.SelectTool(new EditingToolSelectionRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            selection.SelectionRevision,
+            workflow.CurrentAnnotationDocument!.Revision,
+            EditingToolKind.Rectangle));
+
+        var start = new RectanglePointerEvent(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            selection.SelectionRevision,
+            workflow.CurrentAnnotationDocument!.Revision,
+            9,
+            new PhysicalPoint(-2, 1));
+        var moved = start with { GlobalPhysicalPoint = new PhysicalPoint(2, 4) };
+        var draftStarted = workflow.PointerPressed(start);
+        var draftUpdated = workflow.PointerMoved(moved);
+        var committed = workflow.PointerReleased(moved);
+
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, selected.Kind);
+        Assert.AreEqual(RectanglePointerResultKind.DraftStarted, draftStarted.Kind);
+        Assert.AreEqual(RectanglePointerResultKind.DraftUpdated, draftUpdated.Kind);
+        Assert.AreEqual(RectanglePointerResultKind.Committed, committed.Kind);
+        Assert.AreEqual(EditingToolKind.Rectangle, workflow.ActiveTool);
+        Assert.AreEqual(selection.SelectionRevision, workflow.CurrentSelection!.SelectionRevision);
+        Assert.AreEqual(1, workflow.CurrentAnnotationDocument!.Objects.Count);
+        Assert.AreEqual(new PhysicalRect(-2, 1, 2, 4), committed.CommittedObject!.Geometry);
+        Assert.AreEqual(EditingToolKind.Rectangle, overlay.LastAnnotationSnapshot!.ActiveTool);
+        Assert.AreEqual(1, overlay.LastAnnotationSnapshot.Document.Objects.Count);
+        Assert.AreEqual(EditingToolKind.Rectangle, functionBar.LastRequest!.ActiveTool);
+
+        await workflow.CancelCurrentAsync("test");
+    }
+
     private static CapturePresentationWorkflowCoordinator CreateWorkflow(
         CaptureRequestCoordinator requests,
         FakeAllDisplayProvider provider,
@@ -602,7 +645,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
                 return;
             }
 
-            await Task.Yield();
+            await Task.Delay(1);
         }
 
         Assert.AreEqual(expected, authority.CurrentState);
@@ -824,6 +867,8 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
 
         public ISelectionInputSink? InputSink { get; private set; }
 
+        public AnnotationPresentationSnapshot? LastAnnotationSnapshot { get; private set; }
+
         public ValueTask<FrozenDisplayOverlayPresentationOutcome> PresentAsync(
             FrozenDisplayOverlayPresentationRequest request,
             CancellationToken cancellationToken)
@@ -839,6 +884,11 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
 
         public void ApplySelection(SelectionVisualState state)
         {
+        }
+
+        public void ApplyAnnotation(AnnotationPresentationSnapshot snapshot)
+        {
+            LastAnnotationSnapshot = snapshot;
         }
 
         public ValueTask CloseAsync(Guid sessionId, CancellationToken cancellationToken)

@@ -63,6 +63,7 @@ public enum FunctionBarCommandResultKind
     StaleSession,
     StaleSelectionRevision,
     InvalidWorkflowState,
+    AnnotationOutputNotSupported,
     Failed
 }
 
@@ -129,7 +130,14 @@ public sealed record FunctionBarPresentationRequest(
     string CoordinateVersion,
     SelectionVisualState Selection,
     FunctionBarCommandAvailability Availability,
-    IFunctionBarCommandSink CommandSink);
+    IFunctionBarCommandSink CommandSink)
+{
+    public EditingToolKind ActiveTool { get; init; } = EditingToolKind.Selection;
+
+    public AnnotationRevision AnnotationRevision { get; init; } = AnnotationRevision.Initial;
+
+    public IEditingToolSelectionSink? ToolSelectionSink { get; init; }
+}
 
 public enum FunctionBarPresentationResultKind
 {

@@ -43,7 +43,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         var inputBoundary = new SessionInputBoundary(
             request.Plan.SessionId,
             request.Plan.CoordinateVersion,
-            request.InputSink);
+            request.InputSink,
+            request.EditingInputRouter);
         var surfaces = new List<OverlaySurface>(request.Plan.Displays.Count);
         try
         {
@@ -287,6 +288,26 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         foreach (var surface in surfaces)
         {
             surface.ApplySelection(state);
+        }
+    }
+
+    public void ApplyAnnotation(AnnotationPresentationSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        IReadOnlyList<OverlaySurface>? surfaces;
+        lock (_gate)
+        {
+            _sessions.TryGetValue(snapshot.SessionId, out surfaces);
+        }
+
+        if (surfaces is null)
+        {
+            return;
+        }
+
+        foreach (var surface in surfaces)
+        {
+            surface.ApplyAnnotation(snapshot);
         }
     }
 
@@ -653,6 +674,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             Visibility = Visibility.Collapsed
         };
         private readonly IReadOnlyDictionary<FunctionBarCommand, Button> _buttons;
+        private readonly IReadOnlyDictionary<EditingToolKind, RadioButton> _toolButtons;
         private readonly CancelCommandGate _cancelCommandGate = new();
         private readonly CancelCommandGate _completeCommandGate = new();
         private FunctionBarPresentationRequest _request;
@@ -672,10 +694,22 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 [FunctionBarCommand.Undo] = CreateButton("Undo"),
                 [FunctionBarCommand.Redo] = CreateButton("Redo")
             };
+            _toolButtons = new Dictionary<EditingToolKind, RadioButton>
+            {
+                [EditingToolKind.Selection] = CreateToolButton("Selection"),
+                [EditingToolKind.Rectangle] = CreateToolButton("Rectangle")
+            };
             _buttons[FunctionBarCommand.Complete].Click += OnCompleteClicked;
             _buttons[FunctionBarCommand.Cancel].Click += OnCancelClicked;
+            _toolButtons[EditingToolKind.Selection].Click += OnSelectionToolClicked;
+            _toolButtons[EditingToolKind.Rectangle].Click += OnRectangleToolClicked;
             _root.PointerPressed += OnPointerPressed;
             _panel.Children.Add(_feedbackText);
+            foreach (var toolButton in _toolButtons.Values)
+            {
+                _panel.Children.Add(toolButton);
+            }
+
             foreach (var button in _buttons.Values)
             {
                 _panel.Children.Add(button);
@@ -711,6 +745,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             foreach (var pair in _buttons)
             {
                 pair.Value.IsEnabled = request.Availability.IsEnabled(pair.Key);
+            }
+
+            foreach (var pair in _toolButtons)
+            {
+                pair.Value.IsChecked = pair.Key == request.ActiveTool;
+                pair.Value.IsEnabled = request.ToolSelectionSink is not null;
             }
         }
 
@@ -775,6 +815,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _disposed = true;
             _buttons[FunctionBarCommand.Complete].Click -= OnCompleteClicked;
             _buttons[FunctionBarCommand.Cancel].Click -= OnCancelClicked;
+            _toolButtons[EditingToolKind.Selection].Click -= OnSelectionToolClicked;
+            _toolButtons[EditingToolKind.Rectangle].Click -= OnRectangleToolClicked;
             _root.PointerPressed -= OnPointerPressed;
             _owner.RemoveFunctionBar(this);
             _root.Opacity = 0;
@@ -867,6 +909,22 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return button;
         }
 
+        private static RadioButton CreateToolButton(string label)
+        {
+            var button = new RadioButton
+            {
+                Content = label,
+                GroupName = "SnipPlusEditingTool",
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(2, 0, 2, 0),
+                IsTabStop = true
+            };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                button,
+                $"Editing tool {label}");
+            return button;
+        }
+
         private static FunctionBarButtonVisualStyle GetButtonVisualStyle() =>
             new(
                 ColorHelper.FromArgb(255, 255, 255, 255),
@@ -954,6 +1012,32 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
         }
 
+        private void OnSelectionToolClicked(object sender, RoutedEventArgs args) =>
+            SelectTool(EditingToolKind.Selection);
+
+        private void OnRectangleToolClicked(object sender, RoutedEventArgs args) =>
+            SelectTool(EditingToolKind.Rectangle);
+
+        private void SelectTool(EditingToolKind tool)
+        {
+            var sink = _request.ToolSelectionSink;
+            if (_disposed || sink is null)
+            {
+                return;
+            }
+
+            var result = sink.SelectTool(new EditingToolSelectionRequest(
+                _request.SessionId,
+                _request.CoordinateVersion,
+                _request.Selection.SelectionRevision,
+                _request.AnnotationRevision,
+                tool));
+            if (result.Kind != EditingToolSelectionResultKind.Selected)
+            {
+                Update(_request);
+            }
+        }
+
         private void OnPointerPressed(object sender, PointerRoutedEventArgs args) =>
             args.Handled = true;
 
@@ -978,24 +1062,53 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly Guid _sessionId;
         private readonly string _coordinateVersion;
         private readonly ISelectionInputSink _inner;
+        private readonly IEditingInputRouter? _editingRouter;
         private SelectionInputResult _lastResult;
+        private RectanglePointerResult _lastRectangleResult;
         private int? _activePointerId;
+        private int? _rectangleSelectionRevision;
+        private AnnotationRevision? _rectangleAnnotationRevision;
         private bool _releaseConsumed;
 
         public SessionInputBoundary(
             Guid sessionId,
             string coordinateVersion,
             ISelectionInputSink inner)
+            : this(sessionId, coordinateVersion, inner, null)
+        {
+        }
+
+        public SessionInputBoundary(
+            Guid sessionId,
+            string coordinateVersion,
+            ISelectionInputSink inner,
+            IEditingInputRouter? editingRouter)
         {
             _sessionId = sessionId;
             _coordinateVersion = coordinateVersion
                 ?? throw new ArgumentNullException(nameof(coordinateVersion));
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+            _editingRouter = editingRouter;
             _lastResult = new SelectionInputResult(
                 SelectionInputResultKind.Ignored,
                 SelectionVisualState.Initial(sessionId, coordinateVersion),
                 "No Selection input has been accepted.");
+            _lastRectangleResult = new RectanglePointerResult(
+                RectanglePointerResultKind.NoActiveDraft,
+                editingRouter?.ActiveTool ?? EditingToolKind.Selection,
+                sessionId,
+                coordinateVersion,
+                editingRouter?.CurrentSelectionRevision ?? 0,
+                editingRouter?.CurrentAnnotationRevision ?? AnnotationRevision.Initial,
+                null,
+                null,
+                null,
+                null,
+                "No Rectangle input has been accepted.");
         }
+
+        public bool UsesRectangleTool =>
+            _editingRouter?.ActiveTool == EditingToolKind.Rectangle;
 
         public SelectionInputResult PointerPressed(SelectionPointerEvent input)
         {
@@ -1022,6 +1135,42 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return result;
         }
 
+        public RectanglePointerResult PointerPressedRectangle(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastRectangleResult;
+            }
+
+            lock (_gate)
+            {
+                if (_activePointerId is not null)
+                {
+                    return _lastRectangleResult with
+                    {
+                        Kind = RectanglePointerResultKind.PointerMismatch,
+                        Message = "Another pointer interaction is already active."
+                    };
+                }
+            }
+
+            var result = _editingRouter.PointerPressed(ToRectangleInput(input));
+            lock (_gate)
+            {
+                _lastRectangleResult = result;
+                if (result.Kind == RectanglePointerResultKind.DraftStarted)
+                {
+                    _activePointerId = input.PointerId;
+                    _rectangleSelectionRevision = _editingRouter.CurrentSelectionRevision;
+                    _rectangleAnnotationRevision = _editingRouter.CurrentAnnotationRevision;
+                    _releaseConsumed = false;
+                }
+            }
+
+            return result;
+        }
+
         public SelectionInputResult PointerMoved(SelectionPointerEvent input)
         {
             ArgumentNullException.ThrowIfNull(input);
@@ -1029,6 +1178,24 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             lock (_gate)
             {
                 _lastResult = result;
+            }
+
+            return result;
+        }
+
+        public RectanglePointerResult PointerMovedRectangle(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastRectangleResult;
+            }
+
+            var result = _editingRouter.PointerMoved(
+                ToRectangleInput(NormalizePointer(input)));
+            lock (_gate)
+            {
+                _lastRectangleResult = result;
             }
 
             return result;
@@ -1057,8 +1224,46 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return result;
         }
 
+        public RectanglePointerResult PointerReleasedRectangle(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastRectangleResult;
+            }
+
+            lock (_gate)
+            {
+                if (_releaseConsumed || _activePointerId is null)
+                {
+                    return _lastRectangleResult;
+                }
+
+                _releaseConsumed = true;
+            }
+
+            var result = _editingRouter.PointerReleased(
+                ToRectangleInput(NormalizePointer(input)));
+            lock (_gate)
+            {
+                _lastRectangleResult = result;
+                _activePointerId = null;
+                _rectangleSelectionRevision = null;
+                _rectangleAnnotationRevision = null;
+            }
+
+            return result;
+        }
+
         public SelectionInputResult PointerReleasedFromNative(PhysicalPoint point) =>
             PointerReleased(new SelectionPointerEvent(
+                _sessionId,
+                _coordinateVersion,
+                GetActivePointerId(),
+                point));
+
+        public RectanglePointerResult PointerReleasedRectangleFromNative(PhysicalPoint point) =>
+            PointerReleasedRectangle(new SelectionPointerEvent(
                 _sessionId,
                 _coordinateVersion,
                 GetActivePointerId(),
@@ -1072,6 +1277,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _lastResult = result;
                 _activePointerId = null;
                 _releaseConsumed = true;
+                _rectangleSelectionRevision = null;
+                _rectangleAnnotationRevision = null;
+                _lastRectangleResult = _editingRouter is null
+                    ? _lastRectangleResult
+                    : _lastRectangleResult with
+                    {
+                        Kind = RectanglePointerResultKind.Cancelled,
+                        ActiveTool = _editingRouter.ActiveTool,
+                        Message = "Rectangle input cancelled with the capture session."
+                    };
             }
 
             return result;
@@ -1092,6 +1307,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     : input;
             }
         }
+
+        private RectanglePointerEvent ToRectangleInput(SelectionPointerEvent input) =>
+            new(
+                input.SessionId,
+                input.CoordinateVersion,
+                _rectangleSelectionRevision
+                    ?? _editingRouter?.CurrentSelectionRevision
+                    ?? 0,
+                _rectangleAnnotationRevision
+                    ?? _editingRouter?.CurrentAnnotationRevision
+                    ?? AnnotationRevision.Initial,
+                input.PointerId,
+                input.GlobalPhysicalPoint);
 
         private int GetActivePointerId()
         {
@@ -1161,6 +1389,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             StrokeThickness = 2,
             Visibility = Visibility.Collapsed
         };
+        private readonly List<Rectangle> _annotationPreviews = new();
         private readonly IReadOnlyDictionary<SelectionHitTestKind, Rectangle> _handles =
             new Dictionary<SelectionHitTestKind, Rectangle>
             {
@@ -1443,6 +1672,97 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         }
 
+        public void ApplyAnnotation(AnnotationPresentationSnapshot snapshot)
+        {
+            if (_disposed
+                || snapshot.SessionId != _descriptor.SessionId
+                || !string.Equals(
+                    snapshot.CoordinateVersion,
+                    _descriptor.CoordinateVersion,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            ClearAnnotationPreviews();
+            var selection = snapshot.SelectionPhysicalBounds;
+            foreach (var annotationObject in snapshot.Document.Objects)
+            {
+                if (annotationObject.ToolKind != AnnotationToolKind.Rectangle
+                    || annotationObject.Content is not RectangleAnnotationContent content)
+                {
+                    continue;
+                }
+
+                AddAnnotationPreview(annotationObject.Geometry, content.Style, selection);
+            }
+
+            if (snapshot.DraftPhysicalBounds is PhysicalRect draft
+                && draft.IsPositive)
+            {
+                AddAnnotationPreview(
+                    draft,
+                    RectangleAnnotationStyle.Default,
+                    selection);
+            }
+
+            _canvas.Cursor = snapshot.ActiveTool == EditingToolKind.Rectangle
+                ? InputSystemCursor.Create(InputSystemCursorShape.Cross)
+                : _canvas.Cursor;
+        }
+
+        private void AddAnnotationPreview(
+            PhysicalRect geometry,
+            RectangleAnnotationStyle style,
+            PhysicalRect? selection)
+        {
+            var visible = geometry.Intersection(_descriptor.PhysicalBoundsInVirtualDesktop);
+            if (selection is PhysicalRect selectionBounds)
+            {
+                visible = visible.Intersection(selectionBounds);
+            }
+
+            if (!visible.IsPositive)
+            {
+                return;
+            }
+
+            var rectangle = new Rectangle
+            {
+                Fill = new SolidColorBrush(ColorHelper.FromArgb(0, 0, 0, 0)),
+                Stroke = new SolidColorBrush(ColorHelper.FromArgb(
+                    style.StrokeColor.A,
+                    style.StrokeColor.R,
+                    style.StrokeColor.G,
+                    style.StrokeColor.B)),
+                StrokeThickness = style.StrokeThickness / _rasterizationScale,
+                IsHitTestVisible = false,
+                Visibility = Visibility.Visible
+            };
+            var left = (visible.Left - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                / _rasterizationScale;
+            var top = (visible.Top - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                / _rasterizationScale;
+            SetCanvasRectangle(
+                rectangle,
+                left,
+                top,
+                visible.Width / _rasterizationScale,
+                visible.Height / _rasterizationScale);
+            _annotationPreviews.Add(rectangle);
+            _canvas.Children.Add(rectangle);
+        }
+
+        private void ClearAnnotationPreviews()
+        {
+            foreach (var preview in _annotationPreviews)
+            {
+                _canvas.Children.Remove(preview);
+            }
+
+            _annotationPreviews.Clear();
+        }
+
         public void Dispose()
         {
             if (_disposed)
@@ -1459,6 +1779,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _canvas.PointerCaptureLost -= OnPointerCaptureLost;
             _canvas.KeyDown -= OnKeyDown;
             _canvas.Cursor = null;
+            ClearAnnotationPreviews();
             HideHandles();
             RemoveNativeInputBoundary();
             try
@@ -1496,15 +1817,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
             _canvas.Focus(FocusState.Pointer);
             var handle = WindowNative.GetWindowHandle(_window);
-            var result = _inputBoundary.PointerPressed(new SelectionPointerEvent(
+            var pointer = new SelectionPointerEvent(
                 _descriptor.SessionId,
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
-                point));
-            if (result.Kind is SelectionInputResultKind.Dragging
-                or SelectionInputResultKind.Moving
-                or SelectionInputResultKind.Resizing
-                or SelectionInputResultKind.Reselecting)
+                point);
+            var capturesPointer = _inputBoundary.UsesRectangleTool
+                ? _inputBoundary.PointerPressedRectangle(pointer).Kind
+                    == RectanglePointerResultKind.DraftStarted
+                : _inputBoundary.PointerPressed(pointer).Kind is SelectionInputResultKind.Dragging
+                    or SelectionInputResultKind.Moving
+                    or SelectionInputResultKind.Resizing
+                    or SelectionInputResultKind.Reselecting;
+            if (capturesPointer)
             {
                 _ = SetCapture(handle);
             }
@@ -1518,11 +1843,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
-            _inputBoundary.PointerMoved(new SelectionPointerEvent(
+            var pointer = new SelectionPointerEvent(
                 _descriptor.SessionId,
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
-                point));
+                point);
+            if (_inputBoundary.UsesRectangleTool)
+            {
+                _inputBoundary.PointerMovedRectangle(pointer);
+            }
+            else
+            {
+                _inputBoundary.PointerMoved(pointer);
+            }
             args.Handled = true;
         }
 
@@ -1533,11 +1866,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
-            _inputBoundary.PointerReleased(new SelectionPointerEvent(
+            var pointer = new SelectionPointerEvent(
                 _descriptor.SessionId,
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
-                point));
+                point);
+            if (_inputBoundary.UsesRectangleTool)
+            {
+                _inputBoundary.PointerReleasedRectangle(pointer);
+            }
+            else
+            {
+                _inputBoundary.PointerReleased(pointer);
+            }
             _ = ReleaseCapture();
             args.Handled = true;
         }
@@ -1793,7 +2134,14 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 if (message == WmLButtonUp
                     && TryGetGlobalPointer(out var point))
                 {
-                    _inputBoundary.PointerReleasedFromNative(point);
+                    if (_inputBoundary.UsesRectangleTool)
+                    {
+                        _inputBoundary.PointerReleasedRectangleFromNative(point);
+                    }
+                    else
+                    {
+                        _inputBoundary.PointerReleasedFromNative(point);
+                    }
                 }
                 else if (message == WmCaptureChanged)
                 {

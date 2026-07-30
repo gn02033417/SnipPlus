@@ -57,7 +57,8 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
         Guid sessionId,
         AnnotationToolKind toolKind,
         PhysicalRect geometry,
-        int zOrder)
+        int zOrder,
+        RectangleAnnotationContent? content = null)
     {
         if (!objectId.IsValid)
         {
@@ -79,11 +80,23 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
             throw new ArgumentOutOfRangeException(nameof(zOrder), "Annotation object Z-order cannot be negative.");
         }
 
+        if (toolKind == AnnotationToolKind.Rectangle)
+        {
+            content ??= new RectangleAnnotationContent(RectangleAnnotationStyle.Default);
+        }
+        else if (content is not null)
+        {
+            throw new ArgumentException(
+                "Only Rectangle annotation objects can carry Rectangle content.",
+                nameof(content));
+        }
+
         ObjectId = objectId;
         SessionId = sessionId;
         ToolKind = toolKind;
         Geometry = geometry;
         ZOrder = zOrder;
+        Content = content;
     }
 
     public AnnotationObjectId ObjectId { get; }
@@ -96,12 +109,15 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
 
     public int ZOrder { get; }
 
+    public RectangleAnnotationContent? Content { get; }
+
     public bool Equals(AnnotationObject? other) => other is not null
         && ObjectId == other.ObjectId
         && SessionId == other.SessionId
         && ToolKind == other.ToolKind
         && Geometry == other.Geometry
-        && ZOrder == other.ZOrder;
+        && ZOrder == other.ZOrder
+        && Equals(Content, other.Content);
 
     public override bool Equals(object? obj) => Equals(obj as AnnotationObject);
 
@@ -110,7 +126,8 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
         SessionId,
         ToolKind,
         Geometry,
-        ZOrder);
+        ZOrder,
+        Content);
 }
 
 public sealed class AnnotationDocument
