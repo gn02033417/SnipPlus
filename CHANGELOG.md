@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed — Stage 6C WinUI Entry-Point COM Boundary (2026-07-30)
+
+- The latest packaged trace reached `RuntimeInitializationAfter`, completed `DataPackage` construction and failed only at `Clipboard.SetContentWithOptions()` with `0x800401F0 (CO_E_NOTINITIALIZED)`; Render and PNG encoding had already succeeded.
+- Replaced the custom WinUI `async Main` with a synchronous `[STAThread] Main`. Secondary `AppInstance` activation redirection now runs on a worker thread and is awaited through `CoWaitForMultipleObjects`, preserving single-instance routing without blocking the WinUI STA or changing the Clipboard payload／output contract.
+- Locked restore succeeded、Release x64 build succeeded with `0 warnings／0 errors`、all non-interactive tests `142/142` passed、and the modified-file format verification passed. The newly signed Development MSIX requires one packaged Complete retry; Clipboard runtime success is not yet claimed.
+
 ### Fixed — Stage 6C Clipboard Payload Runtime Boundary (2026-07-30)
 
 - The MTA correction reached `RuntimeInitializationAfter`, but the next packaged trace still failed at `Clipboard.SetContentWithOptions()` with `0x800401F0 (CO_E_NOTINITIALIZED)`; `Flush()` was not reached.
