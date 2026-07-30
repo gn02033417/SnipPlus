@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Verified — Stage 6C Complete Clipboard Runtime (2026-07-30)
+
+- Repository owner confirmed the current installed Development MSIX completed a selection and copied it to Clipboard; pasting produced the exact selected position／content.
+- The packaged trace reached `SetContentAfter`, initially encountered bounded Clipboard contention at `Flush` (`0x800401D0`) on attempts 1–3, then reached `FlushAfter` on attempt 4 and returned through the completed workflow to `ResidentReady`.
+- This is runtime evidence for the current Owner Reference Complete／paste scenario. Broader Selection adjustment cases、four-4K envelope、performance、Save and Annotation remain outside this evidence; Stage 7 was not started. No desktop screenshot or Clipboard payload was saved.
+
 ### Corrected — Stage 6C Clipboard STA Runtime Boundary (2026-07-30)
 
 - The latest packaged trace reached the Clipboard dispatcher but `RoInitialize(RO_INIT_MULTITHREADED)` failed before `DataPackage` creation with `0x80010106 (RPC_E_CHANGED_MODE)`. This confirms the synchronous WinUI entrypoint now reaches the existing STA boundary; the MTA initializer was the new direct failure.
