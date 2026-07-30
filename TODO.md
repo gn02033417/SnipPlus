@@ -48,7 +48,7 @@ Work in order. Do not begin a later item while an earlier prerequisite is unreso
 - [ ] Implement Complete、Save and Cancel commitment boundaries.
 - [ ] Show non-blocking commit progress after `300 ms`.
 - [ ] Record and restore the pre-capture foreground application without reopening MainWindow.
-- [ ] Implement the Annotation document and object identity／revision model.
+- [x] Implement the Annotation document and object identity／revision model.
 - [ ] Implement pointer-driven Rectangle.
 - [ ] Implement pointer-driven Arrow／Line.
 - [ ] Implement pointer-driven semi-transparent Highlighter.

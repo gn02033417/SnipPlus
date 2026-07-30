@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added — Stage 7A Annotation Document Foundation (2026-07-30)
+
+- Added platform-neutral `AnnotationObjectId`、`AnnotationRevision`、accepted `AnnotationToolKind` values、physical-pixel `AnnotationObject` geometry and immutable `AnnotationDocument` contracts. Object collections are read-only、session-bound and deterministically ordered by Z-order.
+- Added Core-owned `AnnotationDocumentCoordinator` with one current document per Capture Session、typed Add／Replace／Remove outcomes、stale Session／Annotation Revision rejection、duplicate／missing／invalid／no-change outcomes and explicit revision-overflow handling.
+- Integrated the document lifecycle with the existing `CapturePresentationWorkflowCoordinator`: an empty document is created once at `SelectionLocked → Editing`; Selection move／resize／reselection does not alter Annotation geometry or revision; recoverable Complete failure retains the document; successful Complete、Cancel、Esc、terminal failure and Dispose clear ownership; a new Session receives a new document.
+- Added deterministic Contracts／Core tests for identity、tool values、validation、immutable collections、mutation revisions／ordering／typed failures、Selection adjustment separation、recoverable failure retention、successful cleanup and new-Session ownership. No Annotation tool、style、render、Undo／Redo、Save or UI was added.
+- Locked restore succeeded. Release x64 solution build succeeded with `0 warnings／0 errors`; non-interactive tests `155/155` passed with `0 failures／0 skips`; the six modified C# files passed limited `dotnet format --verify-no-changes --no-restore --include ...`; `git diff --check` passed. No MSIX、Publish、install、GUI、interactive／manual runtime or real desktop／Clipboard payload was used in this slice.
+
 ### Verified — Stage 6C Complete Clipboard Runtime (2026-07-30)
 
 - Repository owner confirmed the current installed Development MSIX completed a selection and copied it to Clipboard; pasting produced the exact selected position／content.

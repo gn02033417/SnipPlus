@@ -35,6 +35,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private readonly IClipboardDeliveryService? _clipboardDelivery;
     private readonly Action<string>? _feedback;
     private readonly ICompleteExecutionTraceSink _trace;
+    private readonly AnnotationDocumentCoordinator _annotationDocuments;
     private CaptureSessionContext? _activeSession;
     private InitialSelectionCoordinator? _selectionCoordinator;
     private CancellationTokenSource? _sessionCancellation;
@@ -52,7 +53,8 @@ public sealed class CapturePresentationWorkflowCoordinator :
         IFrozenDisplayFrameSetRenderer? finalRenderer = null,
         IClipboardDeliveryService? clipboardDelivery = null,
         Action<string>? feedback = null,
-        ICompleteExecutionTraceSink? traceSink = null)
+        ICompleteExecutionTraceSink? traceSink = null,
+        AnnotationDocumentCoordinator? annotationDocuments = null)
     {
         _freezingCoordinator = freezingCoordinator
             ?? throw new ArgumentNullException(nameof(freezingCoordinator));
@@ -66,6 +68,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         _clipboardDelivery = clipboardDelivery;
         _feedback = feedback;
         _trace = traceSink ?? NoOpCompleteExecutionTraceSink.Instance;
+        _annotationDocuments = annotationDocuments ?? new AnnotationDocumentCoordinator();
     }
 
     public WorkflowState CurrentState => _stateAuthority.CurrentState;
@@ -91,6 +94,17 @@ public sealed class CapturePresentationWorkflowCoordinator :
             }
         }
     }
+
+    public AnnotationDocument? CurrentAnnotationDocument => _annotationDocuments.Current;
+
+    public AnnotationMutationResult AddAnnotationObject(AddAnnotationObjectRequest request) =>
+        _annotationDocuments.Add(request);
+
+    public AnnotationMutationResult ReplaceAnnotationObject(ReplaceAnnotationObjectRequest request) =>
+        _annotationDocuments.Replace(request);
+
+    public AnnotationMutationResult RemoveAnnotationObject(RemoveAnnotationObjectRequest request) =>
+        _annotationDocuments.Remove(request);
 
     public async ValueTask<CapturePresentationOutcome> StartAsync(
         CaptureRequest request,
@@ -546,6 +560,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         sessionCancellation?.Cancel();
         if (session is not null)
         {
+            _annotationDocuments.ClearSession(session.SessionId);
             _functionBarPresentation?.Close(session.SessionId);
             await _overlayCoordinator
                 .CloseAsync(session.SessionId, CancellationToken.None)
@@ -586,6 +601,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         cancellation?.Cancel();
         if (session is not null)
         {
+            _annotationDocuments.ClearSession(session.SessionId);
             _functionBarPresentation?.Close(session.SessionId);
             Observe(_overlayCoordinator.CloseAsync(session.SessionId, CancellationToken.None));
             _freezingCoordinator.ReleaseSession(session);
@@ -714,6 +730,8 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 "The workflow could not enter Editing.")));
             return;
         }
+
+        _annotationDocuments.BeginSession(selection.SessionId);
 
         var shown = _functionBarPresentation.Show(
             selection.SessionId,
@@ -1173,6 +1191,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         }
         finally
         {
+            _annotationDocuments.ClearSession(session.SessionId);
             _freezingCoordinator.ReleaseSession(session);
             session.Dispose();
             selection?.Dispose();
@@ -1281,6 +1300,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         cancellation?.Cancel();
         if (session is not null)
         {
+            _annotationDocuments.ClearSession(session.SessionId);
             try
             {
                 await _overlayCoordinator
@@ -1313,6 +1333,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         await _overlayCoordinator
             .CloseAsync(session.SessionId, CancellationToken.None)
             .ConfigureAwait(true);
+        _annotationDocuments.ClearSession(session.SessionId);
         _freezingCoordinator.ReleaseSession(session);
         session.Cancel();
         MoveToResidentReady(WorkflowState.Cancelled, origin);
