@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Corrected — Stage 6C Clipboard STA Runtime Boundary (2026-07-30)
+
+- The latest packaged trace reached the Clipboard dispatcher but `RoInitialize(RO_INIT_MULTITHREADED)` failed before `DataPackage` creation with `0x80010106 (RPC_E_CHANGED_MODE)`. This confirms the synchronous WinUI entrypoint now reaches the existing STA boundary; the MTA initializer was the new direct failure.
+- `WindowsClipboardRuntimeInitializer` now requests `RO_INIT_SINGLETHREADED`, which is compatible with the WinUI dispatcher STA, and keeps the existing balanced `RoUninitialize()` cleanup scope.
+- Locked restore succeeded、Release x64 build succeeded with `0 warnings／0 errors`、all non-interactive tests `142/142` passed、and modified-file format verification passed. The new signed Development MSIX requires another packaged Complete retry; Clipboard runtime success is not yet claimed.
+
 ### Fixed — Stage 6C WinUI Entry-Point COM Boundary (2026-07-30)
 
 - The latest packaged trace reached `RuntimeInitializationAfter`, completed `DataPackage` construction and failed only at `Clipboard.SetContentWithOptions()` with `0x800401F0 (CO_E_NOTINITIALIZED)`; Render and PNG encoding had already succeeded.
