@@ -226,23 +226,85 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
 
         if (_dispatcher is null || _dispatcher.HasThreadAccess)
         {
+            Trace(
+                request,
+                CompleteExecutionStage.ClipboardPublishing,
+                attempt: attempt,
+                component: "ClipboardDispatcher",
+                diagnosticEvent: "DirectPath",
+                dispatcherAvailable: _dispatcher is not null,
+                dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
             return PublishDirect(package, options, request, attempt, cancellationToken);
         }
 
+        Trace(
+            request,
+            CompleteExecutionStage.ClipboardPublishing,
+            attempt: attempt,
+            component: "ClipboardDispatcher",
+            diagnosticEvent: "BeforeEnqueue",
+            dispatcherAvailable: true,
+            dispatcherHasThreadAccess: _dispatcher.HasThreadAccess);
         var completion = new TaskCompletionSource<bool>(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        var enqueued = _dispatcher.TryEnqueue(() =>
+        bool enqueued;
+        try
         {
-            try
+            enqueued = _dispatcher.TryEnqueue(() =>
             {
-                completion.TrySetResult(
-                    PublishDirect(package, options, request, attempt, cancellationToken));
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(exception);
-            }
-        });
+                Trace(
+                    request,
+                    CompleteExecutionStage.ClipboardPublishing,
+                    attempt: attempt,
+                    component: "ClipboardDispatcher",
+                    diagnosticEvent: "CallbackEntered",
+                    dispatcherAvailable: true,
+                    dispatcherHasThreadAccess: _dispatcher.HasThreadAccess);
+                try
+                {
+                    completion.TrySetResult(
+                        PublishDirect(package, options, request, attempt, cancellationToken));
+                }
+                catch (Exception exception)
+                {
+                    Trace(
+                        request,
+                        CompleteExecutionStage.ClipboardFailed,
+                        attempt: attempt,
+                        component: "ClipboardDispatcher",
+                        diagnosticEvent: "CallbackException",
+                        dispatcherAvailable: true,
+                        dispatcherHasThreadAccess: _dispatcher.HasThreadAccess,
+                        nativeCode: exception.HResult,
+                        exceptionType: exception.GetType().FullName);
+                    completion.TrySetException(exception);
+                }
+            });
+        }
+        catch (Exception exception)
+        {
+            Trace(
+                request,
+                CompleteExecutionStage.ClipboardFailed,
+                attempt: attempt,
+                component: "ClipboardDispatcher",
+                diagnosticEvent: "EnqueueException",
+                dispatcherAvailable: true,
+                dispatcherHasThreadAccess: _dispatcher.HasThreadAccess,
+                nativeCode: exception.HResult,
+                exceptionType: exception.GetType().FullName);
+            throw;
+        }
+
+        Trace(
+            request,
+            CompleteExecutionStage.ClipboardPublishing,
+            attempt: attempt,
+            component: "ClipboardDispatcher",
+            diagnosticEvent: "AfterEnqueue",
+            dispatcherAvailable: true,
+            dispatcherHasThreadAccess: _dispatcher.HasThreadAccess,
+            dispatcherEnqueueSucceeded: enqueued);
         if (!enqueued)
         {
             throw new InvalidOperationException("Clipboard dispatcher is unavailable.");
@@ -259,15 +321,83 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Trace(request, CompleteExecutionStage.ClipboardPublishing, attempt: attempt, component: nameof(Clipboard));
-        if (!_setContent(package, options))
+        Trace(
+            request,
+            CompleteExecutionStage.ClipboardPublishing,
+            attempt: attempt,
+            component: nameof(Clipboard),
+            diagnosticEvent: "SetContentBefore",
+            dispatcherAvailable: _dispatcher is not null,
+            dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
+        bool published;
+        try
+        {
+            published = _setContent(package, options);
+        }
+        catch (Exception exception)
+        {
+            Trace(
+                request,
+                CompleteExecutionStage.ClipboardFailed,
+                attempt: attempt,
+                component: nameof(Clipboard),
+                diagnosticEvent: "SetContentException",
+                dispatcherAvailable: _dispatcher is not null,
+                dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess,
+                nativeCode: exception.HResult,
+                exceptionType: exception.GetType().FullName);
+            throw;
+        }
+
+        Trace(
+            request,
+            CompleteExecutionStage.ClipboardPublishing,
+            attempt: attempt,
+            component: nameof(Clipboard),
+            diagnosticEvent: "SetContentAfter",
+            dispatcherAvailable: _dispatcher is not null,
+            dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
+        if (!published)
         {
             return false;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        Trace(request, CompleteExecutionStage.ClipboardFlushing, attempt: attempt, component: nameof(Clipboard));
-        _flush();
+        Trace(
+            request,
+            CompleteExecutionStage.ClipboardFlushing,
+            attempt: attempt,
+            component: nameof(Clipboard),
+            diagnosticEvent: "FlushBefore",
+            dispatcherAvailable: _dispatcher is not null,
+            dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
+        try
+        {
+            _flush();
+        }
+        catch (Exception exception)
+        {
+            Trace(
+                request,
+                CompleteExecutionStage.ClipboardFailed,
+                attempt: attempt,
+                component: nameof(Clipboard),
+                diagnosticEvent: "FlushException",
+                dispatcherAvailable: _dispatcher is not null,
+                dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess,
+                nativeCode: exception.HResult,
+                exceptionType: exception.GetType().FullName);
+            throw;
+        }
+
+        Trace(
+            request,
+            CompleteExecutionStage.ClipboardFlushing,
+            attempt: attempt,
+            component: nameof(Clipboard),
+            diagnosticEvent: "FlushAfter",
+            dispatcherAvailable: _dispatcher is not null,
+            dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
         Trace(request, CompleteExecutionStage.ClipboardDelivered, attempt: attempt, component: nameof(Clipboard));
         return true;
     }
@@ -294,7 +424,13 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
         CompleteExecutionStage stage,
         Failure? failure = null,
         int attempt = 0,
-        string component = nameof(WinRtClipboardDeliveryAdapter))
+        string component = nameof(WinRtClipboardDeliveryAdapter),
+        string? diagnosticEvent = null,
+        bool? dispatcherAvailable = null,
+        bool? dispatcherHasThreadAccess = null,
+        bool? dispatcherEnqueueSucceeded = null,
+        int? nativeCode = null,
+        string? exceptionType = null)
     {
         try
         {
@@ -308,14 +444,20 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
                 CompleteStage = stage,
                 FailureCode = failure?.Code,
                 FailureCategory = failure?.Category,
-                NativeCode = failure?.NativeCode,
+                NativeCode = failure?.NativeCode ?? nativeCode,
                 Component = component,
                 SelectionWidth = request.SelectionWidth,
                 SelectionHeight = request.SelectionHeight,
                 ResultWidth = metadata.PixelWidth,
                 ResultHeight = metadata.PixelHeight,
                 DisplayCount = request.DisplayCount,
-                ClipboardAttempt = attempt
+                ClipboardAttempt = attempt,
+                ManagedThreadId = Environment.CurrentManagedThreadId,
+                DispatcherAvailable = dispatcherAvailable,
+                DispatcherHasThreadAccess = dispatcherHasThreadAccess,
+                DispatcherEnqueueSucceeded = dispatcherEnqueueSucceeded,
+                DiagnosticEvent = diagnosticEvent,
+                ExceptionType = exceptionType
             });
         }
         catch

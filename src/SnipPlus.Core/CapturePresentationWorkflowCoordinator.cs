@@ -1403,7 +1403,8 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 ResultWidth = resultMetadata?.PixelWidth ?? 0,
                 ResultHeight = resultMetadata?.PixelHeight ?? 0,
                 DisplayCount = frameSet?.Frames.Count ?? 0,
-                ClipboardAttempt = clipboardAttempt
+                ClipboardAttempt = clipboardAttempt,
+                ManagedThreadId = Environment.CurrentManagedThreadId
             });
         }
         catch

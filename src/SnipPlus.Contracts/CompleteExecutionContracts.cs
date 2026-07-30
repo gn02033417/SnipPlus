@@ -39,6 +39,12 @@ public sealed record CompleteExecutionTraceEntry
     public int ResultHeight { get; init; }
     public int DisplayCount { get; init; }
     public int ClipboardAttempt { get; init; }
+    public int? ManagedThreadId { get; init; }
+    public bool? DispatcherAvailable { get; init; }
+    public bool? DispatcherHasThreadAccess { get; init; }
+    public bool? DispatcherEnqueueSucceeded { get; init; }
+    public string? DiagnosticEvent { get; init; }
+    public string? ExceptionType { get; init; }
 }
 
 public interface ICompleteExecutionTraceSink

@@ -8,6 +8,17 @@ namespace SnipPlus.Windows.Tests;
 [TestClass]
 public sealed class WinRtClipboardDeliveryAdapterTests
 {
+    private static readonly string[] DispatcherDiagnosticEvents =
+    {
+        "BeforeEnqueue",
+        "AfterEnqueue",
+        "CallbackEntered",
+        "SetContentBefore",
+        "SetContentAfter",
+        "FlushBefore",
+        "FlushAfter"
+    };
+
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Clipboard")]
@@ -108,6 +119,7 @@ public sealed class WinRtClipboardDeliveryAdapterTests
         var dispatches = 0;
         var publications = 0;
         var flushes = 0;
+        var trace = new FakeCompleteExecutionTraceSink();
         var dispatcher = new FakeClipboardDeliveryDispatcher(
             hasThreadAccess: false,
             callback =>
@@ -123,6 +135,7 @@ public sealed class WinRtClipboardDeliveryAdapterTests
                 return true;
             },
             () => flushes++,
+            traceSink: trace,
             dispatcher: dispatcher);
 
         var result = await adapter.DeliverAsync(
@@ -133,6 +146,11 @@ public sealed class WinRtClipboardDeliveryAdapterTests
         Assert.AreEqual(1, dispatches);
         Assert.AreEqual(1, publications);
         Assert.AreEqual(1, flushes);
+        var diagnosticEvents = trace.Entries
+            .Where(entry => entry.DiagnosticEvent is not null)
+            .Select(entry => entry.DiagnosticEvent)
+            .ToHashSet();
+        CollectionAssert.IsSubsetOf(DispatcherDiagnosticEvents, diagnosticEvents.ToArray());
     }
 
     [TestMethod]
@@ -181,6 +199,13 @@ public sealed class WinRtClipboardDeliveryAdapterTests
         public bool HasThreadAccess { get; }
 
         public bool TryEnqueue(Action callback) => _tryEnqueue(callback);
+    }
+
+    private sealed class FakeCompleteExecutionTraceSink : ICompleteExecutionTraceSink
+    {
+        public List<CompleteExecutionTraceEntry> Entries { get; } = new();
+
+        public void Record(CompleteExecutionTraceEntry entry) => Entries.Add(entry);
     }
 
     private static ClipboardDeliveryRequest CreateRequest(

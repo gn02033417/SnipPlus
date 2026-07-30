@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Added — Stage 6C Clipboard Boundary Diagnostics (2026-07-30)
+
+- Repository owner 重試後的 packaged trace 仍顯示 Render／PNG 成功，Clipboard 在 `0x800401F0 (CO_E_NOTINITIALIZED)` 失敗；同時確認 installed `SnipPlus.App.dll`／`SnipPlus.Windows.dll` 與上一個 artifact 一致，因此新增更細的流程診斷。
+- Complete trace 現在記錄 managed thread id、dispatcher availability／`HasThreadAccess`、enqueue result、callback entry、`SetContent` 前後、`Flush` 前後、exception type 與 HRESULT；診斷不記錄桌面像素、Clipboard payload、私人路徑或視窗資料。
+- 新增 deterministic trace assertions；Release x64 build 0 warnings／0 errors、非互動 tests `141/141` 通過，限定範圍 format verify 與 `git diff --check` 通過。修正後 artifact 仍須重新執行 packaged Complete 才能判定下一個根因。
+
 ### Fixed — Stage 6C Clipboard COM Dispatcher Boundary (2026-07-30)
 
 - Packaged `stage6c-complete-failure.jsonl` 已確認 Render、結果驗證與 PNG encoding 成功，Clipboard publication 以 `0x800401F0` (`CO_E_NOTINITIALIZED`) 失敗；根因是 WinRT Clipboard 呼叫在未初始化 COM 的 workflow thread 執行，不是 crop、render 或 PNG 內容錯誤。
