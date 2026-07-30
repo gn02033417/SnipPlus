@@ -1,4 +1,4 @@
-namespace SnipPlus.Contracts;
+﻿namespace SnipPlus.Contracts;
 
 public sealed record ClipboardDeliveryRequest
 {
@@ -6,6 +6,9 @@ public sealed record ClipboardDeliveryRequest
     public required Guid SessionId { get; init; }
     public required Guid ResultId { get; init; }
     public required IImageResult ImageResult { get; init; }
+    public int SelectionWidth { get; init; }
+    public int SelectionHeight { get; init; }
+    public int DisplayCount { get; init; }
     public bool HistoryAllowed { get; init; }
     public bool RoamingAllowed { get; init; }
     public int MaximumAttempts { get; init; } = 5;

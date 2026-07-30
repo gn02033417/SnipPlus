@@ -162,6 +162,12 @@ public interface IFunctionBarPresentationCoordinator : IDisposable
         string coordinateVersion,
         int selectionRevision);
 
+    FunctionBarPresentationResult ShowFeedback(
+        Guid sessionId,
+        string coordinateVersion,
+        int selectionRevision,
+        string message);
+
     FunctionBarPresentationResult Hide(Guid sessionId);
 
     FunctionBarPresentationResult Close(Guid sessionId);

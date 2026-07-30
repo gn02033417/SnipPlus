@@ -34,6 +34,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private readonly IFrozenDisplayFrameSetRenderer? _finalRenderer;
     private readonly IClipboardDeliveryService? _clipboardDelivery;
     private readonly Action<string>? _feedback;
+    private readonly ICompleteExecutionTraceSink _trace;
     private CaptureSessionContext? _activeSession;
     private InitialSelectionCoordinator? _selectionCoordinator;
     private CancellationTokenSource? _sessionCancellation;
@@ -50,7 +51,8 @@ public sealed class CapturePresentationWorkflowCoordinator :
         IFunctionBarPresentationCoordinator? functionBarPresentation = null,
         IFrozenDisplayFrameSetRenderer? finalRenderer = null,
         IClipboardDeliveryService? clipboardDelivery = null,
-        Action<string>? feedback = null)
+        Action<string>? feedback = null,
+        ICompleteExecutionTraceSink? traceSink = null)
     {
         _freezingCoordinator = freezingCoordinator
             ?? throw new ArgumentNullException(nameof(freezingCoordinator));
@@ -63,6 +65,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         _finalRenderer = finalRenderer;
         _clipboardDelivery = clipboardDelivery;
         _feedback = feedback;
+        _trace = traceSink ?? NoOpCompleteExecutionTraceSink.Instance;
     }
 
     public WorkflowState CurrentState => _stateAuthority.CurrentState;
@@ -425,6 +428,17 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 "Complete requires a valid locked Selection and an available output pipeline.");
         }
 
+        TraceStage(
+            CompleteExecutionStage.CommandAccepted,
+            session,
+            currentSelection,
+            component: nameof(CapturePresentationWorkflowCoordinator));
+        TraceStage(
+            CompleteExecutionStage.SessionValidated,
+            session,
+            currentSelection,
+            component: nameof(CapturePresentationWorkflowCoordinator));
+
         lock (_gate)
         {
             if (_completeInProgress)
@@ -742,55 +756,117 @@ public sealed class CapturePresentationWorkflowCoordinator :
                     session.VirtualDesktopSnapshot.CoordinateVersion,
                     StringComparison.Ordinal))
             {
-                ReturnToEditing(session, CreateFailure(
+                var failure = CreateFailure(
                     session.SessionId,
                     FailureCode.InvalidResultLifetime,
-                    "The frozen display frame set is unavailable for Complete."));
+                    "The frozen display frame set is unavailable for Complete.");
+                TraceStage(
+                    CompleteExecutionStage.RenderFailed,
+                    session,
+                    selection,
+                    failure,
+                    component: nameof(CapturePresentationWorkflowCoordinator));
+                ReturnToEditing(session, failure);
                 return;
             }
 
+            TraceStage(
+                CompleteExecutionStage.FrozenFrameSetValidated,
+                session,
+                selection,
+                component: nameof(CapturePresentationWorkflowCoordinator));
+
+            TraceStage(
+                CompleteExecutionStage.TransitioningToResultReady,
+                session,
+                selection,
+                component: nameof(WorkflowStateAuthority));
             var readyTransition = _stateAuthority.RequestTransition(new(
                 WorkflowState.Editing,
                 WorkflowState.ResultReady,
                 "CompleteRenderStarted"));
             if (!readyTransition.IsSuccess)
             {
-                ReturnToEditing(session, readyTransition.Failure ?? CreateFailure(
+                var failure = readyTransition.Failure ?? CreateFailure(
                     session.SessionId,
                     FailureCode.InvalidStateTransition,
-                    "The workflow could not start the final render."));
+                    "The workflow could not start the final render.");
+                TraceStage(
+                    CompleteExecutionStage.RenderFailed,
+                    session,
+                    selection,
+                    failure,
+                    component: nameof(WorkflowStateAuthority));
+                ReturnToEditing(session, failure);
                 return;
             }
 
+            TraceStage(
+                CompleteExecutionStage.Rendering,
+                session,
+                selection,
+                component: nameof(IFrozenDisplayFrameSetRenderer));
             var rendered = await _finalRenderer!
                 .RenderAsync(frameSet, bounds, session.Cancellation)
                 .ConfigureAwait(true);
             if (rendered is FrozenDisplayFrameSetRenderOutcome.Cancelled cancelled)
             {
-                ReturnToEditing(session, CreateFailure(
+                var failure = CreateFailure(
                     session.SessionId,
                     FailureCode.Cancelled,
-                    cancelled.CancellationOrigin));
+                    cancelled.CancellationOrigin);
+                TraceStage(
+                    CompleteExecutionStage.RenderFailed,
+                    session,
+                    selection,
+                    failure,
+                    component: nameof(IFrozenDisplayFrameSetRenderer));
+                ReturnToEditing(session, failure);
                 return;
             }
 
             if (rendered is FrozenDisplayFrameSetRenderOutcome.Failed failed)
             {
+                TraceStage(
+                    CompleteExecutionStage.RenderFailed,
+                    session,
+                    selection,
+                    failed.Failure,
+                    component: nameof(IFrozenDisplayFrameSetRenderer));
                 ReturnToEditing(session, failed.Failure);
                 return;
             }
 
             if (rendered is not FrozenDisplayFrameSetRenderOutcome.Succeeded succeeded)
             {
-                ReturnToEditing(session, CreateFailure(
+                var failure = CreateFailure(
                     session.SessionId,
                     FailureCode.RenderingFailed,
-                    "The final renderer returned an unknown outcome."));
+                    "The final renderer returned an unknown outcome.");
+                TraceStage(
+                    CompleteExecutionStage.RenderFailed,
+                    session,
+                    selection,
+                    failure,
+                    component: nameof(IFrozenDisplayFrameSetRenderer));
+                ReturnToEditing(session, failure);
                 return;
             }
 
             result = succeeded.ImageResult;
+            TraceStage(
+                CompleteExecutionStage.RenderSucceeded,
+                session,
+                selection,
+                result: result,
+                component: nameof(IFrozenDisplayFrameSetRenderer));
 
+            TraceStage(
+                CompleteExecutionStage.ResultValidation,
+                session,
+                selection,
+                result: result,
+                component: nameof(CapturePresentationWorkflowCoordinator));
             if (result is null
                 || result.IsDisposed
                 || result.Metadata.SessionId != session.SessionId
@@ -798,23 +874,45 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 || result.Metadata.PixelWidth != bounds.Width
                 || result.Metadata.PixelHeight != bounds.Height)
             {
-                ReturnToEditing(session, CreateFailure(
+                var failure = CreateFailure(
                     session.SessionId,
                     FailureCode.InvalidResultLifetime,
-                    "The final render did not produce a valid canonical Selection result."));
+                    "The final render did not produce a valid canonical Selection result.");
+                TraceStage(
+                    CompleteExecutionStage.ResultValidationFailed,
+                    session,
+                    selection,
+                    failure,
+                    result,
+                    nameof(CapturePresentationWorkflowCoordinator));
+                ReturnToEditing(session, failure);
                 return;
             }
 
+            TraceStage(
+                CompleteExecutionStage.TransitioningToDelivering,
+                session,
+                selection,
+                result: result,
+                component: nameof(WorkflowStateAuthority));
             var deliveryTransition = _stateAuthority.RequestTransition(new(
                 WorkflowState.ResultReady,
                 WorkflowState.Delivering,
                 "CompleteRenderSucceeded"));
             if (!deliveryTransition.IsSuccess)
             {
-                ReturnToEditing(session, deliveryTransition.Failure ?? CreateFailure(
+                var failure = deliveryTransition.Failure ?? CreateFailure(
                     session.SessionId,
                     FailureCode.InvalidStateTransition,
-                    "The workflow could not start Clipboard delivery."));
+                    "The workflow could not start Clipboard delivery.");
+                TraceStage(
+                    CompleteExecutionStage.ClipboardFailed,
+                    session,
+                    selection,
+                    failure,
+                    result,
+                    nameof(WorkflowStateAuthority));
+                ReturnToEditing(session, failure);
                 return;
             }
 
@@ -830,6 +928,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
                         RoamingAllowed = false,
                         MaximumAttempts = 5,
                         RetryBudget = TimeSpan.FromSeconds(1),
+                        SelectionWidth = bounds.Width,
+                        SelectionHeight = bounds.Height,
+                        DisplayCount = frameSet.Frames.Count,
                         Cancellation = session.Cancellation
                     },
                     session.Cancellation)
@@ -846,52 +947,127 @@ public sealed class CapturePresentationWorkflowCoordinator :
                         "ClipboardDelivered"));
                     if (!completedTransition.IsSuccess)
                     {
-                        ReturnToEditing(session, completedTransition.Failure ?? CreateFailure(
+                        var failure = completedTransition.Failure ?? CreateFailure(
                             session.SessionId,
                             FailureCode.InvalidStateTransition,
-                            "The workflow could not complete after Clipboard delivery."));
+                            "The workflow could not complete after Clipboard delivery.");
+                        TraceStage(
+                            CompleteExecutionStage.ClipboardFailed,
+                            session,
+                            selection,
+                            failure,
+                            result,
+                            nameof(WorkflowStateAuthority));
+                        ReturnToEditing(session, failure);
                         return;
                     }
 
+                    TraceStage(
+                        CompleteExecutionStage.ClipboardDelivered,
+                        session,
+                        selection,
+                        result: result,
+                        clipboardAttempt: delivered.Attempts,
+                        component: nameof(IClipboardDeliveryService));
+                    TraceStage(
+                        CompleteExecutionStage.Completed,
+                        session,
+                        selection,
+                        result: result,
+                        clipboardAttempt: delivered.Attempts,
+                        component: nameof(CapturePresentationWorkflowCoordinator));
                     await CompleteSessionAsync(session).ConfigureAwait(true);
                     return;
                 case ClipboardDeliveryResult.Cancelled deliveryCancelled:
-                    ReturnToEditing(session, CreateFailure(
+                    var cancelledFailure = CreateFailure(
                         session.SessionId,
                         FailureCode.Cancelled,
-                        deliveryCancelled.CancellationOrigin));
+                        deliveryCancelled.CancellationOrigin);
+                    TraceStage(
+                        CompleteExecutionStage.ClipboardFailed,
+                        session,
+                        selection,
+                        cancelledFailure,
+                        result,
+                        nameof(IClipboardDeliveryService));
+                    ReturnToEditing(session, cancelledFailure);
                     return;
                 case ClipboardDeliveryResult.RetryableFailure retryable:
+                    TraceStage(
+                        CompleteExecutionStage.ClipboardFailed,
+                        session,
+                        selection,
+                        retryable.Failure,
+                        result,
+                        nameof(IClipboardDeliveryService),
+                        retryable.AttemptsUsed);
                     ReturnToEditing(session, retryable.Failure);
                     return;
                 case ClipboardDeliveryResult.TerminalFailure terminal:
+                    TraceStage(
+                        CompleteExecutionStage.ClipboardFailed,
+                        session,
+                        selection,
+                        terminal.Failure,
+                        result,
+                        nameof(IClipboardDeliveryService));
                     ReturnToEditing(session, terminal.Failure);
                     return;
                 default:
-                    ReturnToEditing(session, CreateFailure(
+                    var unknownDeliveryFailure = CreateFailure(
                         session.SessionId,
                         FailureCode.ClipboardPublicationRejected,
-                        "Clipboard delivery returned an unknown outcome."));
+                        "Clipboard delivery returned an unknown outcome.");
+                    TraceStage(
+                        CompleteExecutionStage.ClipboardFailed,
+                        session,
+                        selection,
+                        unknownDeliveryFailure,
+                        result,
+                        nameof(IClipboardDeliveryService));
+                    ReturnToEditing(session, unknownDeliveryFailure);
                     return;
             }
         }
         catch (OperationCanceledException)
         {
-            ReturnToEditing(session, CreateFailure(
+            var failure = CreateFailure(
                 session.SessionId,
                 FailureCode.Cancelled,
-                "CancellationToken"));
+                "CancellationToken");
+            TraceStage(
+                CompleteExecutionStage.ReturningToEditing,
+                session,
+                selection,
+                failure,
+                result,
+                nameof(CapturePresentationWorkflowCoordinator));
+            ReturnToEditing(session, failure);
         }
         catch (Exception exception)
         {
-            ReturnToEditing(session, CreateFailure(
+            var failure = CreateFailure(
                 session.SessionId,
                 FailureCode.UnexpectedFailure,
                 exception.GetType().Name,
-                exception.HResult));
+                exception.HResult);
+            TraceStage(
+                CompleteExecutionStage.ReturningToEditing,
+                session,
+                selection,
+                failure,
+                result,
+                nameof(CapturePresentationWorkflowCoordinator));
+            ReturnToEditing(session, failure);
         }
         finally
         {
+            TraceStage(
+                CompleteExecutionStage.CleaningUp,
+                session,
+                selection,
+                result: result,
+                component: nameof(CapturePresentationWorkflowCoordinator));
             result?.Dispose();
             lock (_gate)
             {
@@ -918,6 +1094,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         SelectionVisualState? selection;
         lock (_gate)
         {
+            _completeInProgress = false;
             if (_disposed || !ReferenceEquals(_activeSession, session))
             {
                 return;
@@ -936,14 +1113,35 @@ public sealed class CapturePresentationWorkflowCoordinator :
         }
 
         _feedback?.Invoke(failure.UserMessageKey);
+        TraceStage(
+            CompleteExecutionStage.ReturningToEditing,
+            session,
+            selection,
+            failure,
+            component: nameof(CapturePresentationWorkflowCoordinator));
         if (selection is not null
             && _functionBarPresentation is not null
             && selection.Status == SelectionStatus.Locked
             && selection.InteractionMode == SelectionInteractionMode.Locked
             && selection.IsGeometryValid)
         {
-            _functionBarPresentation.Reposition(
+            var repositioned = _functionBarPresentation.Reposition(
                 CreateFunctionBarRequest(selection, FunctionBarCommandAvailability.Stage6C));
+            if (repositioned.Kind == FunctionBarPresentationResultKind.Ready)
+            {
+                var shown = _functionBarPresentation.Show(
+                    selection.SessionId,
+                    selection.CoordinateVersion,
+                    selection.SelectionRevision);
+                if (shown.Kind == FunctionBarPresentationResultKind.Shown)
+                {
+                    _functionBarPresentation.ShowFeedback(
+                        selection.SessionId,
+                        selection.CoordinateVersion,
+                        selection.SelectionRevision,
+                        GetCaptureFailureMessage(failure));
+                }
+            }
         }
     }
 
@@ -1174,6 +1372,68 @@ public sealed class CapturePresentationWorkflowCoordinator :
         correlationId,
         message,
         nativeCode: nativeCode);
+
+    private void TraceStage(
+        CompleteExecutionStage stage,
+        CaptureSessionContext session,
+        SelectionVisualState? selection,
+        Failure? failure = null,
+        IImageResult? result = null,
+        string component = "CapturePresentationWorkflowCoordinator",
+        int clipboardAttempt = 0)
+    {
+        try
+        {
+            var selectionBounds = selection?.NormalizedPhysicalBounds;
+            var resultMetadata = result?.Metadata;
+            var frameSet = session.FrozenDisplayFrames;
+            _trace.Record(new CompleteExecutionTraceEntry
+            {
+                TimestampUtc = DateTimeOffset.UtcNow,
+                SessionId = session.SessionId,
+                SelectionRevision = selection?.SelectionRevision ?? -1,
+                WorkflowState = _stateAuthority.CurrentState,
+                CompleteStage = stage,
+                FailureCode = failure?.Code,
+                FailureCategory = failure?.Category,
+                NativeCode = failure?.NativeCode,
+                Component = component,
+                SelectionWidth = selectionBounds?.Width ?? 0,
+                SelectionHeight = selectionBounds?.Height ?? 0,
+                ResultWidth = resultMetadata?.PixelWidth ?? 0,
+                ResultHeight = resultMetadata?.PixelHeight ?? 0,
+                DisplayCount = frameSet?.Frames.Count ?? 0,
+                ClipboardAttempt = clipboardAttempt
+            });
+        }
+        catch
+        {
+            // Diagnostics must never change the capture outcome.
+        }
+    }
+
+    private static string GetCaptureFailureMessage(Failure failure) => failure.Code switch
+    {
+        FailureCode.InvalidSelection => "目前框選範圍無法完成。",
+        FailureCode.EncodingFailed
+            or FailureCode.ClipboardBusy
+            or FailureCode.ClipboardPublicationRejected
+            or FailureCode.OutputAccessDenied
+            or FailureCode.OutputWriteFailed => "無法複製到剪貼簿，請再試一次。",
+        FailureCode.RenderingFailed
+            or FailureCode.RenderingResourceLost
+            or FailureCode.InvalidResultLifetime => "無法產生截圖影像，請再試一次。",
+        _ => "無法完成截圖，請再試一次。"
+    };
+
+    private sealed class NoOpCompleteExecutionTraceSink : ICompleteExecutionTraceSink
+    {
+        public static NoOpCompleteExecutionTraceSink Instance { get; } = new();
+
+        public void Record(CompleteExecutionTraceEntry entry)
+        {
+        }
+    }
 
     private static void Observe(ValueTask<CapturePresentationOutcome> operation) =>
         _ = operation.AsTask();

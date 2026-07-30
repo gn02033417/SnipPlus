@@ -160,6 +160,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     "The Function Bar show request is stale.");
             }
 
+            presentation.Surface.ClearFeedback();
             presentation.Surface.SetVisible(true);
             return FunctionBarResult(
                 FunctionBarPresentationResultKind.Shown,
@@ -169,6 +170,56 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 presentation.Placement,
                 null,
                 "The Function Bar is visible.");
+        }
+    }
+
+    public FunctionBarPresentationResult ShowFeedback(
+        Guid sessionId,
+        string coordinateVersion,
+        int selectionRevision,
+        string message)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        lock (_gate)
+        {
+            if (!_functionBars.TryGetValue(sessionId, out var presentation))
+            {
+                return FunctionBarResult(
+                    FunctionBarPresentationResultKind.StaleSession,
+                    sessionId,
+                    coordinateVersion,
+                    selectionRevision,
+                    null,
+                    null,
+                    "The Function Bar feedback session is no longer active.");
+            }
+
+            if (!string.Equals(
+                    presentation.Request.CoordinateVersion,
+                    coordinateVersion,
+                    StringComparison.Ordinal)
+                || selectionRevision != presentation.Request.Selection.SelectionRevision)
+            {
+                return FunctionBarResult(
+                    FunctionBarPresentationResultKind.StaleSelectionRevision,
+                    sessionId,
+                    coordinateVersion,
+                    selectionRevision,
+                    presentation.Placement,
+                    null,
+                    "The Function Bar feedback request is stale.");
+            }
+
+            presentation.Surface.ShowFeedback(message);
+            presentation.Surface.SetVisible(true);
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.Shown,
+                sessionId,
+                coordinateVersion,
+                selectionRevision,
+                presentation.Placement,
+                null,
+                message);
         }
     }
 
@@ -594,6 +645,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         {
             Orientation = Orientation.Horizontal
         };
+        private readonly TextBlock _feedbackText = new()
+        {
+            Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 255, 255)),
+            Margin = new Thickness(4, 0, 8, 0),
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed
+        };
         private readonly IReadOnlyDictionary<FunctionBarCommand, Button> _buttons;
         private readonly CancelCommandGate _cancelCommandGate = new();
         private readonly CancelCommandGate _completeCommandGate = new();
@@ -617,6 +675,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _buttons[FunctionBarCommand.Complete].Click += OnCompleteClicked;
             _buttons[FunctionBarCommand.Cancel].Click += OnCancelClicked;
             _root.PointerPressed += OnPointerPressed;
+            _panel.Children.Add(_feedbackText);
             foreach (var button in _buttons.Values)
             {
                 _panel.Children.Add(button);
@@ -636,6 +695,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             if (request.Availability.IsEnabled(FunctionBarCommand.Complete))
             {
                 _completeCommandGate.Reset();
+            }
+
+            if (!request.Availability.IsEnabled(FunctionBarCommand.Complete)
+                && !request.Availability.IsEnabled(FunctionBarCommand.Cancel))
+            {
+                ClearFeedback();
             }
 
             if (request.Availability.IsEnabled(FunctionBarCommand.Cancel))
@@ -679,6 +744,24 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             if (!_disposed)
             {
                 ApplyVisibility(_root, visible);
+            }
+        }
+
+        public void ClearFeedback()
+        {
+            if (!_disposed)
+            {
+                _feedbackText.Text = string.Empty;
+                _feedbackText.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        public void ShowFeedback(string message)
+        {
+            if (!_disposed)
+            {
+                _feedbackText.Text = message;
+                _feedbackText.Visibility = Visibility.Visible;
             }
         }
 

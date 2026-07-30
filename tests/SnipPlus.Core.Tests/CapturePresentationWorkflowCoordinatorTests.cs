@@ -232,13 +232,15 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         var functionBar = new FakeFunctionBarPresentationCoordinator();
         var renderer = new FakeFinalRenderer();
         var clipboard = new FakeClipboardDelivery();
+        var trace = new FakeCompleteExecutionTraceSink();
         using var workflow = CreateWorkflow(
             requests,
             provider,
             overlay,
             functionBar,
             renderer,
-            clipboard);
+            clipboard,
+            trace);
 
         var ready = (CapturePresentationOutcome.SelectingReady)
             await workflow.StartAsync(request, CancellationToken.None);
@@ -263,6 +265,64 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.AreEqual(0, clipboard.Calls);
         Assert.AreEqual(0, overlay.CloseCalls);
         Assert.IsFalse(ready.Session.IsDisposed);
+        Assert.IsTrue(functionBar.ShowCalls >= 2);
+        Assert.AreEqual(1, functionBar.FeedbackCalls);
+        Assert.AreEqual("無法產生截圖影像，請再試一次。", functionBar.LastFeedback);
+        Assert.AreEqual(FunctionBarCommandAvailability.Stage6C, functionBar.LastRequest!.Availability);
+        Assert.IsTrue(trace.Entries.Any(entry => entry.CompleteStage == CompleteExecutionStage.Rendering));
+        var renderFailure = trace.Entries.Last(entry => entry.CompleteStage == CompleteExecutionStage.RenderFailed);
+        Assert.AreEqual(FailureCode.RenderingFailed, renderFailure.FailureCode);
+        Assert.AreEqual(nameof(IFrozenDisplayFrameSetRenderer), renderFailure.Component);
+        await workflow.CancelCurrentAsync("test");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public async Task TraceSinkFailureDoesNotChangeCompleteFailureRecovery()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer
+        {
+            Outcome = new FrozenDisplayFrameSetRenderOutcome.Failed(Failure.Create(
+                FailureCode.RenderingFailed,
+                FailureCategory.Resource,
+                FailureRecoverability.RetrySameIntent,
+                "test-renderer",
+                request.RequestId,
+                "synthetic renderer failure"))
+        };
+        var clipboard = new FakeClipboardDelivery();
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard,
+            new ThrowingCompleteExecutionTraceSink());
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        LockSelection(overlay.InputSink!, ready.Session);
+
+        var accepted = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            workflow.CurrentSelection!.SelectionRevision,
+            FunctionBarCommand.Complete));
+
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, accepted.Kind);
+        await WaitForAsync(() => renderer.Calls == 1);
+        Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
+        Assert.AreEqual(1, functionBar.FeedbackCalls);
+        Assert.AreEqual("無法產生截圖影像，請再試一次。", functionBar.LastFeedback);
         await workflow.CancelCurrentAsync("test");
     }
 
@@ -332,13 +392,15 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
                 request.RequestId,
                 "synthetic clipboard contention")
         };
+        var trace = new FakeCompleteExecutionTraceSink();
         using var workflow = CreateWorkflow(
             requests,
             provider,
             overlay,
             functionBar,
             renderer,
-            clipboard);
+            clipboard,
+            trace);
 
         var ready = (CapturePresentationOutcome.SelectingReady)
             await workflow.StartAsync(request, CancellationToken.None);
@@ -356,6 +418,13 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.AreEqual(0, overlay.CloseCalls);
         Assert.IsFalse(ready.Session.IsDisposed);
         Assert.IsTrue(renderer.LastImageResult?.IsDisposed ?? false);
+        Assert.IsTrue(functionBar.ShowCalls >= 2);
+        Assert.AreEqual(1, functionBar.FeedbackCalls);
+        Assert.AreEqual("無法複製到剪貼簿，請再試一次。", functionBar.LastFeedback);
+        Assert.IsTrue(trace.Entries.Any(entry => entry.CompleteStage == CompleteExecutionStage.TransitioningToDelivering));
+        var clipboardFailure = trace.Entries.Last(entry => entry.CompleteStage == CompleteExecutionStage.ClipboardFailed);
+        Assert.AreEqual(FailureCode.ClipboardBusy, clipboardFailure.FailureCode);
+        Assert.AreEqual(nameof(IClipboardDeliveryService), clipboardFailure.Component);
         await workflow.CancelCurrentAsync("test");
     }
 
@@ -437,7 +506,8 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         FakeOverlayCoordinator overlay,
         IFunctionBarPresentationCoordinator? functionBar = null,
         IFrozenDisplayFrameSetRenderer? finalRenderer = null,
-        IClipboardDeliveryService? clipboardDelivery = null)
+        IClipboardDeliveryService? clipboardDelivery = null,
+        ICompleteExecutionTraceSink? traceSink = null)
     {
         var freezing = new CaptureFreezingCoordinator(
             requests,
@@ -449,7 +519,8 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             new HiddenSourceExclusion(),
             functionBarPresentation: functionBar,
             finalRenderer: finalRenderer,
-            clipboardDelivery: clipboardDelivery);
+            clipboardDelivery: clipboardDelivery,
+            traceSink: traceSink);
     }
 
     private static async Task WaitForStateAsync(
@@ -725,6 +796,10 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
 
         public int HideCalls { get; private set; }
 
+        public int FeedbackCalls { get; private set; }
+
+        public string? LastFeedback { get; private set; }
+
         public int CloseCalls { get; private set; }
 
         public FunctionBarPresentationRequest? LastRequest { get; private set; }
@@ -779,6 +854,29 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
                 "hidden");
         }
 
+        public FunctionBarPresentationResult ShowFeedback(
+            Guid sessionId,
+            string coordinateVersion,
+            int selectionRevision,
+            string message)
+        {
+            FeedbackCalls++;
+            LastFeedback = message;
+            return new FunctionBarPresentationResult(
+                FunctionBarPresentationResultKind.Shown,
+                sessionId,
+                coordinateVersion,
+                selectionRevision,
+                new FunctionBarPlacementResult(
+                    "left",
+                    new PhysicalRect(0, 8, 100, 48),
+                    FunctionBarPlacementSide.Below,
+                    selectionRevision,
+                    true),
+                null,
+                message);
+        }
+
         public FunctionBarPresentationResult Close(Guid sessionId)
         {
             CloseCalls++;
@@ -822,5 +920,17 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             null,
             failure,
             "failed");
+    }
+
+    private sealed class FakeCompleteExecutionTraceSink : ICompleteExecutionTraceSink
+    {
+        public List<CompleteExecutionTraceEntry> Entries { get; } = new();
+
+        public void Record(CompleteExecutionTraceEntry entry) => Entries.Add(entry);
+    }
+
+    private sealed class ThrowingCompleteExecutionTraceSink : ICompleteExecutionTraceSink
+    {
+        public void Record(CompleteExecutionTraceEntry entry) => throw new InvalidOperationException("synthetic trace failure");
     }
 }

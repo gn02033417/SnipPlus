@@ -49,7 +49,8 @@ public partial class MainWindow : Window, IDisposable
             _platformResources.OverlayCoordinator,
             _platformResources.FinalRenderer,
             _platformResources.ClipboardDelivery,
-            message => SetStatus(message));
+            message => SetStatus(message),
+            _platformResources.CompleteExecutionTrace);
         _residentActivation = new ResidentActivationBoundary(
             isApplicationExiting: () => Volatile.Read(ref _shutdownStarted) != 0
                 || Program.IsApplicationExitStarted,
