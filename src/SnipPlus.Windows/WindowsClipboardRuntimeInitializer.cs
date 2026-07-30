@@ -4,14 +4,14 @@ namespace SnipPlus.Windows;
 
 public sealed class WindowsClipboardRuntimeInitializer : IClipboardRuntimeInitializer
 {
-    private const uint RoInitSingleThreaded = 0;
+    private const uint RoInitMultithreaded = 1;
     private static readonly WindowsClipboardRuntimeInitializer _instance = new();
 
     public static WindowsClipboardRuntimeInitializer Instance => _instance;
 
     public IDisposable Enter()
     {
-        var hresult = RoInitialize(RoInitSingleThreaded);
+        var hresult = RoInitialize(RoInitMultithreaded);
         if (hresult < 0)
         {
             Marshal.ThrowExceptionForHR(hresult);

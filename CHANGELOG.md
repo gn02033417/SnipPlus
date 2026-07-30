@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Corrected — Stage 6C Clipboard Runtime Apartment Mode (2026-07-30)
+
+- The first post-fix packaged trace showed `RuntimeInitializationException` with `0x80010106 (RPC_E_CHANGED_MODE)` before `SetContent`; the current dispatcher thread was already using a different apartment mode.
+- `WindowsClipboardRuntimeInitializer` now uses `RoInitialize(RO_INIT_MULTITHREADED)`, matching the actual packaged dispatcher thread and the Windows Runtime initialization contract. `RoUninitialize()` remains balanced through the existing scope.
+- This correction still requires one packaged Complete retry; no success is claimed until the new trace reaches `SetContentAfter` and `FlushAfter` or records the next concrete failure.
+
 ### Fixed — Stage 6C Clipboard WinRT Apartment Initialization (2026-07-30)
 
 - Repository owner packaged trace confirmed `Clipboard.SetContentWithOptions()` failed directly with `0x800401F0 (CO_E_NOTINITIALIZED)` after Render／PNG succeeded; `Flush()` was not reached. The failure was not dispatcher enqueue or Clipboard contention.
