@@ -15,17 +15,20 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
     private readonly Action _flush;
     private readonly ICompleteExecutionTraceSink _trace;
     private readonly IClipboardDeliveryDispatcher? _dispatcher;
+    private readonly IClipboardRuntimeInitializer _runtimeInitializer;
 
     public WinRtClipboardDeliveryAdapter(
         Func<DataPackage, ClipboardContentOptions, bool>? setContent = null,
         Action? flush = null,
         ICompleteExecutionTraceSink? traceSink = null,
-        IClipboardDeliveryDispatcher? dispatcher = null)
+        IClipboardDeliveryDispatcher? dispatcher = null,
+        IClipboardRuntimeInitializer? runtimeInitializer = null)
     {
         _setContent = setContent ?? Clipboard.SetContentWithOptions;
         _flush = flush ?? Clipboard.Flush;
         _trace = traceSink ?? NoOpCompleteExecutionTraceSink.Instance;
         _dispatcher = dispatcher;
+        _runtimeInitializer = runtimeInitializer ?? NoOpClipboardRuntimeInitializer.Instance;
     }
 
     public ValueTask<ClipboardDeliveryResult> DeliverAsync(
@@ -325,6 +328,56 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
             request,
             CompleteExecutionStage.ClipboardPublishing,
             attempt: attempt,
+            component: "ClipboardRuntime",
+            diagnosticEvent: "RuntimeInitializationBefore",
+            dispatcherAvailable: _dispatcher is not null,
+            dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
+        IDisposable runtimeScope;
+        try
+        {
+            runtimeScope = _runtimeInitializer.Enter();
+        }
+        catch (Exception exception)
+        {
+            Trace(
+                request,
+                CompleteExecutionStage.ClipboardFailed,
+                attempt: attempt,
+                component: "ClipboardRuntime",
+                diagnosticEvent: "RuntimeInitializationException",
+                dispatcherAvailable: _dispatcher is not null,
+                dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess,
+                nativeCode: exception.HResult,
+                exceptionType: exception.GetType().FullName);
+            throw;
+        }
+
+        using (runtimeScope)
+        {
+            Trace(
+                request,
+                CompleteExecutionStage.ClipboardPublishing,
+                attempt: attempt,
+                component: "ClipboardRuntime",
+                diagnosticEvent: "RuntimeInitializationAfter",
+                dispatcherAvailable: _dispatcher is not null,
+                dispatcherHasThreadAccess: _dispatcher?.HasThreadAccess);
+            return PublishWithInitializedRuntime(package, options, request, attempt, cancellationToken);
+        }
+    }
+
+    private bool PublishWithInitializedRuntime(
+        DataPackage package,
+        ClipboardContentOptions options,
+        ClipboardDeliveryRequest request,
+        int attempt,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Trace(
+            request,
+            CompleteExecutionStage.ClipboardPublishing,
+            attempt: attempt,
             component: nameof(Clipboard),
             diagnosticEvent: "SetContentBefore",
             dispatcherAvailable: _dispatcher is not null,
@@ -472,6 +525,22 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
 
         public void Record(CompleteExecutionTraceEntry entry)
         {
+        }
+    }
+
+    private sealed class NoOpClipboardRuntimeInitializer : IClipboardRuntimeInitializer
+    {
+        public static NoOpClipboardRuntimeInitializer Instance { get; } = new();
+
+        public IDisposable Enter() => NoOpDisposable.Instance;
+
+        private sealed class NoOpDisposable : IDisposable
+        {
+            public static NoOpDisposable Instance { get; } = new();
+
+            public void Dispose()
+            {
+            }
         }
     }
 }

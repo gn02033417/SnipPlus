@@ -26,7 +26,8 @@ public sealed class WindowsCapturePlatformResources : IDisposable
             : new DispatcherQueueClipboardDeliveryDispatcher(dispatcherQueue);
         ClipboardDelivery = new WinRtClipboardDeliveryAdapter(
             traceSink: CompleteExecutionTrace,
-            dispatcher: clipboardDispatcher);
+            dispatcher: clipboardDispatcher,
+            runtimeInitializer: WindowsClipboardRuntimeInitializer.Instance);
     }
 
     public CanvasDevice CanvasDevice { get; }

@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Fixed — Stage 6C Clipboard WinRT Apartment Initialization (2026-07-30)
+
+- Repository owner packaged trace confirmed `Clipboard.SetContentWithOptions()` failed directly with `0x800401F0 (CO_E_NOTINITIALIZED)` after Render／PNG succeeded; `Flush()` was not reached. The failure was not dispatcher enqueue or Clipboard contention.
+- `WindowsClipboardRuntimeInitializer` now calls `RoInitialize(RO_INIT_SINGLETHREADED)` at the actual Clipboard publication boundary and balances it with `RoUninitialize()` after `SetContent`／`Flush`; the production platform resource injects this initializer without changing `COMP-001`, retry policy, Clipboard history／roaming defaults or output semantics.
+- Added deterministic ordering coverage for runtime initialization、`SetContent`、`Flush` and cleanup. Locked restore succeeded、Release x64 build succeeded with `0 warnings／0 errors`、non-interactive tests `142/142` passed、modified-file format verification and `git diff --check` passed.
+- The corrected signed packaged MSIX was installed for the next Repository owner Complete retry; post-fix Clipboard／paste runtime acceptance remains pending. No desktop screenshot or Clipboard payload was saved, and Stage 7 was not started.
+
 ### Added — Stage 6C Clipboard Boundary Diagnostics (2026-07-30)
 
 - Repository owner 重試後的 packaged trace 仍顯示 Render／PNG 成功，Clipboard 在 `0x800401F0 (CO_E_NOTINITIALIZED)` 失敗；同時確認 installed `SnipPlus.App.dll`／`SnipPlus.Windows.dll` 與上一個 artifact 一致，因此新增更細的流程診斷。

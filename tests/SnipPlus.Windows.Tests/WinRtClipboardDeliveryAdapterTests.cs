@@ -19,6 +19,14 @@ public sealed class WinRtClipboardDeliveryAdapterTests
         "FlushAfter"
     };
 
+    private static readonly string[] RuntimeInitializationCallOrder =
+    {
+        "Enter",
+        "SetContent",
+        "Flush",
+        "Dispose"
+    };
+
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Clipboard")]
@@ -156,6 +164,33 @@ public sealed class WinRtClipboardDeliveryAdapterTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Clipboard")]
+    public async Task ClipboardPublicationInitializesRuntimeAroundSetContentAndFlush()
+    {
+        using var image = CreateImage();
+        var calls = new List<string>();
+        var initializer = new FakeClipboardRuntimeInitializer(calls);
+        var adapter = new WinRtClipboardDeliveryAdapter(
+            (_, _) =>
+            {
+                calls.Add("SetContent");
+                return true;
+            },
+            () => calls.Add("Flush"),
+            runtimeInitializer: initializer);
+
+        var result = await adapter.DeliverAsync(
+            CreateRequest(image, maximumAttempts: 1, retryBudget: TimeSpan.Zero),
+            CancellationToken.None);
+
+        Assert.IsInstanceOfType<ClipboardDeliveryResult.Delivered>(result);
+        CollectionAssert.AreEqual(RuntimeInitializationCallOrder, calls);
+        Assert.AreEqual(1, initializer.EnterCount);
+        Assert.AreEqual(1, initializer.DisposeCount);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Clipboard")]
     public async Task UnavailableClipboardDispatcherReturnsTypedFailureWithoutPublishing()
     {
         using var image = CreateImage();
@@ -206,6 +241,49 @@ public sealed class WinRtClipboardDeliveryAdapterTests
         public List<CompleteExecutionTraceEntry> Entries { get; } = new();
 
         public void Record(CompleteExecutionTraceEntry entry) => Entries.Add(entry);
+    }
+
+    private sealed class FakeClipboardRuntimeInitializer : IClipboardRuntimeInitializer
+    {
+        private readonly List<string> _calls;
+
+        public FakeClipboardRuntimeInitializer(List<string> calls)
+        {
+            _calls = calls;
+        }
+
+        public int EnterCount { get; private set; }
+
+        public int DisposeCount { get; private set; }
+
+        public IDisposable Enter()
+        {
+            EnterCount++;
+            _calls.Add("Enter");
+            return new Scope(this);
+        }
+
+        private sealed class Scope : IDisposable
+        {
+            private readonly FakeClipboardRuntimeInitializer _owner;
+            private int _disposed;
+
+            public Scope(FakeClipboardRuntimeInitializer owner)
+            {
+                _owner = owner;
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                {
+                    return;
+                }
+
+                _owner.DisposeCount++;
+                _owner._calls.Add("Dispose");
+            }
+        }
     }
 
     private static ClipboardDeliveryRequest CreateRequest(
