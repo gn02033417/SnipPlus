@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Corrected — Stage 6C Complete Failure Trace and Recovery (2026-07-30)
+
+- Repository owner 使用已確認一致的 Release／MSIX／Installed `SnipPlus.App.dll` Artifact 重現了 Complete 後 Function Bar 立即消失、Overlay 保留、Clipboard 不變，且移動 Pointer 後 Function Bar 才重新出現的問題；本次不再把 Artifact mismatch 或先前偶發的 startup crash 當作 Complete 根因。
+- 已確認 Function Bar 缺陷根因：`ReturnToEditing` 只呼叫 `Reposition`，而 Windows `PrepareOrReposition` 會先將 hosted Function Bar 設為不可見；Pointer movement 後的 selection update 才會另外呼叫 `Show`。現在 failure recovery 會先清除 `_completeInProgress`，返回 `Editing`，再用最新 `SelectionRevision` 執行 Stage 6C `Reposition`、`Show`，並在 Capture UI 顯示可理解的 Render／Clipboard failure feedback；不關閉 Overlay、Session 或 FrozenDisplayFrameSet。
+- 新增平台中立 `CompleteExecutionStage`／`CompleteExecutionTraceEntry`／`ICompleteExecutionTraceSink`，以及 packaged App `LocalCache\Diagnostics\stage6c-complete-failure.jsonl` sink。Trace 僅記錄 stage、typed `FailureCode`／category、HRESULT、component、workflow state、session／revision、selection／result 尺寸、display count 與 Clipboard attempt；不記錄桌面像素、Clipboard payload、視窗標題或私人路徑，Trace 寫入失敗不影響產品流程。
+- 新增 deterministic recovery／trace assertions；locked restore 成功、Release x64 solution build 成功（`0 warnings、0 errors`）、非互動測試 `139/139` 通過（`0 failures、0 skips`）、本次修改 C# 檔案限定範圍 format verify 與 `git diff --check` 通過。
+- Source implementation commit 為 `8eec140919c6871c6ead50a522f42b0d54bea4a0`。從該 commit 建立並重新安裝 Development MSIX；PackageFullName 為 `SnipPlus.App_1.0.0.0_x64__26728c12bvz0c`，Release／package／installed DLL SHA-256 均為 `A1BAEC6A0DFE81479DBD2C2448482595BB267EF2DCBAC7B829ED0C4D37B808BF`，簽署後 MSIX SHA-256 為 `5213F36B5773D221605CD80F1BD5AAF435E8A4B2779AEB2422464D5496EC5ED8`；不可覆寫 Artifact 已保存於 `D:\MEGA\SnipPlusArtifacts\Stage6C\8eec140919c6871c6ead50a522f42b0d54bea4a0`。
+- 本次未取得 Repository owner 實際按下 Complete 後的 packaged JSONL failure stage，因此尚未宣稱 Render、Result validation、PNG encoding 或 Clipboard 的實際 runtime root cause；Stage 6C 維持 `Partial／packaged failure-stage verification pending`。未啟動 Paint、Notepad 或其他外部 GUI，未保存桌面截圖或 Clipboard payload，Stage 7 未開始。
+
 ### Added
 
 - 建立 Repository 文件治理、PRD、Specs、Architecture、ADR、Development Guide、Coding Standard、ROADMAP 與 TODO。
