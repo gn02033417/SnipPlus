@@ -11,6 +11,12 @@
 - 新增 dispatcher unavailable 與 caller 不具 thread access 的 deterministic tests；Release x64 build 0 warnings／0 errors、非互動 tests `141/141` 通過，限定範圍 C# format verify 與 `git diff --check` 通過。
 - 修正後尚未重新執行 Repository owner 的 packaged Complete／實際貼上驗收；Stage 6C 仍為 `Partial／post-fix packaged Clipboard verification pending`。未啟動 Paint、Notepad 或其他外部 GUI，未保存桌面截圖或 Clipboard payload，Stage 7 未開始。
 
+### Corrected — Stage 6C Exact WinRT Clipboard Call Boundary (2026-07-30)
+
+- Repository owner 使用上一個修正版 artifact 重試後，trace 仍確認 Render／PNG 成功、`ClipboardPublicationRejected` 與 `0x800401F0 (CO_E_NOTINITIALIZED)`；installed `SnipPlus.App.dll`／`SnipPlus.Windows.dll` 與 artifact 一致，因此排除 artifact mismatch。
+- 前一版只將整個 async delivery 啟動到 dispatcher；`await PngEncoder` 後仍可能在其他 thread 繼續。現在只有實際的同步 `Clipboard.SetContentWithOptions()` 與 `Clipboard.Flush()` 會在 dispatcher callback 內執行，確保 WinRT Clipboard 操作不會落到未初始化 COM 的 thread。
+- Build 0 warnings／0 errors、非互動 tests `141/141` 通過、限定範圍 format verify 與 `git diff --check` 通過。修正後 packaged Complete／實際貼上仍待重新驗收，Stage 6C 維持 Partial。
+
 ### Corrected — Stage 6C Complete Failure Trace and Recovery (2026-07-30)
 
 - Repository owner 使用已確認一致的 Release／MSIX／Installed `SnipPlus.App.dll` Artifact 重現了 Complete 後 Function Bar 立即消失、Overlay 保留、Clipboard 不變，且移動 Pointer 後 Function Bar 才重新出現的問題；本次不再把 Artifact mismatch 或先前偶發的 startup crash 當作 Complete 根因。

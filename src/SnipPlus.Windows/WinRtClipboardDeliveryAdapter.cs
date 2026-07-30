@@ -35,51 +35,7 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (_dispatcher is not null && !_dispatcher.HasThreadAccess)
-        {
-            return DeliverOnDispatcherAsync(request, cancellationToken);
-        }
-
         return DeliverCoreAsync(request, cancellationToken);
-    }
-
-    private async ValueTask<ClipboardDeliveryResult> DeliverOnDispatcherAsync(
-        ClipboardDeliveryRequest request,
-        CancellationToken cancellationToken)
-    {
-        var completion = new TaskCompletionSource<ClipboardDeliveryResult>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-
-        try
-        {
-            if (!_dispatcher!.TryEnqueue(async () =>
-            {
-                try
-                {
-                    completion.TrySetResult(
-                        await DeliverCoreAsync(request, cancellationToken));
-                }
-                catch (OperationCanceledException)
-                {
-                    completion.TrySetResult(Cancelled(request));
-                }
-                catch (Exception exception)
-                {
-                    completion.TrySetResult(DispatcherFailure(request, exception));
-                }
-            }))
-            {
-                return DispatcherFailure(
-                    request,
-                    new InvalidOperationException("Clipboard dispatcher is unavailable."));
-            }
-        }
-        catch (Exception exception)
-        {
-            return DispatcherFailure(request, exception);
-        }
-
-        return await completion.Task;
     }
 
     private async ValueTask<ClipboardDeliveryResult> DeliverCoreAsync(
@@ -153,8 +109,12 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
                         IsRoamable = request.RoamingAllowed
                     };
 
-                    Trace(request, CompleteExecutionStage.ClipboardPublishing, attempt: attempt, component: nameof(Clipboard));
-                    if (!_setContent(package, options))
+                    if (!await PublishOnRequiredThreadAsync(
+                        package,
+                        options,
+                        request,
+                        attempt,
+                        cancellationToken))
                     {
                         Trace(
                             request,
@@ -173,9 +133,6 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
                     }
                     else
                     {
-                        Trace(request, CompleteExecutionStage.ClipboardFlushing, attempt: attempt, component: nameof(Clipboard));
-                        _flush();
-                        Trace(request, CompleteExecutionStage.ClipboardDelivered, attempt: attempt, component: nameof(Clipboard));
                         return new ClipboardDeliveryResult.Delivered(
                             request.DeliveryId,
                             request.SessionId,
@@ -258,20 +215,61 @@ public sealed class WinRtClipboardDeliveryAdapter : IClipboardDeliveryService
         }
     }
 
-    private ClipboardDeliveryResult.TerminalFailure DispatcherFailure(
+    private async ValueTask<bool> PublishOnRequiredThreadAsync(
+        DataPackage package,
+        ClipboardContentOptions options,
         ClipboardDeliveryRequest request,
-        Exception exception)
+        int attempt,
+        CancellationToken cancellationToken)
     {
-        var failure = Failure.Create(
-            FailureCode.ClipboardPublicationRejected,
-            FailureCategory.IO,
-            FailureRecoverability.TerminalForSession,
-            "WinRtClipboardDeliveryAdapter.Dispatcher",
-            request.DeliveryId,
-            exception.Message,
-            nativeCode: exception.HResult);
-        Trace(request, CompleteExecutionStage.ClipboardFailed, failure, component: nameof(_dispatcher));
-        return TerminalFailure(request, failure);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (_dispatcher is null || _dispatcher.HasThreadAccess)
+        {
+            return PublishDirect(package, options, request, attempt, cancellationToken);
+        }
+
+        var completion = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var enqueued = _dispatcher.TryEnqueue(() =>
+        {
+            try
+            {
+                completion.TrySetResult(
+                    PublishDirect(package, options, request, attempt, cancellationToken));
+            }
+            catch (Exception exception)
+            {
+                completion.TrySetException(exception);
+            }
+        });
+        if (!enqueued)
+        {
+            throw new InvalidOperationException("Clipboard dispatcher is unavailable.");
+        }
+
+        return await completion.Task;
+    }
+
+    private bool PublishDirect(
+        DataPackage package,
+        ClipboardContentOptions options,
+        ClipboardDeliveryRequest request,
+        int attempt,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Trace(request, CompleteExecutionStage.ClipboardPublishing, attempt: attempt, component: nameof(Clipboard));
+        if (!_setContent(package, options))
+        {
+            return false;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        Trace(request, CompleteExecutionStage.ClipboardFlushing, attempt: attempt, component: nameof(Clipboard));
+        _flush();
+        Trace(request, CompleteExecutionStage.ClipboardDelivered, attempt: attempt, component: nameof(Clipboard));
+        return true;
     }
 
     private static bool IsContention(Exception exception) => exception switch

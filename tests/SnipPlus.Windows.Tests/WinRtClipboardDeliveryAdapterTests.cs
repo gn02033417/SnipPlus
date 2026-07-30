@@ -113,7 +113,7 @@ public sealed class WinRtClipboardDeliveryAdapterTests
             callback =>
             {
                 dispatches++;
-                _ = callback();
+                callback();
                 return true;
             });
         var adapter = new WinRtClipboardDeliveryAdapter(
@@ -168,11 +168,11 @@ public sealed class WinRtClipboardDeliveryAdapterTests
 
     private sealed class FakeClipboardDeliveryDispatcher : IClipboardDeliveryDispatcher
     {
-        private readonly Func<Func<Task>, bool> _tryEnqueue;
+        private readonly Func<Action, bool> _tryEnqueue;
 
         public FakeClipboardDeliveryDispatcher(
             bool hasThreadAccess,
-            Func<Func<Task>, bool> tryEnqueue)
+            Func<Action, bool> tryEnqueue)
         {
             HasThreadAccess = hasThreadAccess;
             _tryEnqueue = tryEnqueue;
@@ -180,7 +180,7 @@ public sealed class WinRtClipboardDeliveryAdapterTests
 
         public bool HasThreadAccess { get; }
 
-        public bool TryEnqueue(Func<Task> callback) => _tryEnqueue(callback);
+        public bool TryEnqueue(Action callback) => _tryEnqueue(callback);
     }
 
     private static ClipboardDeliveryRequest CreateRequest(

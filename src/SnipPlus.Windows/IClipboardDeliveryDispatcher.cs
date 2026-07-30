@@ -6,7 +6,7 @@ public interface IClipboardDeliveryDispatcher
 {
     bool HasThreadAccess { get; }
 
-    bool TryEnqueue(Func<Task> callback);
+    bool TryEnqueue(Action callback);
 }
 
 public sealed class DispatcherQueueClipboardDeliveryDispatcher : IClipboardDeliveryDispatcher
@@ -20,9 +20,9 @@ public sealed class DispatcherQueueClipboardDeliveryDispatcher : IClipboardDeliv
 
     public bool HasThreadAccess => _dispatcherQueue.HasThreadAccess;
 
-    public bool TryEnqueue(Func<Task> callback)
+    public bool TryEnqueue(Action callback)
     {
         ArgumentNullException.ThrowIfNull(callback);
-        return _dispatcherQueue.TryEnqueue(() => _ = callback());
+        return _dispatcherQueue.TryEnqueue(() => callback());
     }
 }
