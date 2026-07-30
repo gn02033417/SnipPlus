@@ -25,6 +25,20 @@ public sealed class FunctionBarPlacementServiceTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Contract")]
+    public void Stage6CEnablesCompleteAndCancelOnly()
+    {
+        var availability = FunctionBarCommandAvailability.Stage6C;
+
+        Assert.IsTrue(availability.IsEnabled(FunctionBarCommand.Complete));
+        Assert.IsFalse(availability.IsEnabled(FunctionBarCommand.Save));
+        Assert.IsTrue(availability.IsEnabled(FunctionBarCommand.Cancel));
+        Assert.IsFalse(availability.IsEnabled(FunctionBarCommand.Undo));
+        Assert.IsFalse(availability.IsEnabled(FunctionBarCommand.Redo));
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
     public void PlacesBarBelowSelectionWhenBelowWorkAreaHasRoom()
     {
         var result = Place(

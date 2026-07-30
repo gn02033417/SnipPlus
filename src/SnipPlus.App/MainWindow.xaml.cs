@@ -46,7 +46,10 @@ public partial class MainWindow : Window, IDisposable
             _platformResources.OverlayCoordinator,
             new WindowsMainWindowCaptureSourceExclusion(this),
             _platformResources.AdapterFactory,
-            _platformResources.OverlayCoordinator);
+            _platformResources.OverlayCoordinator,
+            _platformResources.FinalRenderer,
+            _platformResources.ClipboardDelivery,
+            message => SetStatus(message));
         _residentActivation = new ResidentActivationBoundary(
             isApplicationExiting: () => Volatile.Read(ref _shutdownStarted) != 0
                 || Program.IsApplicationExitStarted,

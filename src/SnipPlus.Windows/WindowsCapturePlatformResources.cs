@@ -16,6 +16,8 @@ public sealed class WindowsCapturePlatformResources : IDisposable
             AdapterFactory,
             TopologyProvider);
         OverlayCoordinator = new WindowsFrozenDisplayOverlayCoordinator(functionBarPlacementService);
+        FinalRenderer = new WindowsFrozenDisplayFrameSetRenderer();
+        ClipboardDelivery = new WinRtClipboardDeliveryAdapter();
     }
 
     public CanvasDevice CanvasDevice { get; }
@@ -27,6 +29,10 @@ public sealed class WindowsCapturePlatformResources : IDisposable
     public WindowsFrozenDisplayFrameSetProvider FrameProvider { get; }
 
     public WindowsFrozenDisplayOverlayCoordinator OverlayCoordinator { get; }
+
+    public WindowsFrozenDisplayFrameSetRenderer FinalRenderer { get; }
+
+    public WinRtClipboardDeliveryAdapter ClipboardDelivery { get; }
 
     public void Dispose()
     {

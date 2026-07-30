@@ -1,4 +1,4 @@
-namespace SnipPlus.Contracts;
+﻿namespace SnipPlus.Contracts;
 
 public enum RenderTargetKind
 {
@@ -46,4 +46,28 @@ public abstract record RenderOutcome(Guid SceneId)
 public interface IRenderingAdapter
 {
     ValueTask<RenderOutcome> RenderAsync(RenderIntent intent, CancellationToken cancellationToken);
+}
+
+public abstract record FrozenDisplayFrameSetRenderOutcome
+{
+    private FrozenDisplayFrameSetRenderOutcome()
+    {
+    }
+
+    public sealed record Succeeded(IImageResult ImageResult)
+        : FrozenDisplayFrameSetRenderOutcome;
+
+    public sealed record Cancelled(string CancellationOrigin)
+        : FrozenDisplayFrameSetRenderOutcome;
+
+    public sealed record Failed(Failure Failure)
+        : FrozenDisplayFrameSetRenderOutcome;
+}
+
+public interface IFrozenDisplayFrameSetRenderer
+{
+    ValueTask<FrozenDisplayFrameSetRenderOutcome> RenderAsync(
+        FrozenDisplayFrameSet frameSet,
+        PhysicalRect selectionPhysicalBounds,
+        CancellationToken cancellationToken);
 }

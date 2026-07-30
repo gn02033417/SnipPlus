@@ -149,7 +149,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Contract")]
-    public async Task LockedSelectionEntersEditingAndOnlyCancelIsEnabled()
+    public async Task LockedSelectionEntersEditingAndCompleteAndCancelAreEnabled()
     {
         var authority = new WorkflowStateAuthority();
         using var requests = new CaptureRequestCoordinator(authority);
@@ -158,7 +158,15 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         var provider = new FakeAllDisplayProvider();
         var overlay = new FakeOverlayCoordinator();
         var functionBar = new FakeFunctionBarPresentationCoordinator();
-        using var workflow = CreateWorkflow(requests, provider, overlay, functionBar);
+        var renderer = new FakeFinalRenderer();
+        var clipboard = new FakeClipboardDelivery();
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard);
 
         var result = (CapturePresentationOutcome.SelectingReady)
             await workflow.StartAsync(request, CancellationToken.None);
@@ -174,9 +182,11 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.AreEqual(1, functionBar.ShowCalls);
         Assert.AreEqual(0, overlay.CloseCalls);
 
+        Assert.IsTrue(functionBar.LastRequest!.Availability.IsEnabled(FunctionBarCommand.Complete));
+        Assert.IsTrue(functionBar.LastRequest.Availability.IsEnabled(FunctionBarCommand.Cancel));
+
         foreach (var command in new[]
         {
-            FunctionBarCommand.Complete,
             FunctionBarCommand.Save,
             FunctionBarCommand.Undo,
             FunctionBarCommand.Redo
@@ -190,15 +200,163 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             Assert.AreEqual(FunctionBarCommandResultKind.Disabled, disabled.Kind);
         }
 
-        var cancel = workflow.Execute(new FunctionBarCommandRequest(
+        var complete = workflow.Execute(new FunctionBarCommandRequest(
             result.Session.SessionId,
             result.Session.VirtualDesktopSnapshot.CoordinateVersion,
             locked.State.SelectionRevision,
-            FunctionBarCommand.Cancel));
-        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, cancel.Kind);
-        await workflow.CancelCurrentAsync("test");
+            FunctionBarCommand.Complete));
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, complete.Kind);
+        await WaitForStateAsync(authority, WorkflowState.ResidentReady);
+        Assert.AreEqual(1, renderer.Calls);
+        Assert.AreEqual(1, provider.AcquireAllCalls);
+        Assert.AreEqual(1, clipboard.Calls);
+        Assert.AreSame(renderer.LastImageResult, clipboard.LastRequest!.ImageResult);
+        Assert.AreEqual(1, overlay.CloseCalls);
+        Assert.IsTrue(renderer.LastImageResult?.IsDisposed ?? false);
+        Assert.IsTrue(result.Session.IsDisposed);
         Assert.AreEqual(WorkflowState.ResidentReady, authority.CurrentState);
         Assert.IsTrue(functionBar.CloseCalls >= 1);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Rendering")]
+    public async Task FinalRenderFailureReturnsToEditingAndRetainsFrozenSession()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer();
+        var clipboard = new FakeClipboardDelivery();
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard);
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        LockSelection(overlay.InputSink!, ready.Session);
+        renderer.Outcome = new FrozenDisplayFrameSetRenderOutcome.Failed(Failure.Create(
+            FailureCode.RenderingFailed,
+            FailureCategory.Resource,
+            FailureRecoverability.RetrySameIntent,
+            "test-renderer",
+            ready.Session.SessionId,
+            "synthetic renderer failure"));
+
+        var accepted = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            workflow.CurrentSelection!.SelectionRevision,
+            FunctionBarCommand.Complete));
+
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, accepted.Kind);
+        await WaitForAsync(() => renderer.Calls == 1);
+        Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
+        Assert.AreEqual(0, clipboard.Calls);
+        Assert.AreEqual(0, overlay.CloseCalls);
+        Assert.IsFalse(ready.Session.IsDisposed);
+        await workflow.CancelCurrentAsync("test");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public async Task CompleteCommandGateRejectsASecondCommandWhileTheFirstIsRunning()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new BlockingFinalRenderer();
+        var clipboard = new FakeClipboardDelivery();
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard);
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        LockSelection(overlay.InputSink!, ready.Session);
+        var command = new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            workflow.CurrentSelection!.SelectionRevision,
+            FunctionBarCommand.Complete);
+
+        var first = workflow.Execute(command);
+        await renderer.Started.Task;
+        var second = workflow.Execute(command);
+
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, first.Kind);
+        Assert.AreEqual(FunctionBarCommandResultKind.Busy, second.Kind);
+        renderer.Release.TrySetResult(true);
+        await WaitForStateAsync(authority, WorkflowState.ResidentReady);
+        Assert.AreEqual(1, provider.AcquireAllCalls);
+        Assert.AreEqual(1, clipboard.Calls);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Clipboard")]
+    public async Task ClipboardFailureReturnsToEditingAndDoesNotCloseFrozenSession()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer();
+        var clipboard = new FakeClipboardDelivery
+        {
+            Failure = Failure.Create(
+                FailureCode.ClipboardBusy,
+                FailureCategory.Contention,
+                FailureRecoverability.RetrySameIntent,
+                "test-clipboard",
+                request.RequestId,
+                "synthetic clipboard contention")
+        };
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard);
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        LockSelection(overlay.InputSink!, ready.Session);
+
+        var accepted = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            workflow.CurrentSelection!.SelectionRevision,
+            FunctionBarCommand.Complete));
+
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, accepted.Kind);
+        await WaitForAsync(() => clipboard.Calls == 1);
+        Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
+        Assert.AreEqual(0, overlay.CloseCalls);
+        Assert.IsFalse(ready.Session.IsDisposed);
+        Assert.IsTrue(renderer.LastImageResult?.IsDisposed ?? false);
+        await workflow.CancelCurrentAsync("test");
     }
 
     [TestMethod]
@@ -277,7 +435,9 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         CaptureRequestCoordinator requests,
         FakeAllDisplayProvider provider,
         FakeOverlayCoordinator overlay,
-        IFunctionBarPresentationCoordinator? functionBar = null)
+        IFunctionBarPresentationCoordinator? functionBar = null,
+        IFrozenDisplayFrameSetRenderer? finalRenderer = null,
+        IClipboardDeliveryService? clipboardDelivery = null)
     {
         var freezing = new CaptureFreezingCoordinator(
             requests,
@@ -287,7 +447,26 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             freezing,
             overlay,
             new HiddenSourceExclusion(),
-            functionBarPresentation: functionBar);
+            functionBarPresentation: functionBar,
+            finalRenderer: finalRenderer,
+            clipboardDelivery: clipboardDelivery);
+    }
+
+    private static async Task WaitForStateAsync(
+        WorkflowStateAuthority authority,
+        WorkflowState expected)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (authority.CurrentState == expected)
+            {
+                return;
+            }
+
+            await Task.Yield();
+        }
+
+        Assert.AreEqual(expected, authority.CurrentState);
     }
 
     private static SelectionPointerEvent Input(
@@ -298,6 +477,30 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         session.VirtualDesktopSnapshot.CoordinateVersion,
         1,
         new PhysicalPoint(x, y));
+
+    private static SelectionInputResult LockSelection(
+        ISelectionInputSink input,
+        CaptureSessionContext session)
+    {
+        input.PointerPressed(Input(session, -3, 0));
+        input.PointerMoved(Input(session, 3, 2));
+        return input.PointerReleased(Input(session, 3, 2));
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Yield();
+        }
+
+        Assert.IsTrue(condition());
+    }
 
     private static VirtualDesktopSnapshot CreateSnapshot() => new(
         "presentation-v1",
@@ -381,6 +584,95 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             ValueTask.FromResult(CaptureSourceExclusionOutcome.Hidden());
     }
 
+    private sealed class FakeFinalRenderer : IFrozenDisplayFrameSetRenderer
+    {
+        public int Calls { get; private set; }
+
+        public TestImageResult? LastImageResult { get; private set; }
+
+        public FrozenDisplayFrameSetRenderOutcome? Outcome { get; set; }
+
+        public ValueTask<FrozenDisplayFrameSetRenderOutcome> RenderAsync(
+            FrozenDisplayFrameSet frameSet,
+            PhysicalRect selectionPhysicalBounds,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            if (Outcome is not null)
+            {
+                return ValueTask.FromResult(Outcome);
+            }
+
+            LastImageResult = new TestImageResult(
+                sessionId: frameSet.SessionId,
+                pixelWidth: selectionPhysicalBounds.Width,
+                pixelHeight: selectionPhysicalBounds.Height,
+                sourceBounds: selectionPhysicalBounds,
+                cropBounds: selectionPhysicalBounds);
+            return ValueTask.FromResult<FrozenDisplayFrameSetRenderOutcome>(
+                new FrozenDisplayFrameSetRenderOutcome.Succeeded(LastImageResult));
+        }
+    }
+
+    private sealed class FakeClipboardDelivery : IClipboardDeliveryService
+    {
+        public int Calls { get; private set; }
+
+        public Failure? Failure { get; init; }
+
+        public ClipboardDeliveryRequest? LastRequest { get; private set; }
+
+        public ValueTask<ClipboardDeliveryResult> DeliverAsync(
+            ClipboardDeliveryRequest request,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            LastRequest = request;
+            if (Failure is not null)
+            {
+                return ValueTask.FromResult<ClipboardDeliveryResult>(
+                    new ClipboardDeliveryResult.RetryableFailure(
+                        request.DeliveryId,
+                        request.SessionId,
+                        request.ResultId,
+                        Failure,
+                        1));
+            }
+
+            return ValueTask.FromResult<ClipboardDeliveryResult>(
+                new ClipboardDeliveryResult.Delivered(
+                    request.DeliveryId,
+                    request.SessionId,
+                    request.ResultId,
+                    1));
+        }
+    }
+
+    private sealed class BlockingFinalRenderer : IFrozenDisplayFrameSetRenderer
+    {
+        public TaskCompletionSource<bool> Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> Release { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask<FrozenDisplayFrameSetRenderOutcome> RenderAsync(
+            FrozenDisplayFrameSet frameSet,
+            PhysicalRect selectionPhysicalBounds,
+            CancellationToken cancellationToken)
+        {
+            Started.TrySetResult(true);
+            await Release.Task.WaitAsync(cancellationToken);
+            return new FrozenDisplayFrameSetRenderOutcome.Succeeded(
+                new TestImageResult(
+                    sessionId: frameSet.SessionId,
+                    pixelWidth: selectionPhysicalBounds.Width,
+                    pixelHeight: selectionPhysicalBounds.Height,
+                    sourceBounds: selectionPhysicalBounds,
+                    cropBounds: selectionPhysicalBounds));
+        }
+    }
+
     private sealed class FakeOverlayCoordinator : IAllDisplayOverlayPresentationCoordinator
     {
         public Failure? Failure { get; set; }
@@ -435,9 +727,12 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
 
         public int CloseCalls { get; private set; }
 
+        public FunctionBarPresentationRequest? LastRequest { get; private set; }
+
         public FunctionBarPresentationResult Prepare(FunctionBarPresentationRequest request)
         {
             PrepareCalls++;
+            LastRequest = request;
             return PreparationFailure is null
                 ? Ready(request, FunctionBarPresentationResultKind.Ready)
                 : Failed(request, PreparationFailure);
@@ -446,6 +741,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         public FunctionBarPresentationResult Reposition(FunctionBarPresentationRequest request)
         {
             RepositionCalls++;
+            LastRequest = request;
             return Ready(request, FunctionBarPresentationResultKind.Ready);
         }
 

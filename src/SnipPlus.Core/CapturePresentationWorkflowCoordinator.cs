@@ -31,11 +31,15 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private readonly ICaptureSourceExclusion? _captureSourceExclusion;
     private readonly ICaptureAccessPreflight? _captureAccessPreflight;
     private readonly IFunctionBarPresentationCoordinator? _functionBarPresentation;
+    private readonly IFrozenDisplayFrameSetRenderer? _finalRenderer;
+    private readonly IClipboardDeliveryService? _clipboardDelivery;
+    private readonly Action<string>? _feedback;
     private CaptureSessionContext? _activeSession;
     private InitialSelectionCoordinator? _selectionCoordinator;
     private CancellationTokenSource? _sessionCancellation;
     private bool _startInProgress;
     private bool _inputEnabled;
+    private bool _completeInProgress;
     private bool _disposed;
 
     public CapturePresentationWorkflowCoordinator(
@@ -43,7 +47,10 @@ public sealed class CapturePresentationWorkflowCoordinator :
         IAllDisplayOverlayPresentationCoordinator overlayCoordinator,
         ICaptureSourceExclusion? captureSourceExclusion = null,
         ICaptureAccessPreflight? captureAccessPreflight = null,
-        IFunctionBarPresentationCoordinator? functionBarPresentation = null)
+        IFunctionBarPresentationCoordinator? functionBarPresentation = null,
+        IFrozenDisplayFrameSetRenderer? finalRenderer = null,
+        IClipboardDeliveryService? clipboardDelivery = null,
+        Action<string>? feedback = null)
     {
         _freezingCoordinator = freezingCoordinator
             ?? throw new ArgumentNullException(nameof(freezingCoordinator));
@@ -53,6 +60,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
         _captureSourceExclusion = captureSourceExclusion;
         _captureAccessPreflight = captureAccessPreflight;
         _functionBarPresentation = functionBarPresentation;
+        _finalRenderer = finalRenderer;
+        _clipboardDelivery = clipboardDelivery;
+        _feedback = feedback;
     }
 
     public WorkflowState CurrentState => _stateAuthority.CurrentState;
@@ -334,6 +344,20 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 "The Function Bar command belongs to a stale Selection revision.");
         }
 
+        lock (_gate)
+        {
+            if (_completeInProgress)
+            {
+                return new FunctionBarCommandResult(
+                    request.Command,
+                    FunctionBarCommandResultKind.Busy,
+                    _stateAuthority.CurrentState,
+                    currentSelection.SelectionRevision,
+                    null,
+                    "The Complete command is already in progress.");
+            }
+        }
+
         if (_stateAuthority.CurrentState != WorkflowState.Editing)
         {
             return new FunctionBarCommandResult(
@@ -345,7 +369,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 "The Function Bar command is not valid in the current workflow state.");
         }
 
-        if (!FunctionBarCommandAvailability.Stage6B.IsEnabled(request.Command))
+        if (!FunctionBarCommandAvailability.Stage6C.IsEnabled(request.Command))
         {
             return new FunctionBarCommandResult(
                 request.Command,
@@ -356,14 +380,99 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 "The Function Bar command is disabled in this slice.");
         }
 
-        Observe(CancelCurrentAsync("FunctionBarCancel"));
+        if (request.Command == FunctionBarCommand.Cancel)
+        {
+            lock (_gate)
+            {
+                if (_completeInProgress)
+                {
+                    return new FunctionBarCommandResult(
+                        request.Command,
+                        FunctionBarCommandResultKind.Busy,
+                        _stateAuthority.CurrentState,
+                        currentSelection.SelectionRevision,
+                        null,
+                        "The Complete command is already in progress.");
+                }
+            }
+
+            Observe(CancelCurrentAsync("FunctionBarCancel"));
+            return new FunctionBarCommandResult(
+                request.Command,
+                FunctionBarCommandResultKind.Accepted,
+                _stateAuthority.CurrentState,
+                currentSelection.SelectionRevision,
+                null,
+                "The capture session cancellation was accepted.");
+        }
+
+        if (_finalRenderer is null
+            || _clipboardDelivery is null
+            || currentSelection.Status != SelectionStatus.Locked
+            || currentSelection.InteractionMode != SelectionInteractionMode.Locked
+            || !currentSelection.IsGeometryValid
+            || currentSelection.NormalizedPhysicalBounds is not PhysicalRect)
+        {
+            return new FunctionBarCommandResult(
+                request.Command,
+                FunctionBarCommandResultKind.Failed,
+                _stateAuthority.CurrentState,
+                currentSelection.SelectionRevision,
+                CreateFailure(
+                    request.SessionId,
+                    FailureCode.InvalidSelection,
+                    "Complete requires a valid locked Selection and an available output pipeline."),
+                "Complete requires a valid locked Selection and an available output pipeline.");
+        }
+
+        lock (_gate)
+        {
+            if (_completeInProgress)
+            {
+                return new FunctionBarCommandResult(
+                    request.Command,
+                    FunctionBarCommandResultKind.Busy,
+                    _stateAuthority.CurrentState,
+                    currentSelection.SelectionRevision,
+                    null,
+                    "The Complete command is already in progress.");
+            }
+
+            _completeInProgress = true;
+        }
+
+        var executing = _functionBarPresentation?.Reposition(
+            CreateFunctionBarRequest(
+                currentSelection,
+                FunctionBarCommandAvailability.Stage6CExecuting));
+        if (executing is not null
+            && executing.Kind != FunctionBarPresentationResultKind.Ready)
+        {
+            lock (_gate)
+            {
+                _completeInProgress = false;
+            }
+
+            return new FunctionBarCommandResult(
+                request.Command,
+                FunctionBarCommandResultKind.Failed,
+                _stateAuthority.CurrentState,
+                currentSelection.SelectionRevision,
+                executing.Failure ?? CreateFailure(
+                    request.SessionId,
+                    FailureCode.FunctionBarPresentationFailed,
+                    "The Function Bar could not enter the Complete state."),
+                "The Function Bar could not enter the Complete state.");
+        }
+
+        Observe(CompleteAsync(session, currentSelection));
         return new FunctionBarCommandResult(
             request.Command,
             FunctionBarCommandResultKind.Accepted,
             _stateAuthority.CurrentState,
             currentSelection.SelectionRevision,
             null,
-            "The capture session cancellation was accepted.");
+            "The capture is being rendered and delivered to Clipboard.");
     }
 
     public SelectionInputResult Escape(Guid sessionId, string coordinateVersion)
@@ -412,6 +521,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
             }
 
             _inputEnabled = false;
+            _completeInProgress = false;
             session = _activeSession;
             sessionCancellation = _sessionCancellation;
             selection = _selectionCoordinator;
@@ -450,6 +560,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
 
             _disposed = true;
             _inputEnabled = false;
+            _completeInProgress = false;
             cancellation = _sessionCancellation;
             session = _activeSession;
             selection = _selectionCoordinator;
@@ -601,12 +712,276 @@ public sealed class CapturePresentationWorkflowCoordinator :
     }
 
     private FunctionBarPresentationRequest CreateFunctionBarRequest(
-        SelectionVisualState selection) => new(
+        SelectionVisualState selection,
+        FunctionBarCommandAvailability? availability = null) => new(
         selection.SessionId,
         selection.CoordinateVersion,
         selection,
-        FunctionBarCommandAvailability.Stage6B,
+        availability ?? FunctionBarCommandAvailability.Stage6C,
         this);
+
+    private async ValueTask CompleteAsync(
+        CaptureSessionContext session,
+        SelectionVisualState selection)
+    {
+        IImageResult? result = null;
+        try
+        {
+            if (!IsCurrentEditingSession(session, selection))
+            {
+                return;
+            }
+
+            var bounds = selection.NormalizedPhysicalBounds!.Value;
+            var frameSet = session.FrozenDisplayFrames;
+            if (frameSet is null
+                || frameSet.IsDisposed
+                || frameSet.SessionId != session.SessionId
+                || !string.Equals(
+                    frameSet.CoordinateVersion,
+                    session.VirtualDesktopSnapshot.CoordinateVersion,
+                    StringComparison.Ordinal))
+            {
+                ReturnToEditing(session, CreateFailure(
+                    session.SessionId,
+                    FailureCode.InvalidResultLifetime,
+                    "The frozen display frame set is unavailable for Complete."));
+                return;
+            }
+
+            var readyTransition = _stateAuthority.RequestTransition(new(
+                WorkflowState.Editing,
+                WorkflowState.ResultReady,
+                "CompleteRenderStarted"));
+            if (!readyTransition.IsSuccess)
+            {
+                ReturnToEditing(session, readyTransition.Failure ?? CreateFailure(
+                    session.SessionId,
+                    FailureCode.InvalidStateTransition,
+                    "The workflow could not start the final render."));
+                return;
+            }
+
+            var rendered = await _finalRenderer!
+                .RenderAsync(frameSet, bounds, session.Cancellation)
+                .ConfigureAwait(true);
+            if (rendered is FrozenDisplayFrameSetRenderOutcome.Cancelled cancelled)
+            {
+                ReturnToEditing(session, CreateFailure(
+                    session.SessionId,
+                    FailureCode.Cancelled,
+                    cancelled.CancellationOrigin));
+                return;
+            }
+
+            if (rendered is FrozenDisplayFrameSetRenderOutcome.Failed failed)
+            {
+                ReturnToEditing(session, failed.Failure);
+                return;
+            }
+
+            if (rendered is not FrozenDisplayFrameSetRenderOutcome.Succeeded succeeded)
+            {
+                ReturnToEditing(session, CreateFailure(
+                    session.SessionId,
+                    FailureCode.RenderingFailed,
+                    "The final renderer returned an unknown outcome."));
+                return;
+            }
+
+            result = succeeded.ImageResult;
+
+            if (result is null
+                || result.IsDisposed
+                || result.Metadata.SessionId != session.SessionId
+                || result.Metadata.CropPhysicalBounds != bounds
+                || result.Metadata.PixelWidth != bounds.Width
+                || result.Metadata.PixelHeight != bounds.Height)
+            {
+                ReturnToEditing(session, CreateFailure(
+                    session.SessionId,
+                    FailureCode.InvalidResultLifetime,
+                    "The final render did not produce a valid canonical Selection result."));
+                return;
+            }
+
+            var deliveryTransition = _stateAuthority.RequestTransition(new(
+                WorkflowState.ResultReady,
+                WorkflowState.Delivering,
+                "CompleteRenderSucceeded"));
+            if (!deliveryTransition.IsSuccess)
+            {
+                ReturnToEditing(session, deliveryTransition.Failure ?? CreateFailure(
+                    session.SessionId,
+                    FailureCode.InvalidStateTransition,
+                    "The workflow could not start Clipboard delivery."));
+                return;
+            }
+
+            var delivery = await _clipboardDelivery!
+                .DeliverAsync(
+                    new ClipboardDeliveryRequest
+                    {
+                        DeliveryId = Guid.NewGuid(),
+                        SessionId = session.SessionId,
+                        ResultId = result.Metadata.ResultId,
+                        ImageResult = result,
+                        HistoryAllowed = false,
+                        RoamingAllowed = false,
+                        MaximumAttempts = 5,
+                        RetryBudget = TimeSpan.FromSeconds(1),
+                        Cancellation = session.Cancellation
+                    },
+                    session.Cancellation)
+                .ConfigureAwait(true);
+
+            switch (delivery)
+            {
+                case ClipboardDeliveryResult.Delivered delivered
+                    when delivered.SessionId == session.SessionId
+                        && delivered.ResultId == result.Metadata.ResultId:
+                    var completedTransition = _stateAuthority.RequestTransition(new(
+                        WorkflowState.Delivering,
+                        WorkflowState.Completed,
+                        "ClipboardDelivered"));
+                    if (!completedTransition.IsSuccess)
+                    {
+                        ReturnToEditing(session, completedTransition.Failure ?? CreateFailure(
+                            session.SessionId,
+                            FailureCode.InvalidStateTransition,
+                            "The workflow could not complete after Clipboard delivery."));
+                        return;
+                    }
+
+                    await CompleteSessionAsync(session).ConfigureAwait(true);
+                    return;
+                case ClipboardDeliveryResult.Cancelled deliveryCancelled:
+                    ReturnToEditing(session, CreateFailure(
+                        session.SessionId,
+                        FailureCode.Cancelled,
+                        deliveryCancelled.CancellationOrigin));
+                    return;
+                case ClipboardDeliveryResult.RetryableFailure retryable:
+                    ReturnToEditing(session, retryable.Failure);
+                    return;
+                case ClipboardDeliveryResult.TerminalFailure terminal:
+                    ReturnToEditing(session, terminal.Failure);
+                    return;
+                default:
+                    ReturnToEditing(session, CreateFailure(
+                        session.SessionId,
+                        FailureCode.ClipboardPublicationRejected,
+                        "Clipboard delivery returned an unknown outcome."));
+                    return;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            ReturnToEditing(session, CreateFailure(
+                session.SessionId,
+                FailureCode.Cancelled,
+                "CancellationToken"));
+        }
+        catch (Exception exception)
+        {
+            ReturnToEditing(session, CreateFailure(
+                session.SessionId,
+                FailureCode.UnexpectedFailure,
+                exception.GetType().Name,
+                exception.HResult));
+        }
+        finally
+        {
+            result?.Dispose();
+            lock (_gate)
+            {
+                _completeInProgress = false;
+            }
+        }
+    }
+
+    private bool IsCurrentEditingSession(
+        CaptureSessionContext session,
+        SelectionVisualState selection)
+    {
+        lock (_gate)
+        {
+            return !_disposed
+                && ReferenceEquals(_activeSession, session)
+                && _selectionCoordinator?.State.SelectionRevision == selection.SelectionRevision
+                && _stateAuthority.CurrentState == WorkflowState.Editing;
+        }
+    }
+
+    private void ReturnToEditing(CaptureSessionContext session, Failure failure)
+    {
+        SelectionVisualState? selection;
+        lock (_gate)
+        {
+            if (_disposed || !ReferenceEquals(_activeSession, session))
+            {
+                return;
+            }
+
+            selection = _selectionCoordinator?.State;
+        }
+
+        var currentState = _stateAuthority.CurrentState;
+        if (currentState is WorkflowState.ResultReady or WorkflowState.Delivering)
+        {
+            _stateAuthority.RequestTransition(new(
+                currentState,
+                WorkflowState.Editing,
+                $"CompleteFailed:{failure.Code}"));
+        }
+
+        _feedback?.Invoke(failure.UserMessageKey);
+        if (selection is not null
+            && _functionBarPresentation is not null
+            && selection.Status == SelectionStatus.Locked
+            && selection.InteractionMode == SelectionInteractionMode.Locked
+            && selection.IsGeometryValid)
+        {
+            _functionBarPresentation.Reposition(
+                CreateFunctionBarRequest(selection, FunctionBarCommandAvailability.Stage6C));
+        }
+    }
+
+    private async ValueTask CompleteSessionAsync(CaptureSessionContext session)
+    {
+        InitialSelectionCoordinator? selection;
+        CancellationTokenSource? cancellation;
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_activeSession, session))
+            {
+                return;
+            }
+
+            _inputEnabled = false;
+            selection = _selectionCoordinator;
+            cancellation = _sessionCancellation;
+            _activeSession = null;
+            _selectionCoordinator = null;
+            _sessionCancellation = null;
+        }
+
+        _functionBarPresentation?.Close(session.SessionId);
+        try
+        {
+            await _overlayCoordinator
+                .CloseAsync(session.SessionId, CancellationToken.None)
+                .ConfigureAwait(true);
+        }
+        finally
+        {
+            _freezingCoordinator.ReleaseSession(session);
+            session.Dispose();
+            selection?.Dispose();
+            MoveToResidentReady(WorkflowState.Completed, "CompleteCleanup");
+            cancellation?.Dispose();
+        }
+    }
 
     private async ValueTask<CapturePresentationOutcome> HandleFreezingFailureAsync(
         CaptureRequest request,

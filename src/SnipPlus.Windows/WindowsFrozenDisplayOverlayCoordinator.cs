@@ -596,6 +596,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         };
         private readonly IReadOnlyDictionary<FunctionBarCommand, Button> _buttons;
         private readonly CancelCommandGate _cancelCommandGate = new();
+        private readonly CancelCommandGate _completeCommandGate = new();
         private FunctionBarPresentationRequest _request;
         private bool _disposed;
 
@@ -613,6 +614,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 [FunctionBarCommand.Undo] = CreateButton("Undo"),
                 [FunctionBarCommand.Redo] = CreateButton("Redo")
             };
+            _buttons[FunctionBarCommand.Complete].Click += OnCompleteClicked;
             _buttons[FunctionBarCommand.Cancel].Click += OnCancelClicked;
             _root.PointerPressed += OnPointerPressed;
             foreach (var button in _buttons.Values)
@@ -631,6 +633,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         public void Update(FunctionBarPresentationRequest request)
         {
             _request = request;
+            if (request.Availability.IsEnabled(FunctionBarCommand.Complete))
+            {
+                _completeCommandGate.Reset();
+            }
+
+            if (request.Availability.IsEnabled(FunctionBarCommand.Cancel))
+            {
+                _cancelCommandGate.Reset();
+            }
+
             foreach (var pair in _buttons)
             {
                 pair.Value.IsEnabled = request.Availability.IsEnabled(pair.Key);
@@ -678,6 +690,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             _disposed = true;
+            _buttons[FunctionBarCommand.Complete].Click -= OnCompleteClicked;
             _buttons[FunctionBarCommand.Cancel].Click -= OnCancelClicked;
             _root.PointerPressed -= OnPointerPressed;
             _owner.RemoveFunctionBar(this);
@@ -815,6 +828,47 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _buttons[FunctionBarCommand.Cancel].IsEnabled = true;
             }
 
+        }
+
+        private void OnCompleteClicked(object sender, RoutedEventArgs args)
+        {
+            if (!_completeCommandGate.TryBegin())
+            {
+                return;
+            }
+
+            var command = new FunctionBarCommandRequest(
+                _request.SessionId,
+                _request.CoordinateVersion,
+                _request.Selection.SelectionRevision,
+                FunctionBarCommand.Complete);
+            _buttons[FunctionBarCommand.Complete].IsEnabled = false;
+
+            var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+            if (dispatcherQueue is null
+                || !dispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_disposed)
+                    {
+                        return;
+                    }
+
+                    var result = _request.CommandSink.Execute(command);
+                    if (result.Kind != FunctionBarCommandResultKind.Accepted)
+                    {
+                        _completeCommandGate.Reset();
+                        if (!_disposed)
+                        {
+                            _buttons[FunctionBarCommand.Complete].IsEnabled =
+                                _request.Availability.IsEnabled(FunctionBarCommand.Complete);
+                        }
+                    }
+                }))
+            {
+                _completeCommandGate.Reset();
+                _buttons[FunctionBarCommand.Complete].IsEnabled =
+                    _request.Availability.IsEnabled(FunctionBarCommand.Complete);
+            }
         }
 
         private void OnPointerPressed(object sender, PointerRoutedEventArgs args) =>

@@ -23,6 +23,20 @@ public readonly record struct FunctionBarCommandAvailability(
         CanUndo: false,
         CanRedo: false);
 
+    public static FunctionBarCommandAvailability Stage6C => new(
+        CanComplete: true,
+        CanSave: false,
+        CanCancel: true,
+        CanUndo: false,
+        CanRedo: false);
+
+    public static FunctionBarCommandAvailability Stage6CExecuting => new(
+        CanComplete: false,
+        CanSave: false,
+        CanCancel: false,
+        CanUndo: false,
+        CanRedo: false);
+
     public bool IsEnabled(FunctionBarCommand command) => command switch
     {
         FunctionBarCommand.Complete => CanComplete,
@@ -43,6 +57,7 @@ public sealed record FunctionBarCommandRequest(
 public enum FunctionBarCommandResultKind
 {
     Accepted,
+    Busy,
     Disabled,
     Cancelled,
     StaleSession,

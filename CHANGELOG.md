@@ -264,6 +264,16 @@ Detailed status and required actions are maintained in `PRD/PRD-TRACEABILITY-MAT
 - Added deterministic tests for cross-window PointerId normalization、native/XAML release deduplication、Cancel single-dispatch gating、high-contrast visual policy and Owner Reference Physical Gap／Virtual Bounds behavior. The non-interactive suite is `132/132` passed with `0` failures and `0` skips.
 - Locked restore succeeded; Release x64 build succeeded with `0` warnings and `0` errors; the three modified C# files passed limited `dotnet format --verify-no-changes`; `git diff --check` passed. A clean-commit Development MSIX was generated, signed and installed with matching Release／package／installed DLL hashes. A post-fix packaged manual re-acceptance attempt was blocked before MainWindow appeared: Windows Error Reporting recorded `Microsoft.UI.Xaml.dll` with exception `0xc000027b`; no Selection、Function Bar or output scenario was executed after this launch failure. No source change was made for this separate startup/runtime blocker, and Stage 7 was not started.
 
+### Added — Stage 6C Complete to Clipboard Vertical Slice (2026-07-30)
+
+- 新增 platform-neutral `IFrozenDisplayFrameSetRenderer` 與 typed render outcomes；Complete 只接受 current Session／coordinate version／Selection revision 的有效 `SelectionInteractionMode.Locked`，並以 `Editing → ResultReady → Delivering → Completed → ResidentReady` 由唯一 `WorkflowStateAuthority` 管理。
+- `WindowsFrozenDisplayFrameSetRenderer` 從同一個 Session-owned `FrozenDisplayFrameSet` 合成 canonical BGRA8、Premultiplied、sRGB SDR `SoftwareBitmap`；只配置 Selection 尺寸、逐 display copy physical intersection、不 stretch、不重新擷取，非顯示 Gap 保留透明 alpha `0`。
+- Function Bar 現在只啟用 Complete／Cancel；Complete 使用 deferred DispatcherQueue command gate，重複命令回傳 `Busy`。Save、Undo、Redo、Annotation、PNG、Save As 均未加入。
+- Complete 成功後只透過既有 `WinRtClipboardDeliveryAdapter` 發布 canonical result，History／Roaming 維持 disabled，成功後關閉 Function Bar／Overlays、dispose Session frame set 並回到 resident；render 或 Clipboard failure 保留 Editing、Selection 與 FrozenDisplayFrameSet，只 dispose temporary result 並回報 typed feedback。
+- 新增 deterministic Core／Windows tests：Complete success、same frozen frame set／single acquisition、duplicate gate、render failure retention、Clipboard failure retention、negative-coordinate physical composition、transparent topology gap、canonical BGRA8 metadata 與 zero-size rejection。
+- Locked restore 成功；Release x64 solution build 成功，`0 warnings、0 errors`；非互動測試 `138/138` 通過，`0 failures、0 skips`；本 Slice 11 個 C# 檔案限定範圍 `dotnet format --verify-no-changes --no-restore --include ...` 通過；`git diff --check` 通過。
+- 本次未啟動 SnipPlus GUI、Paint、Notepad、Snipping Tool 或其他外部 GUI，未保存真實桌面／Frozen Frame／Clipboard payload；Stage 6C packaged Windows runtime、四螢幕／Maximum four-4K、performance、Save、Annotation 與 Stage 7 仍未開始。
+
 ### Not Released
 
 - No release publication、Store deployment or release artifact submission has occurred。
