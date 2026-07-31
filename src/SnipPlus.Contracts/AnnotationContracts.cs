@@ -116,8 +116,16 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
                 "Privacy Region annotation objects require Privacy Region content.",
                 nameof(content));
         }
+        else if (toolKind == AnnotationToolKind.NumberedMarker
+            && content is null)
+        {
+            throw new ArgumentException(
+                "Numbered marker annotation objects require Numbered Marker content.",
+                nameof(content));
+        }
         else if (toolKind != AnnotationToolKind.Text
             && toolKind != AnnotationToolKind.PrivacyRegion
+            && toolKind != AnnotationToolKind.NumberedMarker
             && content is not null)
         {
             throw new ArgumentException(
@@ -185,6 +193,14 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
         {
             throw new ArgumentException(
                 "Privacy Region annotation objects require Privacy Region content.",
+                nameof(content));
+        }
+
+        if (toolKind == AnnotationToolKind.NumberedMarker
+            && content is not NumberedMarkerAnnotationContent)
+        {
+            throw new ArgumentException(
+                "Numbered marker annotation objects require Numbered Marker content.",
                 nameof(content));
         }
 

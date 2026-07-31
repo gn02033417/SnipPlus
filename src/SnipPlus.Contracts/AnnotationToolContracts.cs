@@ -7,7 +7,8 @@ public enum EditingToolKind
     ArrowLine,
     Highlighter,
     Text,
-    PrivacyRegion
+    PrivacyRegion,
+    NumberedMarker
 }
 
 public readonly record struct ArgbColor(byte A, byte R, byte G, byte B)
@@ -243,6 +244,78 @@ public sealed record HighlighterStrokeContent : IAnnotationContent
     public HighlighterAnnotationStyle Style { get; }
 }
 
+public sealed record NumberedMarkerAnnotationStyle
+{
+    public const int MinSize = 8;
+
+    public const int MaxSize = 256;
+
+    public const int DefaultSize = 24;
+
+    public NumberedMarkerAnnotationStyle(ArgbColor color, int size)
+    {
+        if (!color.IsVisible)
+        {
+            throw new ArgumentException(
+                "Numbered marker color must have a visible alpha channel.",
+                nameof(color));
+        }
+
+        if (size is < MinSize or > MaxSize)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(size),
+                $"Numbered marker size must be between {MinSize} and {MaxSize} physical pixels.");
+        }
+
+        Color = color;
+        Size = size;
+    }
+
+    public ArgbColor Color { get; }
+
+    public int Size { get; }
+
+    public static NumberedMarkerAnnotationStyle Default => new(ArgbColor.Red, DefaultSize);
+}
+
+public sealed record NumberedMarkerAnnotationContent : IAnnotationContent
+{
+    public NumberedMarkerAnnotationContent(
+        int number,
+        NumberedMarkerAnnotationStyle style)
+    {
+        if (number <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(number),
+                "Numbered marker number must be positive.");
+        }
+
+        Number = number;
+        Style = style ?? throw new ArgumentNullException(nameof(style));
+    }
+
+    public int Number { get; }
+
+    public NumberedMarkerAnnotationStyle Style { get; }
+
+    public static PhysicalRect GetBounds(
+        PhysicalPoint center,
+        NumberedMarkerAnnotationStyle style)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        var half = style.Size / 2;
+        var left = checked((long)center.X - half);
+        var top = checked((long)center.Y - half);
+        return new PhysicalRect(
+            checked((int)left),
+            checked((int)top),
+            checked((int)(left + style.Size)),
+            checked((int)(top + style.Size)));
+    }
+}
+
 public sealed record EditingToolSelectionRequest(
     Guid SessionId,
     string CoordinateVersion,
@@ -282,6 +355,11 @@ public sealed record EditingToolSelectionResult(
     public PrivacyRegionMode? ActivePrivacyRegionMode { get; init; }
 
     public PrivacyRegionEffectParameters? ActivePrivacyRegionEffectParameters { get; init; }
+
+    public NumberedMarkerAnnotationStyle ActiveNumberedMarkerStyle { get; init; }
+        = NumberedMarkerAnnotationStyle.Default;
+
+    public int ActiveNumberedMarkerNextNumber { get; init; } = 1;
 }
 
 public sealed record RectanglePointerEvent(
@@ -428,6 +506,13 @@ public sealed record AnnotationPresentationSnapshot(
     public PrivacyRegionEffectParameters? DraftPrivacyRegionEffectParameters { get; init; }
 
     public PhysicalRect? DraftPrivacyRegionBounds { get; init; }
+
+    public NumberedMarkerAnnotationStyle ActiveNumberedMarkerStyle { get; init; }
+        = NumberedMarkerAnnotationStyle.Default;
+
+    public int ActiveNumberedMarkerNextNumber { get; init; } = 1;
+
+    public NumberedMarkerDraftPresentation? DraftNumberedMarker { get; init; }
 }
 
 public interface IEditingToolSelectionSink
@@ -477,6 +562,20 @@ public interface IPrivacyRegionModeSelectionSink
         PrivacyRegionModeSelectionRequest request);
 }
 
+public interface INumberedMarkerPointerInputSink
+{
+    NumberedMarkerPointerResult PointerPressed(NumberedMarkerPointerEvent input);
+
+    NumberedMarkerPointerResult PointerMoved(NumberedMarkerPointerEvent input);
+
+    NumberedMarkerPointerResult PointerReleased(NumberedMarkerPointerEvent input);
+}
+
+public interface INextNumberSelectionSink
+{
+    SetNextNumberResult SetNextNumber(SetNextNumberRequest request);
+}
+
 public interface IEditingInputRouter :
     ISelectionInputSink,
     IAnnotationPointerInputSink,
@@ -484,6 +583,8 @@ public interface IEditingInputRouter :
     IHighlighterPointerInputSink,
     IPrivacyRegionPointerInputSink,
     IPrivacyRegionModeSelectionSink,
+    INumberedMarkerPointerInputSink,
+    INextNumberSelectionSink,
     ITextDraftInputSink,
     IEditingToolSelectionSink
 {
@@ -502,4 +603,8 @@ public interface IEditingInputRouter :
     PrivacyRegionMode ActivePrivacyRegionMode { get; }
 
     PrivacyRegionEffectParameters ActivePrivacyRegionEffectParameters { get; }
+
+    NumberedMarkerAnnotationStyle ActiveNumberedMarkerStyle { get; }
+
+    int ActiveNumberedMarkerNextNumber { get; }
 }

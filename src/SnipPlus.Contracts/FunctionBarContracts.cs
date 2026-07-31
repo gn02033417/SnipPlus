@@ -143,6 +143,10 @@ public sealed record FunctionBarPresentationRequest(
     public PrivacyRegionMode? ActivePrivacyRegionMode { get; init; }
 
     public IPrivacyRegionModeSelectionSink? PrivacyRegionModeSelectionSink { get; init; }
+
+    public int? ActiveNumberedMarkerNextNumber { get; init; }
+
+    public INextNumberSelectionSink? NextNumberSelectionSink { get; init; }
 }
 
 public enum FunctionBarPresentationResultKind

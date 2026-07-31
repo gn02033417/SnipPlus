@@ -678,9 +678,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly IReadOnlyDictionary<EditingToolKind, RadioButton> _toolButtons;
         private readonly IReadOnlyDictionary<ArrowLineEndStyle, RadioButton> _arrowLineModeButtons;
         private readonly IReadOnlyDictionary<PrivacyRegionMode, RadioButton> _privacyModeButtons;
+        private readonly NumberBox _nextNumberBox = CreateNextNumberBox();
         private readonly CancelCommandGate _cancelCommandGate = new();
         private readonly CancelCommandGate _completeCommandGate = new();
         private FunctionBarPresentationRequest _request;
+        private bool _updatingNextNumber;
         private bool _disposed;
 
         public FunctionBarSurface(
@@ -704,7 +706,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 [EditingToolKind.ArrowLine] = CreateToolButton("Arrow / Line"),
                 [EditingToolKind.Highlighter] = CreateToolButton("Highlighter"),
                 [EditingToolKind.Text] = CreateToolButton("Text"),
-                [EditingToolKind.PrivacyRegion] = CreateToolButton("Mosaic / Blur")
+                [EditingToolKind.PrivacyRegion] = CreateToolButton("Mosaic / Blur"),
+                [EditingToolKind.NumberedMarker] = CreateToolButton("Numbered Marker")
             };
             _arrowLineModeButtons = new Dictionary<ArrowLineEndStyle, RadioButton>
             {
@@ -724,6 +727,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons[EditingToolKind.Highlighter].Click += OnHighlighterToolClicked;
             _toolButtons[EditingToolKind.Text].Click += OnTextToolClicked;
             _toolButtons[EditingToolKind.PrivacyRegion].Click += OnPrivacyRegionToolClicked;
+            _toolButtons[EditingToolKind.NumberedMarker].Click += OnNumberedMarkerToolClicked;
+            _nextNumberBox.ValueChanged += OnNextNumberChanged;
             _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click += OnArrowModeClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click += OnLineModeClicked;
             _privacyModeButtons[PrivacyRegionMode.Mosaic].Click += OnMosaicModeClicked;
@@ -734,6 +739,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             {
                 _panel.Children.Add(toolButton);
             }
+
+            _panel.Children.Add(_nextNumberBox);
 
             foreach (var modeButton in _arrowLineModeButtons.Values)
             {
@@ -800,6 +807,24 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 pair.Value.IsChecked = request.ActivePrivacyRegionMode == pair.Key;
                 pair.Value.IsEnabled = request.PrivacyRegionModeSelectionSink is not null
                     && request.ActiveTool == EditingToolKind.PrivacyRegion;
+            }
+
+            _updatingNextNumber = true;
+            try
+            {
+                _nextNumberBox.Visibility = request.ActiveTool == EditingToolKind.NumberedMarker
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                _nextNumberBox.IsEnabled = request.NextNumberSelectionSink is not null
+                    && request.ActiveTool == EditingToolKind.NumberedMarker;
+                if (request.ActiveNumberedMarkerNextNumber is int nextNumber)
+                {
+                    _nextNumberBox.Value = nextNumber;
+                }
+            }
+            finally
+            {
+                _updatingNextNumber = false;
             }
         }
 
@@ -870,6 +895,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons[EditingToolKind.Highlighter].Click -= OnHighlighterToolClicked;
             _toolButtons[EditingToolKind.Text].Click -= OnTextToolClicked;
             _toolButtons[EditingToolKind.PrivacyRegion].Click -= OnPrivacyRegionToolClicked;
+            _toolButtons[EditingToolKind.NumberedMarker].Click -= OnNumberedMarkerToolClicked;
+            _nextNumberBox.ValueChanged -= OnNextNumberChanged;
             _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click -= OnArrowModeClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click -= OnLineModeClicked;
             _privacyModeButtons[PrivacyRegionMode.Mosaic].Click -= OnMosaicModeClicked;
@@ -992,6 +1019,25 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return button;
         }
 
+        private static NumberBox CreateNextNumberBox()
+        {
+            var numberBox = new NumberBox
+            {
+                Minimum = 1,
+                Maximum = int.MaxValue,
+                SmallChange = 1,
+                Width = 120,
+                Margin = new Thickness(4, 0, 4, 0),
+                Header = "Next number",
+                Visibility = Visibility.Collapsed,
+                IsTabStop = true
+            };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                numberBox,
+                "Next numbered marker number");
+            return numberBox;
+        }
+
         private static FunctionBarButtonVisualStyle GetButtonVisualStyle() =>
             new(
                 ColorHelper.FromArgb(255, 255, 255, 255),
@@ -1097,6 +1143,39 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private void OnPrivacyRegionToolClicked(object sender, RoutedEventArgs args) =>
             SelectTool(EditingToolKind.PrivacyRegion, privacyMode: _request.ActivePrivacyRegionMode);
 
+        private void OnNumberedMarkerToolClicked(object sender, RoutedEventArgs args) =>
+            SelectTool(EditingToolKind.NumberedMarker);
+
+        private void OnNextNumberChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+        {
+            if (_disposed || _updatingNextNumber || _request.NextNumberSelectionSink is null)
+            {
+                return;
+            }
+
+            if (!double.IsFinite(args.NewValue)
+                || args.NewValue < 1
+                || args.NewValue > int.MaxValue
+                || args.NewValue != Math.Truncate(args.NewValue))
+            {
+                Update(_request);
+                return;
+            }
+
+            var result = _request.NextNumberSelectionSink.SetNextNumber(
+                new SetNextNumberRequest(
+                    _request.SessionId,
+                    _request.CoordinateVersion,
+                    _request.Selection.SelectionRevision,
+                    _request.AnnotationRevision,
+                    (int)args.NewValue));
+            if (result.Kind is not SetNextNumberResultKind.Succeeded
+                and not SetNextNumberResultKind.NoChange)
+            {
+                Update(_request);
+            }
+        }
+
         private void OnArrowModeClicked(object sender, RoutedEventArgs args) =>
             SelectTool(EditingToolKind.ArrowLine, ArrowLineEndStyle.Arrow);
 
@@ -1196,6 +1275,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private ArrowLinePointerResult _lastArrowLineResult;
         private HighlighterPointerResult _lastHighlighterResult;
         private PrivacyRegionPointerResult _lastPrivacyRegionResult;
+        private NumberedMarkerPointerResult _lastNumberedMarkerResult;
         private TextDraftResult _lastTextResult;
         private TextDraftRequest? _textRequest;
         private int? _activePointerId;
@@ -1207,6 +1287,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private AnnotationRevision? _highlighterAnnotationRevision;
         private int? _privacySelectionRevision;
         private AnnotationRevision? _privacyAnnotationRevision;
+        private int? _numberedMarkerSelectionRevision;
+        private AnnotationRevision? _numberedMarkerAnnotationRevision;
         private bool _releaseConsumed;
 
         public SessionInputBoundary(
@@ -1288,6 +1370,20 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 null,
                 null,
                 "No Privacy Region input has been accepted.");
+            _lastNumberedMarkerResult = new NumberedMarkerPointerResult(
+                NumberedMarkerPointerResultKind.NoActiveDraft,
+                editingRouter?.ActiveTool ?? EditingToolKind.Selection,
+                editingRouter?.ActiveNumberedMarkerNextNumber ?? 1,
+                editingRouter?.ActiveNumberedMarkerStyle ?? NumberedMarkerAnnotationStyle.Default,
+                sessionId,
+                coordinateVersion,
+                editingRouter?.CurrentSelectionRevision ?? 0,
+                editingRouter?.CurrentAnnotationRevision ?? AnnotationRevision.Initial,
+                null,
+                null,
+                null,
+                null,
+                "No Numbered Marker input has been accepted.");
             _lastTextResult = new TextDraftResult(
                 TextDraftResultKind.NoActiveDraft,
                 editingRouter?.ActiveTool ?? EditingToolKind.Selection,
@@ -1318,6 +1414,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public bool UsesPrivacyRegionTool =>
             _editingRouter?.ActiveTool == EditingToolKind.PrivacyRegion;
+
+        public bool UsesNumberedMarkerTool =>
+            _editingRouter?.ActiveTool == EditingToolKind.NumberedMarker;
 
         public TextDraftResult PointerPressedText(SelectionPointerEvent input)
         {
@@ -1641,6 +1740,42 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return result;
         }
 
+        public NumberedMarkerPointerResult PointerPressedNumberedMarker(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastNumberedMarkerResult;
+            }
+
+            lock (_gate)
+            {
+                if (_activePointerId is not null)
+                {
+                    return _lastNumberedMarkerResult with
+                    {
+                        Kind = NumberedMarkerPointerResultKind.PointerMismatch,
+                        Message = "Another pointer interaction is already active."
+                    };
+                }
+            }
+
+            var result = _editingRouter.PointerPressed(ToNumberedMarkerInput(input));
+            lock (_gate)
+            {
+                _lastNumberedMarkerResult = result;
+                if (result.Kind == NumberedMarkerPointerResultKind.DraftStarted)
+                {
+                    _activePointerId = input.PointerId;
+                    _numberedMarkerSelectionRevision = _editingRouter.CurrentSelectionRevision;
+                    _numberedMarkerAnnotationRevision = _editingRouter.CurrentAnnotationRevision;
+                    _releaseConsumed = false;
+                }
+            }
+
+            return result;
+        }
+
         public SelectionInputResult PointerMoved(SelectionPointerEvent input)
         {
             ArgumentNullException.ThrowIfNull(input);
@@ -1720,6 +1855,24 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             lock (_gate)
             {
                 _lastPrivacyRegionResult = result;
+            }
+
+            return result;
+        }
+
+        public NumberedMarkerPointerResult PointerMovedNumberedMarker(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastNumberedMarkerResult;
+            }
+
+            var result = _editingRouter.PointerMoved(
+                ToNumberedMarkerInput(NormalizePointer(input)));
+            lock (_gate)
+            {
+                _lastNumberedMarkerResult = result;
             }
 
             return result;
@@ -1867,6 +2020,39 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _activePointerId = null;
                 _privacySelectionRevision = null;
                 _privacyAnnotationRevision = null;
+                _numberedMarkerSelectionRevision = null;
+                _numberedMarkerAnnotationRevision = null;
+            }
+
+            return result;
+        }
+
+        public NumberedMarkerPointerResult PointerReleasedNumberedMarker(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastNumberedMarkerResult;
+            }
+
+            lock (_gate)
+            {
+                if (_releaseConsumed || _activePointerId is null)
+                {
+                    return _lastNumberedMarkerResult;
+                }
+
+                _releaseConsumed = true;
+            }
+
+            var result = _editingRouter.PointerReleased(
+                ToNumberedMarkerInput(NormalizePointer(input)));
+            lock (_gate)
+            {
+                _lastNumberedMarkerResult = result;
+                _activePointerId = null;
+                _numberedMarkerSelectionRevision = null;
+                _numberedMarkerAnnotationRevision = null;
             }
 
             return result;
@@ -1902,6 +2088,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public PrivacyRegionPointerResult PointerReleasedPrivacyRegionFromNative(PhysicalPoint point) =>
             PointerReleasedPrivacyRegion(new SelectionPointerEvent(
+                _sessionId,
+                _coordinateVersion,
+                GetActivePointerId(),
+                point));
+
+        public NumberedMarkerPointerResult PointerReleasedNumberedMarkerFromNative(PhysicalPoint point) =>
+            PointerReleasedNumberedMarker(new SelectionPointerEvent(
                 _sessionId,
                 _coordinateVersion,
                 GetActivePointerId(),
@@ -1958,6 +2151,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                         ActiveMode = _editingRouter.ActivePrivacyRegionMode,
                         ActiveEffectParameters = _editingRouter.ActivePrivacyRegionEffectParameters,
                         Message = "Privacy Region input cancelled with the capture session."
+                    };
+                _lastNumberedMarkerResult = _editingRouter is null
+                    ? _lastNumberedMarkerResult
+                    : _lastNumberedMarkerResult with
+                    {
+                        Kind = NumberedMarkerPointerResultKind.Cancelled,
+                        ActiveTool = _editingRouter.ActiveTool,
+                        ActiveNextNumber = _editingRouter.ActiveNumberedMarkerNextNumber,
+                        ActiveStyle = _editingRouter.ActiveNumberedMarkerStyle,
+                        Message = "Numbered Marker input cancelled with the capture session."
                     };
             }
 
@@ -2027,6 +2230,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     ?? _editingRouter?.CurrentSelectionRevision
                     ?? 0,
                 _privacyAnnotationRevision
+                    ?? _editingRouter?.CurrentAnnotationRevision
+                    ?? AnnotationRevision.Initial,
+                input.PointerId,
+                input.GlobalPhysicalPoint);
+
+        private NumberedMarkerPointerEvent ToNumberedMarkerInput(SelectionPointerEvent input) =>
+            new(
+                input.SessionId,
+                input.CoordinateVersion,
+                _numberedMarkerSelectionRevision
+                    ?? _editingRouter?.CurrentSelectionRevision
+                    ?? 0,
+                _numberedMarkerAnnotationRevision
                     ?? _editingRouter?.CurrentAnnotationRevision
                     ?? AnnotationRevision.Initial,
                 input.PointerId,
@@ -2104,6 +2320,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly List<Line> _arrowLinePreviews = new();
         private readonly List<FrameworkElement> _highlighterPreviews = new();
         private readonly List<TextBlock> _textPreviews = new();
+        private readonly List<FrameworkElement> _numberedMarkerPreviews = new();
         private readonly List<PrivacyPreview> _privacyPreviews = new();
         private readonly Grid _textEditorHost = new()
         {
@@ -2482,6 +2699,15 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 {
                     AddTextPreview(textContent, selection);
                 }
+                else if (annotationObject.ToolKind == AnnotationToolKind.NumberedMarker
+                    && annotationObject.Content is NumberedMarkerAnnotationContent markerContent)
+                {
+                    AddNumberedMarkerPreview(
+                        annotationObject.Geometry,
+                        markerContent,
+                        selection,
+                        isDraft: false);
+                }
             }
 
             if (snapshot.DraftPhysicalBounds is PhysicalRect draft
@@ -2532,12 +2758,100 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 HideTextEditor();
             }
 
+            if (snapshot.DraftNumberedMarker is NumberedMarkerDraftPresentation draftMarker)
+            {
+                AddNumberedMarkerPreview(
+                    draftMarker.Bounds,
+                    new NumberedMarkerAnnotationContent(draftMarker.Number, draftMarker.Style),
+                    selection,
+                    isDraft: true);
+            }
+
             _canvas.Cursor = snapshot.ActiveTool is EditingToolKind.Rectangle
                 or EditingToolKind.ArrowLine
                 or EditingToolKind.Highlighter
                 or EditingToolKind.PrivacyRegion
+                or EditingToolKind.NumberedMarker
                 ? InputSystemCursor.Create(InputSystemCursorShape.Cross)
                 : InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+        }
+
+        private void AddNumberedMarkerPreview(
+            PhysicalRect bounds,
+            NumberedMarkerAnnotationContent content,
+            PhysicalRect? selection,
+            bool isDraft)
+        {
+            var visible = bounds.Intersection(_descriptor.PhysicalBoundsInVirtualDesktop);
+            if (selection is PhysicalRect selectionBounds)
+            {
+                visible = visible.Intersection(selectionBounds);
+            }
+
+            if (!visible.IsPositive || !bounds.IsPositive)
+            {
+                return;
+            }
+
+            var marker = new Grid
+            {
+                Width = bounds.Width / _rasterizationScale,
+                Height = bounds.Height / _rasterizationScale,
+                IsHitTestVisible = false,
+                Visibility = Visibility.Visible,
+                Clip = new RectangleGeometry
+                {
+                    Rect = new global::Windows.Foundation.Rect(
+                        (visible.Left - bounds.Left) / _rasterizationScale,
+                        (visible.Top - bounds.Top) / _rasterizationScale,
+                        visible.Width / _rasterizationScale,
+                        visible.Height / _rasterizationScale)
+                }
+            };
+            var color = content.Style.Color;
+            marker.Children.Add(new Ellipse
+            {
+                Fill = new SolidColorBrush(ColorHelper.FromArgb(
+                    color.A,
+                    color.R,
+                    color.G,
+                    color.B)),
+                Stroke = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 255, 255)),
+                StrokeThickness = Math.Max(1, content.Style.Size / 16d) / _rasterizationScale,
+                IsHitTestVisible = false
+            });
+            marker.Children.Add(new TextBlock
+            {
+                Text = content.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                FontSize = Math.Max(10, content.Style.Size * 0.45) / _rasterizationScale,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 255, 255)),
+                HorizontalTextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                IsHitTestVisible = false
+            });
+            if (isDraft)
+            {
+                marker.Children.Add(new Border
+                {
+                    BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 255, 255)),
+                    BorderThickness = new Thickness(2 / _rasterizationScale),
+                    CornerRadius = new CornerRadius(bounds.Width / _rasterizationScale / 2),
+                    IsHitTestVisible = false
+                });
+            }
+
+            SetCanvasRectangle(
+                marker,
+                (bounds.Left - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                    / _rasterizationScale,
+                (bounds.Top - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                    / _rasterizationScale,
+                bounds.Width / _rasterizationScale,
+                bounds.Height / _rasterizationScale);
+            _numberedMarkerPreviews.Add(marker);
+            _canvas.Children.Add(marker);
         }
 
         private void AddTextPreview(
@@ -2988,6 +3302,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             _textPreviews.Clear();
+            foreach (var preview in _numberedMarkerPreviews)
+            {
+                _canvas.Children.Remove(preview);
+            }
+
+            _numberedMarkerPreviews.Clear();
             foreach (var preview in _privacyPreviews)
             {
                 preview.Image.Source = null;
@@ -3154,6 +3474,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 : _inputBoundary.UsesPrivacyRegionTool
                 ? _inputBoundary.PointerPressedPrivacyRegion(pointer).Kind
                     == PrivacyRegionPointerResultKind.DraftStarted
+                : _inputBoundary.UsesNumberedMarkerTool
+                ? _inputBoundary.PointerPressedNumberedMarker(pointer).Kind
+                    == NumberedMarkerPointerResultKind.DraftStarted
                 : _inputBoundary.UsesArrowLineTool
                 ? _inputBoundary.PointerPressedArrowLine(pointer).Kind
                     == ArrowLinePointerResultKind.DraftStarted
@@ -3197,6 +3520,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             {
                 _inputBoundary.PointerMovedPrivacyRegion(pointer);
             }
+            else if (_inputBoundary.UsesNumberedMarkerTool)
+            {
+                _inputBoundary.PointerMovedNumberedMarker(pointer);
+            }
             else if (_inputBoundary.UsesArrowLineTool)
             {
                 _inputBoundary.PointerMovedArrowLine(pointer);
@@ -3237,6 +3564,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             else if (_inputBoundary.UsesPrivacyRegionTool)
             {
                 _inputBoundary.PointerReleasedPrivacyRegion(pointer);
+            }
+            else if (_inputBoundary.UsesNumberedMarkerTool)
+            {
+                _inputBoundary.PointerReleasedNumberedMarker(pointer);
             }
             else if (_inputBoundary.UsesArrowLineTool)
             {
@@ -3512,6 +3843,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     else if (_inputBoundary.UsesPrivacyRegionTool)
                     {
                         _inputBoundary.PointerReleasedPrivacyRegionFromNative(point);
+                    }
+                    else if (_inputBoundary.UsesNumberedMarkerTool)
+                    {
+                        _inputBoundary.PointerReleasedNumberedMarkerFromNative(point);
                     }
                     else if (_inputBoundary.UsesArrowLineTool)
                     {

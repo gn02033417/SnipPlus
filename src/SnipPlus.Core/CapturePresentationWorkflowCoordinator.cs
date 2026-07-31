@@ -123,6 +123,12 @@ public sealed class CapturePresentationWorkflowCoordinator :
     public PrivacyRegionEffectParameters ActivePrivacyRegionEffectParameters =>
         _annotationEditing.ActivePrivacyRegionEffectParameters;
 
+    public NumberedMarkerAnnotationStyle ActiveNumberedMarkerStyle =>
+        _annotationEditing.ActiveNumberedMarkerStyle;
+
+    public int ActiveNumberedMarkerNextNumber =>
+        _annotationEditing.ActiveNumberedMarkerNextNumber;
+
     public AnnotationMutationResult AddAnnotationObject(AddAnnotationObjectRequest request) =>
         _annotationDocuments.Add(request);
 
@@ -460,6 +466,33 @@ public sealed class CapturePresentationWorkflowCoordinator :
         return result;
     }
 
+    public NumberedMarkerPointerResult PointerPressed(NumberedMarkerPointerEvent input)
+    {
+        var result = ForwardNumberedMarkerInput(
+            input,
+            static (editing, value, selection) => editing.PointerPressed(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public NumberedMarkerPointerResult PointerMoved(NumberedMarkerPointerEvent input)
+    {
+        var result = ForwardNumberedMarkerInput(
+            input,
+            static (editing, value, selection) => editing.PointerMoved(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public NumberedMarkerPointerResult PointerReleased(NumberedMarkerPointerEvent input)
+    {
+        var result = ForwardNumberedMarkerInput(
+            input,
+            static (editing, value, selection) => editing.PointerReleased(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
     public TextDraftResult BeginTextDraft(TextDraftPointerEvent input)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -642,6 +675,44 @@ public sealed class CapturePresentationWorkflowCoordinator :
             _stateAuthority.CurrentState,
             selection.State);
         if (result.Kind == PrivacyRegionModeSelectionResultKind.Selected)
+        {
+            _overlayCoordinator.ApplyAnnotation(
+                _annotationEditing.CreatePresentationSnapshot(selection.State));
+            _functionBarPresentation?.Reposition(CreateFunctionBarRequest(selection.State));
+        }
+
+        return result;
+    }
+
+    public SetNextNumberResult SetNextNumber(SetNextNumberRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        InitialSelectionCoordinator? selection;
+        lock (_gate)
+        {
+            selection = _selectionCoordinator;
+        }
+
+        if (selection is null)
+        {
+            return new SetNextNumberResult(
+                SetNextNumberResultKind.StaleSession,
+                ActiveTool,
+                ActiveNumberedMarkerNextNumber,
+                ActiveNumberedMarkerStyle,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                CurrentAnnotationRevision,
+                null,
+                "The next marker number request belongs to a stale capture session.");
+        }
+
+        var result = _annotationEditing.SetNextNumber(
+            request,
+            _stateAuthority.CurrentState,
+            selection.State);
+        if (result.Kind is SetNextNumberResultKind.Succeeded or SetNextNumberResultKind.NoChange)
         {
             _overlayCoordinator.ApplyAnnotation(
                 _annotationEditing.CreatePresentationSnapshot(selection.State));
@@ -1106,6 +1177,35 @@ public sealed class CapturePresentationWorkflowCoordinator :
             : handler(_annotationEditing, input, selection.State);
     }
 
+    private NumberedMarkerPointerResult ForwardNumberedMarkerInput(
+        NumberedMarkerPointerEvent input,
+        Func<AnnotationEditingCoordinator, NumberedMarkerPointerEvent, SelectionVisualState, NumberedMarkerPointerResult> handler)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        InitialSelectionCoordinator? selection;
+        lock (_gate)
+        {
+            selection = _inputEnabled ? _selectionCoordinator : null;
+        }
+
+        return selection is null
+            ? new NumberedMarkerPointerResult(
+                NumberedMarkerPointerResultKind.StaleSession,
+                _annotationEditing.ActiveTool,
+                _annotationEditing.ActiveNumberedMarkerNextNumber,
+                _annotationEditing.ActiveNumberedMarkerStyle,
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision,
+                CurrentAnnotationRevision,
+                null,
+                null,
+                CurrentAnnotationDocument,
+                null,
+                "Numbered Marker input was ignored until the capture session was ready.")
+            : handler(_annotationEditing, input, selection.State);
+    }
+
     private void ApplyAnnotationPresentation()
     {
         var selection = CurrentSelection;
@@ -1274,7 +1374,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
             ActiveArrowLineEndStyle = _annotationEditing.ActiveArrowLineEndStyle,
             ToolSelectionSink = this,
             ActivePrivacyRegionMode = _annotationEditing.ActivePrivacyRegionMode,
-            PrivacyRegionModeSelectionSink = this
+            PrivacyRegionModeSelectionSink = this,
+            ActiveNumberedMarkerNextNumber = _annotationEditing.ActiveNumberedMarkerNextNumber,
+            NextNumberSelectionSink = this
         };
 
     private async ValueTask CompleteAsync(

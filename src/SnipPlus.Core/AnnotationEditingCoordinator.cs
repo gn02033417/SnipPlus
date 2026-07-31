@@ -29,6 +29,11 @@ public interface IPrivacyRegionEffectPolicy
     PrivacyRegionEffectParameters GetParameters(PrivacyRegionMode mode);
 }
 
+public interface INumberedMarkerAnnotationStylePolicy
+{
+    NumberedMarkerAnnotationStyle GetDefaultStyle();
+}
+
 public sealed class DefaultRectangleAnnotationStylePolicy : IRectangleAnnotationStylePolicy
 {
     public RectangleAnnotationStyle GetDefaultStyle() => RectangleAnnotationStyle.Default;
@@ -61,6 +66,11 @@ public sealed class DefaultPrivacyRegionEffectPolicy : IPrivacyRegionEffectPolic
     };
 }
 
+public sealed class DefaultNumberedMarkerAnnotationStylePolicy : INumberedMarkerAnnotationStylePolicy
+{
+    public NumberedMarkerAnnotationStyle GetDefaultStyle() => NumberedMarkerAnnotationStyle.Default;
+}
+
 public sealed class AnnotationEditingCoordinator
 {
     private readonly object _gate = new();
@@ -71,6 +81,7 @@ public sealed class AnnotationEditingCoordinator
     private readonly IHighlighterAnnotationStylePolicy _highlighterStylePolicy;
     private readonly ITextAnnotationStylePolicy _textStylePolicy;
     private readonly IPrivacyRegionEffectPolicy _privacyRegionEffectPolicy;
+    private readonly INumberedMarkerAnnotationStylePolicy _numberedMarkerStylePolicy;
     private readonly Func<Guid> _textDraftIdFactory;
     private readonly Func<Guid> _privacyDraftIdFactory;
     private Guid? _sessionId;
@@ -84,6 +95,8 @@ public sealed class AnnotationEditingCoordinator
     private HighlighterDraft? _highlighterDraft;
     private TextDraft? _textDraft;
     private PrivacyRegionDraft? _privacyRegionDraft;
+    private NumberedMarkerDraft? _numberedMarkerDraft;
+    private int _nextNumber = 1;
 
     public AnnotationEditingCoordinator(
         AnnotationDocumentCoordinator documents,
@@ -94,7 +107,8 @@ public sealed class AnnotationEditingCoordinator
         ITextAnnotationStylePolicy? textStylePolicy = null,
         Func<Guid>? textDraftIdFactory = null,
         IPrivacyRegionEffectPolicy? privacyRegionEffectPolicy = null,
-        Func<Guid>? privacyDraftIdFactory = null)
+        Func<Guid>? privacyDraftIdFactory = null,
+        INumberedMarkerAnnotationStylePolicy? numberedMarkerStylePolicy = null)
     {
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
         _objectIdFactory = objectIdFactory ?? AnnotationObjectId.New;
@@ -103,6 +117,8 @@ public sealed class AnnotationEditingCoordinator
         _highlighterStylePolicy = highlighterStylePolicy ?? new DefaultHighlighterAnnotationStylePolicy();
         _textStylePolicy = textStylePolicy ?? new DefaultTextAnnotationStylePolicy();
         _privacyRegionEffectPolicy = privacyRegionEffectPolicy ?? new DefaultPrivacyRegionEffectPolicy();
+        _numberedMarkerStylePolicy = numberedMarkerStylePolicy
+            ?? new DefaultNumberedMarkerAnnotationStylePolicy();
         _textDraftIdFactory = textDraftIdFactory ?? Guid.NewGuid;
         _privacyDraftIdFactory = privacyDraftIdFactory ?? Guid.NewGuid;
         _privacyRegionMode = _privacyRegionEffectPolicy.GetDefaultMode();
@@ -164,6 +180,20 @@ public sealed class AnnotationEditingCoordinator
     public PrivacyRegionEffectParameters ActivePrivacyRegionEffectParameters =>
         _privacyRegionEffectPolicy.GetParameters(ActivePrivacyRegionMode);
 
+    public NumberedMarkerAnnotationStyle ActiveNumberedMarkerStyle =>
+        GetActiveNumberedMarkerStyle();
+
+    public int ActiveNumberedMarkerNextNumber
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _nextNumber;
+            }
+        }
+    }
+
     public void BeginSession(SelectionVisualState selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
@@ -181,6 +211,8 @@ public sealed class AnnotationEditingCoordinator
             _highlighterDraft = null;
             _textDraft = null;
             _privacyRegionDraft = null;
+            _numberedMarkerDraft = null;
+            _nextNumber = 1;
         }
     }
 
@@ -199,6 +231,7 @@ public sealed class AnnotationEditingCoordinator
                 {
                     _textDraft = null;
                     _privacyRegionDraft = null;
+                    _numberedMarkerDraft = null;
                 }
 
                 _selectionRevision = selection.SelectionRevision;
@@ -305,6 +338,7 @@ public sealed class AnnotationEditingCoordinator
             _highlighterDraft = null;
             _textDraft = null;
             _privacyRegionDraft = null;
+            _numberedMarkerDraft = null;
             return new EditingToolSelectionResult(
                 EditingToolSelectionResultKind.Selected,
                 _activeTool,
@@ -318,7 +352,9 @@ public sealed class AnnotationEditingCoordinator
                 ActiveArrowLineEndStyle = _arrowLineEndStyle,
                 ActiveTextStyle = _textStylePolicy.GetDefaultStyle(),
                 ActivePrivacyRegionMode = _privacyRegionMode,
-                ActivePrivacyRegionEffectParameters = _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode)
+                ActivePrivacyRegionEffectParameters = _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode),
+                ActiveNumberedMarkerStyle = GetActiveNumberedMarkerStyle(),
+                ActiveNumberedMarkerNextNumber = _nextNumber
             };
         }
     }
@@ -388,6 +424,425 @@ public sealed class AnnotationEditingCoordinator
                 request,
                 null,
                 $"Privacy Region mode {request.Mode} is active.");
+        }
+    }
+
+    public SetNextNumberResult SetNextNumber(
+        SetNextNumberRequest request,
+        WorkflowState currentState,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            if (currentState != WorkflowState.Editing)
+            {
+                return NextNumberResult(
+                    SetNextNumberResultKind.InvalidWorkflowState,
+                    request,
+                    CreateFailure(
+                        request.SessionId,
+                        FailureCode.InvalidStateTransition,
+                        "The next marker number can only change while the workflow is Editing."),
+                    "The next marker number can only change while the workflow is Editing.");
+            }
+
+            if (!IsCurrentSession(request.SessionId, request.CoordinateVersion))
+            {
+                return NextNumberResult(
+                    SetNextNumberResultKind.StaleSession,
+                    request,
+                    null,
+                    "The next marker number request belongs to a stale capture session.");
+            }
+
+            if (request.SelectionRevision != selection.SelectionRevision)
+            {
+                return NextNumberResult(
+                    SetNextNumberResultKind.StaleSelectionRevision,
+                    request,
+                    null,
+                    "The next marker number request belongs to a stale Selection revision.");
+            }
+
+            var currentRevision = _documents.Current?.Revision ?? AnnotationRevision.Initial;
+            if (request.ExpectedAnnotationRevision != currentRevision)
+            {
+                return NextNumberResult(
+                    SetNextNumberResultKind.StaleAnnotationRevision,
+                    request,
+                    null,
+                    "The next marker number request belongs to a stale Annotation revision.");
+            }
+
+            if (request.Number <= 0)
+            {
+                return NextNumberResult(
+                    SetNextNumberResultKind.InvalidNumber,
+                    request,
+                    null,
+                    "The next marker number must be positive.");
+            }
+
+            if (request.Number == _nextNumber)
+            {
+                return NextNumberResult(
+                    SetNextNumberResultKind.NoChange,
+                    request,
+                    null,
+                    "The next marker number is unchanged.");
+            }
+
+            _nextNumber = request.Number;
+            return NextNumberResult(
+                SetNextNumberResultKind.Succeeded,
+                request,
+                null,
+                "The next marker number was updated.");
+        }
+    }
+
+    public NumberedMarkerPointerResult PointerPressed(
+        NumberedMarkerPointerEvent input,
+        SelectionVisualState selection) => BeginNumberedMarkerDraft(input, selection);
+
+    public NumberedMarkerPointerResult BeginNumberedMarkerDraft(
+        NumberedMarkerPointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateNumberedMarker(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_numberedMarkerDraft is not null)
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.DraftMismatch,
+                    input,
+                    _numberedMarkerDraft,
+                    null,
+                    _documents.Current,
+                    null,
+                    "A Numbered Marker draft is already active.");
+            }
+
+            if (!TryGetNumberedMarkerStyle(out var style, out var styleFailure))
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.InvalidStyle,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    styleFailure,
+                    "The Numbered Marker style is invalid.");
+            }
+
+            if (!Contains(selection.NormalizedPhysicalBounds!.Value, input.GlobalPhysicalPoint))
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.IgnoredOutsideSelection,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Numbered Marker creation starts only inside the current Selection.");
+            }
+
+            _numberedMarkerDraft = new NumberedMarkerDraft(
+                input.PointerId,
+                _nextNumber,
+                input.GlobalPhysicalPoint,
+                input.GlobalPhysicalPoint,
+                style);
+            return NumberedMarkerResult(
+                NumberedMarkerPointerResultKind.DraftStarted,
+                input,
+                _numberedMarkerDraft,
+                null,
+                _documents.Current,
+                null,
+                "Numbered Marker draft started.");
+        }
+    }
+
+    public NumberedMarkerPointerResult PointerMoved(
+        NumberedMarkerPointerEvent input,
+        SelectionVisualState selection) => UpdateNumberedMarkerDraft(input, selection);
+
+    public NumberedMarkerPointerResult UpdateNumberedMarkerDraft(
+        NumberedMarkerPointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateNumberedMarker(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_numberedMarkerDraft is null)
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.NoActiveDraft,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "No Numbered Marker draft is active.");
+            }
+
+            if (_numberedMarkerDraft.PointerId != input.PointerId)
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.PointerMismatch,
+                    input,
+                    _numberedMarkerDraft,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Numbered Marker pointer input belongs to another pointer.");
+            }
+
+            if (!Contains(selection.NormalizedPhysicalBounds!.Value, input.GlobalPhysicalPoint))
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.IgnoredOutsideSelection,
+                    input,
+                    _numberedMarkerDraft,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Numbered Marker preview remains inside the current Selection.");
+            }
+
+            _numberedMarkerDraft = _numberedMarkerDraft with
+            {
+                Center = input.GlobalPhysicalPoint,
+                Bounds = NumberedMarkerAnnotationContent.GetBounds(
+                    input.GlobalPhysicalPoint,
+                    _numberedMarkerDraft.Style)
+            };
+            return NumberedMarkerResult(
+                NumberedMarkerPointerResultKind.DraftUpdated,
+                input,
+                _numberedMarkerDraft,
+                null,
+                _documents.Current,
+                null,
+                "Numbered Marker draft updated.");
+        }
+    }
+
+    public NumberedMarkerPointerResult PointerReleased(
+        NumberedMarkerPointerEvent input,
+        SelectionVisualState selection) => CommitNumberedMarkerDraft(input, selection);
+
+    public NumberedMarkerPointerResult CommitNumberedMarkerDraft(
+        NumberedMarkerPointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateNumberedMarker(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_numberedMarkerDraft is null)
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.NoActiveDraft,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "No Numbered Marker draft is active.");
+            }
+
+            if (_numberedMarkerDraft.PointerId != input.PointerId)
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.PointerMismatch,
+                    input,
+                    _numberedMarkerDraft,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Numbered Marker pointer input belongs to another pointer.");
+            }
+
+            if (!Contains(selection.NormalizedPhysicalBounds!.Value, input.GlobalPhysicalPoint))
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.IgnoredOutsideSelection,
+                    input,
+                    _numberedMarkerDraft,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Numbered Marker commit must finish inside the current Selection.");
+            }
+
+            var draft = _numberedMarkerDraft with
+            {
+                Center = input.GlobalPhysicalPoint,
+                Bounds = NumberedMarkerAnnotationContent.GetBounds(
+                    input.GlobalPhysicalPoint,
+                    _numberedMarkerDraft.Style)
+            };
+            var document = _documents.Current;
+            if (document is null)
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.Failed,
+                    input,
+                    draft,
+                    null,
+                    null,
+                    CreateFailure(
+                        input.SessionId,
+                        FailureCode.InvalidStateTransition,
+                        "The Annotation Document is unavailable for Numbered Marker commit."),
+                    "The Numbered Marker annotation could not be committed.");
+            }
+
+            if (draft.Number == _nextNumber && draft.Number == int.MaxValue)
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.NumberOverflow,
+                    input,
+                    draft,
+                    null,
+                    document,
+                    CreateFailure(
+                        input.SessionId,
+                        FailureCode.InvalidStateTransition,
+                        "The next Numbered Marker number would overflow."),
+                    "The Numbered Marker could not be committed because the next number would overflow.");
+            }
+
+            var zOrder = document.Objects.Count == 0
+                ? 0
+                : document.Objects.Max(annotationObject => annotationObject.ZOrder);
+            if (zOrder == int.MaxValue)
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.ZOrderOverflow,
+                    input,
+                    draft,
+                    null,
+                    document,
+                    CreateFailure(
+                        input.SessionId,
+                        FailureCode.AnnotationZOrderOverflow,
+                        "The next Numbered Marker annotation Z-order would overflow."),
+                    "The Numbered Marker could not be committed because its Z-order would overflow.");
+            }
+
+            AnnotationObject annotationObject;
+            try
+            {
+                annotationObject = new AnnotationObject(
+                    _objectIdFactory(),
+                    input.SessionId,
+                    AnnotationToolKind.NumberedMarker,
+                    draft.Bounds,
+                    document.Objects.Count == 0 ? 0 : zOrder + 1,
+                    new NumberedMarkerAnnotationContent(draft.Number, draft.Style));
+            }
+            catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+            {
+                return NumberedMarkerResult(
+                    NumberedMarkerPointerResultKind.Failed,
+                    input,
+                    draft,
+                    null,
+                    document,
+                    CreateFailure(input.SessionId, FailureCode.InvalidStateTransition, exception.Message),
+                    "The Numbered Marker annotation could not be created.");
+            }
+
+            var mutation = _documents.Add(new AddAnnotationObjectRequest(
+                input.SessionId,
+                input.ExpectedAnnotationRevision,
+                annotationObject));
+            if (mutation is not AnnotationMutationResult.Succeeded succeeded)
+            {
+                return NumberedMarkerResult(
+                    mutation is AnnotationMutationResult.StaleAnnotationRevision
+                        ? NumberedMarkerPointerResultKind.StaleAnnotationRevision
+                        : NumberedMarkerPointerResultKind.Failed,
+                    input,
+                    draft,
+                    null,
+                    mutation.CurrentDocument,
+                    CreateFailure(
+                        input.SessionId,
+                        mutation is AnnotationMutationResult.StaleAnnotationRevision
+                            ? FailureCode.StaleAnnotationRevision
+                            : FailureCode.InvalidStateTransition,
+                        "The Annotation Document changed before the Numbered Marker commit."),
+                    "The Numbered Marker annotation could not be committed.");
+            }
+
+            _numberedMarkerDraft = null;
+            if (_nextNumber == draft.Number)
+            {
+                _nextNumber = checked(draft.Number + 1);
+            }
+
+            return NumberedMarkerResult(
+                NumberedMarkerPointerResultKind.Committed,
+                input,
+                null,
+                annotationObject,
+                succeeded.Document,
+                null,
+                "Numbered Marker annotation committed.");
+        }
+    }
+
+    public NumberedMarkerPointerResult CancelNumberedMarkerDraft(
+        Guid sessionId,
+        string coordinateVersion)
+    {
+        lock (_gate)
+        {
+            var document = _documents.Current;
+            var input = new NumberedMarkerPointerEvent(
+                sessionId,
+                coordinateVersion,
+                _selectionRevision,
+                document?.Revision ?? AnnotationRevision.Initial,
+                _numberedMarkerDraft?.PointerId ?? 0,
+                _numberedMarkerDraft?.Center ?? default);
+            var draft = _numberedMarkerDraft;
+            _numberedMarkerDraft = null;
+            return NumberedMarkerResult(
+                NumberedMarkerPointerResultKind.Cancelled,
+                input,
+                draft,
+                null,
+                document,
+                null,
+                "Numbered Marker draft cancelled.");
         }
     }
 
@@ -2004,6 +2459,15 @@ public sealed class AnnotationEditingCoordinator
                 DraftPrivacyRegionMode = _privacyRegionDraft?.Mode,
                 DraftPrivacyRegionEffectParameters = _privacyRegionDraft?.EffectParameters,
                 DraftPrivacyRegionBounds = _privacyRegionDraft?.Bounds,
+                ActiveNumberedMarkerStyle = GetActiveNumberedMarkerStyle(),
+                ActiveNumberedMarkerNextNumber = _nextNumber,
+                DraftNumberedMarker = _numberedMarkerDraft is null
+                    ? null
+                    : new NumberedMarkerDraftPresentation(
+                        _numberedMarkerDraft.Number,
+                        _numberedMarkerDraft.Center,
+                        _numberedMarkerDraft.Bounds,
+                        _numberedMarkerDraft.Style),
                 DraftText = _textDraft is null
                     ? null
                     : new TextDraftPresentation(
@@ -2034,6 +2498,8 @@ public sealed class AnnotationEditingCoordinator
                 _highlighterDraft = null;
                 _textDraft = null;
                 _privacyRegionDraft = null;
+                _numberedMarkerDraft = null;
+                _nextNumber = 1;
             }
         }
     }
@@ -2650,6 +3116,177 @@ public sealed class AnnotationEditingCoordinator
         return null;
     }
 
+    private NumberedMarkerPointerResult? ValidateNumberedMarker(
+        NumberedMarkerPointerEvent input,
+        SelectionVisualState selection)
+    {
+        if (input.PointerId <= 0)
+        {
+            return NumberedMarkerResult(
+                NumberedMarkerPointerResultKind.PointerMismatch,
+                input,
+                _numberedMarkerDraft,
+                null,
+                _documents.Current,
+                null,
+                "Numbered Marker input must contain a positive pointer identifier.");
+        }
+
+        if (!IsCurrentSession(input.SessionId, input.CoordinateVersion))
+        {
+            return NumberedMarkerResult(
+                NumberedMarkerPointerResultKind.StaleSession,
+                input,
+                _numberedMarkerDraft,
+                null,
+                _documents.Current,
+                null,
+                "Numbered Marker input belongs to a stale capture session.");
+        }
+
+        if (input.SelectionRevision != selection.SelectionRevision)
+        {
+            return NumberedMarkerResult(
+                NumberedMarkerPointerResultKind.StaleSelectionRevision,
+                input,
+                _numberedMarkerDraft,
+                null,
+                _documents.Current,
+                null,
+                "Numbered Marker input belongs to a stale Selection revision.");
+        }
+
+        var currentRevision = _documents.Current?.Revision ?? AnnotationRevision.Initial;
+        if (input.ExpectedAnnotationRevision != currentRevision)
+        {
+            return NumberedMarkerResult(
+                NumberedMarkerPointerResultKind.StaleAnnotationRevision,
+                input,
+                _numberedMarkerDraft,
+                null,
+                _documents.Current,
+                null,
+                "Numbered Marker input belongs to a stale Annotation revision.");
+        }
+
+        if (_activeTool != EditingToolKind.NumberedMarker)
+        {
+            return NumberedMarkerResult(
+                NumberedMarkerPointerResultKind.Failed,
+                input,
+                _numberedMarkerDraft,
+                null,
+                _documents.Current,
+                CreateFailure(
+                    input.SessionId,
+                    FailureCode.InvalidStateTransition,
+                    "Numbered Marker input was received while another editing tool is active."),
+                "Numbered Marker input was received while another editing tool is active.");
+        }
+
+        if (selection.Status != SelectionStatus.Locked
+            || selection.InteractionMode != SelectionInteractionMode.Locked
+            || selection.NormalizedPhysicalBounds is not PhysicalRect bounds
+            || !bounds.IsPositive)
+        {
+            return NumberedMarkerResult(
+                NumberedMarkerPointerResultKind.Failed,
+                input,
+                _numberedMarkerDraft,
+                null,
+                _documents.Current,
+                CreateFailure(
+                    input.SessionId,
+                    FailureCode.InvalidSelection,
+                    "Numbered Marker input requires a valid locked Selection boundary."),
+                "Numbered Marker input requires a valid locked Selection boundary.");
+        }
+
+        return null;
+    }
+
+    private bool TryGetNumberedMarkerStyle(
+        out NumberedMarkerAnnotationStyle style,
+        out Failure? failure)
+    {
+        failure = null;
+        try
+        {
+            style = _numberedMarkerStylePolicy.GetDefaultStyle();
+            if (style is null)
+            {
+                throw new InvalidOperationException("The Numbered Marker style policy returned no style.");
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException or InvalidOperationException)
+        {
+            style = NumberedMarkerAnnotationStyle.Default;
+            failure = CreateFailure(
+                _sessionId ?? Guid.Empty,
+                FailureCode.InvalidStateTransition,
+                exception.Message);
+            return false;
+        }
+    }
+
+    private NumberedMarkerPointerResult NumberedMarkerResult(
+        NumberedMarkerPointerResultKind kind,
+        NumberedMarkerPointerEvent input,
+        NumberedMarkerDraft? draft,
+        AnnotationObject? committedObject,
+        AnnotationDocument? document,
+        Failure? failure,
+        string message) => new(
+        kind,
+        _activeTool,
+        _nextNumber,
+        _numberedMarkerStylePolicy.GetDefaultStyle(),
+        input.SessionId,
+        input.CoordinateVersion,
+        input.SelectionRevision,
+        document?.Revision ?? _documents.Current?.Revision ?? AnnotationRevision.Initial,
+        draft is null
+            ? null
+            : new NumberedMarkerDraftPresentation(
+                draft.Number,
+                draft.Center,
+                draft.Bounds,
+                draft.Style),
+        committedObject,
+        document,
+        failure,
+        message);
+
+    private SetNextNumberResult NextNumberResult(
+        SetNextNumberResultKind kind,
+        SetNextNumberRequest request,
+        Failure? failure,
+        string message) => new(
+        kind,
+        _activeTool,
+        _nextNumber,
+        _numberedMarkerStylePolicy.GetDefaultStyle(),
+        request.SessionId,
+        request.CoordinateVersion,
+        request.SelectionRevision,
+        _documents.Current?.Revision ?? AnnotationRevision.Initial,
+        failure,
+        message);
+
+    private NumberedMarkerAnnotationStyle GetActiveNumberedMarkerStyle()
+    {
+        try
+        {
+            return _numberedMarkerStylePolicy.GetDefaultStyle();
+        }
+        catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException or InvalidOperationException)
+        {
+            return NumberedMarkerAnnotationStyle.Default;
+        }
+    }
+
     private bool IsCurrentSession(Guid sessionId, string coordinateVersion) =>
         _sessionId == sessionId
         && string.Equals(_coordinateVersion, coordinateVersion, StringComparison.Ordinal);
@@ -2781,7 +3418,9 @@ public sealed class AnnotationEditingCoordinator
         {
             ActiveArrowLineEndStyle = _arrowLineEndStyle,
             ActivePrivacyRegionMode = _privacyRegionMode,
-            ActivePrivacyRegionEffectParameters = _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode)
+            ActivePrivacyRegionEffectParameters = _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode),
+            ActiveNumberedMarkerStyle = GetActiveNumberedMarkerStyle(),
+            ActiveNumberedMarkerNextNumber = _nextNumber
         };
 
     private static bool Contains(PhysicalRect bounds, PhysicalPoint point) =>
@@ -2832,5 +3471,17 @@ public sealed class AnnotationEditingCoordinator
         PrivacyRegionEffectParameters EffectParameters)
     {
         public PhysicalRect Bounds { get; init; } = new(Start.X, Start.Y, Start.X, Start.Y);
+    }
+
+    private sealed record NumberedMarkerDraft(
+        int PointerId,
+        int Number,
+        PhysicalPoint Start,
+        PhysicalPoint Center,
+        NumberedMarkerAnnotationStyle Style)
+    {
+        public PhysicalRect Bounds { get; init; } = NumberedMarkerAnnotationContent.GetBounds(
+            Center,
+            Style);
     }
 }

@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added — Stage 7G Pointer-driven Numbered Marker Creation (2026-08-01)
+
+- Added platform-neutral immutable `NumberedMarkerAnnotationContent`／`NumberedMarkerAnnotationStyle` contracts with positive marker numbers, Core-owned centralized default size／color policy and deterministic physical-pixel bounds. No WinUI、Win2D or Windows-specific type crosses the Contracts boundary.
+- Added Core-owned Numbered Marker draft／commit／cancel lifecycle, revision-aware `SetNextNumber` boundary, session reset, preserved deletion gaps, configurable next number, duplicate-number support and atomic number／document／Z-order overflow handling. Active drafts snapshot their number and style; setting the next number does not rewrite an active draft.
+- Added Function Bar Numbered Marker selection and accessible native WinUI `NumberBox` next-number control. Invalid input is rejected or reverted without mutating Core; no color／size picker or keyboard shortcut was added.
+- Added per-display Windows overlay preview for committed and draft solid circle markers with centered invariant-culture number text, physical Virtual Desktop mapping, display／Selection clipping and an explicit draft border state. Complete remains blocked for non-empty Annotation Documents, so no annotation-aware render, Clipboard or file output was added.
+- Added deterministic Contracts／Core／Windows coverage for typed content, physical bounds, sequential numbering, preserved gaps, duplicate numbers, draft snapshots, cancellation, stale Selection, overflow atomicity, NumberBox declaration and marker preview clipping. Current non-interactive evidence is `210/210` passed with `0` failures／`0` skips. A signed Development MSIX was produced with `CN=SnipPlus` (`SHA-256 42382BFF9D3CE781E7AB9D77AB53DF04153B71A083D6271329412134FC15314F`), but packaged installation was blocked by `0x800B0109` because AppX requires the self-signed root in a machine trust store; importing that certificate to `LocalMachine` returned `E_ACCESSDENIED`. Packaged runtime verification remains `Pending`; no GUI runtime result is claimed. No real desktop screenshot or Clipboard payload was used.
+
 ### Added — Stage 7F Pointer-driven Mosaic／Blur Creation (2026-07-31)
 
 - Added platform-neutral `PrivacyRegion` contracts for immutable Mosaic／Blur effect parameters, per-object mode, revision-aware mode selection, pointer draft／commit／cancel outcomes and presentation snapshot state. The effect policy is owned by Core; no WinUI or Windows-specific type crosses the Contracts boundary.
