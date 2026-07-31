@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added — Stage 7D Pointer-driven Highlighter Creation (2026-07-31)
+
+- Added platform-neutral `Highlighter` tool selection, immutable physical polyline／semi-transparent rounded-stroke style／content contracts, revision-aware pointer requests／outcomes and presentation snapshot state. The stroke is freehand, requires at least two distinct physical points and rejects fully transparent or opaque styles.
+- Added Core-owned Highlighter draft／move／release commit routing through `AnnotationEditingCoordinator` and `CapturePresentationWorkflowCoordinator`; release commits one immutable `HighlighterStroke` object with Frozen Virtual Desktop points, deterministic Z-order and stale-session／Selection／Annotation revision rejection.
+- Added Function Bar Highlighter selection and Windows per-display overlay preview using clipped physical polyline segments, semi-transparent color and round endpoint caps. No opaque pen, Text, Mosaic／Blur, Numbered Marker, Undo／Redo or annotation-aware final render was added.
+- Added deterministic Contracts／Core／Workflow／Windows coverage. The focused contract／annotation test run passed `128/128` with `0` failures／`0` skips; final locked restore succeeded, Release x64 build succeeded with `0` warnings／`0` errors, all non-interactive tests passed `182/182` with `0` failures／`0` skips, limited formatting verification passed and `git diff --check` passed. No MSIX、Publish、install、GUI、Interactive／Manual runtime verification or real desktop／Clipboard payload was used in this slice.
+
 ### Added — Stage 7C Pointer-driven Arrow／Line Creation (2026-07-31)
 
 - Added platform-neutral `ArrowLine` editing-tool selection, immutable Arrow／Line end-style／color／thickness contracts, physical line-segment content, revision-aware pointer requests／outcomes and presentation snapshot state. `Arrow` and no-arrow `Line` are one tool with an explicit end-style mode.

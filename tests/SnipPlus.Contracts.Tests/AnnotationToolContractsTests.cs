@@ -11,7 +11,13 @@ public sealed class AnnotationToolContractsTests
     public void EditingToolsKeepSelectionOutsideAnnotationToolKinds()
     {
         CollectionAssert.AreEquivalent(
-            new[] { EditingToolKind.Selection, EditingToolKind.Rectangle, EditingToolKind.ArrowLine },
+            new[]
+            {
+                EditingToolKind.Selection,
+                EditingToolKind.Rectangle,
+                EditingToolKind.ArrowLine,
+                EditingToolKind.Highlighter
+            },
             Enum.GetValues<EditingToolKind>());
         Assert.IsFalse(Enum.IsDefined(AnnotationToolKind.Rectangle.GetType(), "Selection"));
     }
@@ -90,6 +96,35 @@ public sealed class AnnotationToolContractsTests
             new PhysicalLineSegment(
                 new PhysicalPoint(10, 30),
                 new PhysicalPoint(40, 30)).Bounds);
+    }
+
+    [TestMethod]
+    [TestCategory("Contract")]
+    public void HighlighterStyleIsSemiTransparentAndPathIsImmutable()
+    {
+        var points = new[]
+        {
+            new PhysicalPoint(4, 5),
+            new PhysicalPoint(12, 8),
+            new PhysicalPoint(20, 15)
+        };
+        var path = new PhysicalPolyline(points);
+        var content = new HighlighterStrokeContent(
+            path,
+            HighlighterAnnotationStyle.Default);
+
+        Assert.IsTrue(content.Style.StrokeColor.A > 0);
+        Assert.IsTrue(content.Style.StrokeColor.A < 255);
+        Assert.IsTrue(path.HasLength);
+        CollectionAssert.AreEqual(points, path.Points.ToArray());
+        Assert.IsFalse(path.Points.GetType().IsArray);
+        Assert.AreEqual(new PhysicalRect(4, 5, 20, 15), path.Bounds);
+        AssertThrows<ArgumentException>(() =>
+            _ = new HighlighterAnnotationStyle(new ArgbColor(0, 255, 235, 59), 8));
+        AssertThrows<ArgumentException>(() =>
+            _ = new HighlighterAnnotationStyle(new ArgbColor(255, 255, 235, 59), 8));
+        AssertThrows<ArgumentOutOfRangeException>(() =>
+            _ = new HighlighterAnnotationStyle(new ArgbColor(128, 255, 235, 59), 65));
     }
 
     [TestMethod]

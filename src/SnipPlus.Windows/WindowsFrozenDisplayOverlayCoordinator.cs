@@ -699,7 +699,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             {
                 [EditingToolKind.Selection] = CreateToolButton("Selection"),
                 [EditingToolKind.Rectangle] = CreateToolButton("Rectangle"),
-                [EditingToolKind.ArrowLine] = CreateToolButton("Arrow / Line")
+                [EditingToolKind.ArrowLine] = CreateToolButton("Arrow / Line"),
+                [EditingToolKind.Highlighter] = CreateToolButton("Highlighter")
             };
             _arrowLineModeButtons = new Dictionary<ArrowLineEndStyle, RadioButton>
             {
@@ -711,6 +712,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons[EditingToolKind.Selection].Click += OnSelectionToolClicked;
             _toolButtons[EditingToolKind.Rectangle].Click += OnRectangleToolClicked;
             _toolButtons[EditingToolKind.ArrowLine].Click += OnArrowLineToolClicked;
+            _toolButtons[EditingToolKind.Highlighter].Click += OnHighlighterToolClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click += OnArrowModeClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click += OnLineModeClicked;
             _root.PointerPressed += OnPointerPressed;
@@ -840,6 +842,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons[EditingToolKind.Selection].Click -= OnSelectionToolClicked;
             _toolButtons[EditingToolKind.Rectangle].Click -= OnRectangleToolClicked;
             _toolButtons[EditingToolKind.ArrowLine].Click -= OnArrowLineToolClicked;
+            _toolButtons[EditingToolKind.Highlighter].Click -= OnHighlighterToolClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click -= OnArrowModeClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click -= OnLineModeClicked;
             _root.PointerPressed -= OnPointerPressed;
@@ -1056,6 +1059,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private void OnArrowLineToolClicked(object sender, RoutedEventArgs args) =>
             SelectTool(EditingToolKind.ArrowLine, _request.ActiveArrowLineEndStyle);
 
+        private void OnHighlighterToolClicked(object sender, RoutedEventArgs args) =>
+            SelectTool(EditingToolKind.Highlighter);
+
         private void OnArrowModeClicked(object sender, RoutedEventArgs args) =>
             SelectTool(EditingToolKind.ArrowLine, ArrowLineEndStyle.Arrow);
 
@@ -1115,11 +1121,14 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private SelectionInputResult _lastResult;
         private RectanglePointerResult _lastRectangleResult;
         private ArrowLinePointerResult _lastArrowLineResult;
+        private HighlighterPointerResult _lastHighlighterResult;
         private int? _activePointerId;
         private int? _rectangleSelectionRevision;
         private AnnotationRevision? _rectangleAnnotationRevision;
         private int? _arrowLineSelectionRevision;
         private AnnotationRevision? _arrowLineAnnotationRevision;
+        private int? _highlighterSelectionRevision;
+        private AnnotationRevision? _highlighterAnnotationRevision;
         private bool _releaseConsumed;
 
         public SessionInputBoundary(
@@ -1170,6 +1179,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 null,
                 null,
                 "No Arrow or line input has been accepted.");
+            _lastHighlighterResult = new HighlighterPointerResult(
+                HighlighterPointerResultKind.NoActiveDraft,
+                editingRouter?.ActiveTool ?? EditingToolKind.Selection,
+                editingRouter?.ActiveHighlighterStyle ?? HighlighterAnnotationStyle.Default,
+                sessionId,
+                coordinateVersion,
+                editingRouter?.CurrentSelectionRevision ?? 0,
+                editingRouter?.CurrentAnnotationRevision ?? AnnotationRevision.Initial,
+                null,
+                null,
+                null,
+                null,
+                "No Highlighter input has been accepted.");
         }
 
         public bool UsesRectangleTool =>
@@ -1177,6 +1199,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public bool UsesArrowLineTool =>
             _editingRouter?.ActiveTool == EditingToolKind.ArrowLine;
+
+        public bool UsesHighlighterTool =>
+            _editingRouter?.ActiveTool == EditingToolKind.Highlighter;
 
         public SelectionInputResult PointerPressed(SelectionPointerEvent input)
         {
@@ -1275,6 +1300,42 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return result;
         }
 
+        public HighlighterPointerResult PointerPressedHighlighter(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastHighlighterResult;
+            }
+
+            lock (_gate)
+            {
+                if (_activePointerId is not null)
+                {
+                    return _lastHighlighterResult with
+                    {
+                        Kind = HighlighterPointerResultKind.PointerMismatch,
+                        Message = "Another pointer interaction is already active."
+                    };
+                }
+            }
+
+            var result = _editingRouter.PointerPressed(ToHighlighterInput(input));
+            lock (_gate)
+            {
+                _lastHighlighterResult = result;
+                if (result.Kind == HighlighterPointerResultKind.DraftStarted)
+                {
+                    _activePointerId = input.PointerId;
+                    _highlighterSelectionRevision = _editingRouter.CurrentSelectionRevision;
+                    _highlighterAnnotationRevision = _editingRouter.CurrentAnnotationRevision;
+                    _releaseConsumed = false;
+                }
+            }
+
+            return result;
+        }
+
         public SelectionInputResult PointerMoved(SelectionPointerEvent input)
         {
             ArgumentNullException.ThrowIfNull(input);
@@ -1318,6 +1379,24 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             lock (_gate)
             {
                 _lastArrowLineResult = result;
+            }
+
+            return result;
+        }
+
+        public HighlighterPointerResult PointerMovedHighlighter(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastHighlighterResult;
+            }
+
+            var result = _editingRouter.PointerMoved(
+                ToHighlighterInput(NormalizePointer(input)));
+            lock (_gate)
+            {
+                _lastHighlighterResult = result;
             }
 
             return result;
@@ -1408,6 +1487,37 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return result;
         }
 
+        public HighlighterPointerResult PointerReleasedHighlighter(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastHighlighterResult;
+            }
+
+            lock (_gate)
+            {
+                if (_releaseConsumed || _activePointerId is null)
+                {
+                    return _lastHighlighterResult;
+                }
+
+                _releaseConsumed = true;
+            }
+
+            var result = _editingRouter.PointerReleased(
+                ToHighlighterInput(NormalizePointer(input)));
+            lock (_gate)
+            {
+                _lastHighlighterResult = result;
+                _activePointerId = null;
+                _highlighterSelectionRevision = null;
+                _highlighterAnnotationRevision = null;
+            }
+
+            return result;
+        }
+
         public SelectionInputResult PointerReleasedFromNative(PhysicalPoint point) =>
             PointerReleased(new SelectionPointerEvent(
                 _sessionId,
@@ -1429,6 +1539,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 GetActivePointerId(),
                 point));
 
+        public HighlighterPointerResult PointerReleasedHighlighterFromNative(PhysicalPoint point) =>
+            PointerReleasedHighlighter(new SelectionPointerEvent(
+                _sessionId,
+                _coordinateVersion,
+                GetActivePointerId(),
+                point));
+
         public SelectionInputResult Escape(Guid sessionId, string coordinateVersion)
         {
             var result = _inner.Escape(sessionId, coordinateVersion);
@@ -1441,6 +1558,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _rectangleAnnotationRevision = null;
                 _arrowLineSelectionRevision = null;
                 _arrowLineAnnotationRevision = null;
+                _highlighterSelectionRevision = null;
+                _highlighterAnnotationRevision = null;
                 _lastRectangleResult = _editingRouter is null
                     ? _lastRectangleResult
                     : _lastRectangleResult with
@@ -1457,6 +1576,15 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                         ActiveTool = _editingRouter.ActiveTool,
                         ActiveEndStyle = _editingRouter.ActiveArrowLineEndStyle,
                         Message = "Arrow or line input cancelled with the capture session."
+                    };
+                _lastHighlighterResult = _editingRouter is null
+                    ? _lastHighlighterResult
+                    : _lastHighlighterResult with
+                    {
+                        Kind = HighlighterPointerResultKind.Cancelled,
+                        ActiveTool = _editingRouter.ActiveTool,
+                        ActiveStyle = _editingRouter.ActiveHighlighterStyle,
+                        Message = "Highlighter input cancelled with the capture session."
                     };
             }
 
@@ -1500,6 +1628,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     ?? _editingRouter?.CurrentSelectionRevision
                     ?? 0,
                 _arrowLineAnnotationRevision
+                    ?? _editingRouter?.CurrentAnnotationRevision
+                    ?? AnnotationRevision.Initial,
+                input.PointerId,
+                input.GlobalPhysicalPoint);
+
+        private HighlighterPointerEvent ToHighlighterInput(SelectionPointerEvent input) =>
+            new(
+                input.SessionId,
+                input.CoordinateVersion,
+                _highlighterSelectionRevision
+                    ?? _editingRouter?.CurrentSelectionRevision
+                    ?? 0,
+                _highlighterAnnotationRevision
                     ?? _editingRouter?.CurrentAnnotationRevision
                     ?? AnnotationRevision.Initial,
                 input.PointerId,
@@ -1575,6 +1716,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         };
         private readonly List<Rectangle> _annotationPreviews = new();
         private readonly List<Line> _arrowLinePreviews = new();
+        private readonly List<FrameworkElement> _highlighterPreviews = new();
         private readonly IReadOnlyDictionary<SelectionHitTestKind, Rectangle> _handles =
             new Dictionary<SelectionHitTestKind, Rectangle>
             {
@@ -1883,6 +2025,14 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 {
                     AddArrowLinePreview(arrowLineContent.Segment, arrowLineContent.Style, selection);
                 }
+                else if (annotationObject.ToolKind == AnnotationToolKind.HighlighterStroke
+                    && annotationObject.Content is HighlighterStrokeContent highlighterContent)
+                {
+                    AddHighlighterPreview(
+                        highlighterContent.Path.Points,
+                        highlighterContent.Style,
+                        selection);
+                }
             }
 
             if (snapshot.DraftPhysicalBounds is PhysicalRect draft
@@ -1905,8 +2055,17 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     selection);
             }
 
+            if (snapshot.DraftHighlighterPoints is IReadOnlyList<PhysicalPoint> draftHighlighterPoints)
+            {
+                AddHighlighterPreview(
+                    draftHighlighterPoints,
+                    snapshot.ActiveHighlighterStyle,
+                    selection);
+            }
+
             _canvas.Cursor = snapshot.ActiveTool is EditingToolKind.Rectangle
                 or EditingToolKind.ArrowLine
+                or EditingToolKind.Highlighter
                 ? InputSystemCursor.Create(InputSystemCursorShape.Cross)
                 : InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         }
@@ -1976,6 +2135,96 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             {
                 AddArrowHeadPreview(geometry, style, visibleBounds);
             }
+        }
+
+        private void AddHighlighterPreview(
+            IReadOnlyList<PhysicalPoint> points,
+            HighlighterAnnotationStyle style,
+            PhysicalRect? selection)
+        {
+            if (points.Count < 2)
+            {
+                return;
+            }
+
+            var visibleBounds = _descriptor.PhysicalBoundsInVirtualDesktop;
+            if (selection is PhysicalRect selectionBounds)
+            {
+                visibleBounds = visibleBounds.Intersection(selectionBounds);
+            }
+
+            if (!visibleBounds.IsPositive)
+            {
+                return;
+            }
+
+            for (var index = 1; index < points.Count; index++)
+            {
+                var segment = new PhysicalLineSegment(points[index - 1], points[index]);
+                if (!TryClipLine(segment, visibleBounds, out var start, out var end))
+                {
+                    continue;
+                }
+
+                AddHighlighterLine(start, end, style);
+                AddHighlighterCap(start, style);
+                AddHighlighterCap(end, style);
+            }
+        }
+
+        private void AddHighlighterLine(
+            PhysicalPoint start,
+            PhysicalPoint end,
+            HighlighterAnnotationStyle style)
+        {
+            var line = new Line
+            {
+                X1 = (start.X - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                    / _rasterizationScale,
+                Y1 = (start.Y - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                    / _rasterizationScale,
+                X2 = (end.X - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                    / _rasterizationScale,
+                Y2 = (end.Y - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                    / _rasterizationScale,
+                Stroke = new SolidColorBrush(ColorHelper.FromArgb(
+                    style.StrokeColor.A,
+                    style.StrokeColor.R,
+                    style.StrokeColor.G,
+                    style.StrokeColor.B)),
+                StrokeThickness = style.StrokeThickness / _rasterizationScale,
+                IsHitTestVisible = false,
+                Visibility = Visibility.Visible
+            };
+            _highlighterPreviews.Add(line);
+            _canvas.Children.Add(line);
+        }
+
+        private void AddHighlighterCap(
+            PhysicalPoint point,
+            HighlighterAnnotationStyle style)
+        {
+            var diameter = style.StrokeThickness / _rasterizationScale;
+            var cap = new Ellipse
+            {
+                Width = diameter,
+                Height = diameter,
+                Fill = new SolidColorBrush(ColorHelper.FromArgb(
+                    style.StrokeColor.A,
+                    style.StrokeColor.R,
+                    style.StrokeColor.G,
+                    style.StrokeColor.B)),
+                IsHitTestVisible = false,
+                Visibility = Visibility.Visible
+            };
+            var left = (point.X - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                / _rasterizationScale - diameter / 2;
+            var top = (point.Y - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                / _rasterizationScale - diameter / 2;
+            Canvas.SetLeft(cap, left);
+            Canvas.SetTop(cap, top);
+            _highlighterPreviews.Add(cap);
+            _canvas.Children.Add(cap);
         }
 
         private void AddLinePreview(
@@ -2056,6 +2305,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             _arrowLinePreviews.Clear();
+            foreach (var preview in _highlighterPreviews)
+            {
+                _canvas.Children.Remove(preview);
+            }
+
+            _highlighterPreviews.Clear();
         }
 
         private static bool Contains(PhysicalRect bounds, PhysicalPoint point) =>
@@ -2195,7 +2450,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point);
-            var capturesPointer = _inputBoundary.UsesArrowLineTool
+            var capturesPointer = _inputBoundary.UsesHighlighterTool
+                ? _inputBoundary.PointerPressedHighlighter(pointer).Kind
+                    == HighlighterPointerResultKind.DraftStarted
+                : _inputBoundary.UsesArrowLineTool
                 ? _inputBoundary.PointerPressedArrowLine(pointer).Kind
                     == ArrowLinePointerResultKind.DraftStarted
                 : _inputBoundary.UsesRectangleTool
@@ -2224,7 +2482,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point);
-            if (_inputBoundary.UsesArrowLineTool)
+            if (_inputBoundary.UsesHighlighterTool)
+            {
+                _inputBoundary.PointerMovedHighlighter(pointer);
+            }
+            else if (_inputBoundary.UsesArrowLineTool)
             {
                 _inputBoundary.PointerMovedArrowLine(pointer);
             }
@@ -2251,7 +2513,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point);
-            if (_inputBoundary.UsesArrowLineTool)
+            if (_inputBoundary.UsesHighlighterTool)
+            {
+                _inputBoundary.PointerReleasedHighlighter(pointer);
+            }
+            else if (_inputBoundary.UsesArrowLineTool)
             {
                 _inputBoundary.PointerReleasedArrowLine(pointer);
             }
@@ -2518,7 +2784,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 if (message == WmLButtonUp
                     && TryGetGlobalPointer(out var point))
                 {
-                    if (_inputBoundary.UsesArrowLineTool)
+                    if (_inputBoundary.UsesHighlighterTool)
+                    {
+                        _inputBoundary.PointerReleasedHighlighterFromNative(point);
+                    }
+                    else if (_inputBoundary.UsesArrowLineTool)
                     {
                         _inputBoundary.PointerReleasedArrowLineFromNative(point);
                     }

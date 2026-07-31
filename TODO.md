@@ -51,7 +51,7 @@ Work in order. Do not begin a later item while an earlier prerequisite is unreso
 - [x] Implement the Annotation document and object identity／revision model.
 - [x] Implement pointer-driven Rectangle creation／draft preview／commit; object editing、other tools、annotation-aware final render and runtime acceptance remain incomplete, so FR-017 is still `Partial`.
 - [x] Implement pointer-driven Arrow／Line creation／draft preview／commit with Arrow／Line mode; object editing、other tools、annotation-aware final render and runtime acceptance remain incomplete, so FR-018 is still `Partial`.
-- [ ] Implement pointer-driven semi-transparent Highlighter.
+- [x] Implement pointer-driven semi-transparent Highlighter stroke creation／draft preview／commit; object editing、other tools、annotation-aware final render and runtime acceptance remain incomplete, so FR-019 is still `Partial`.
 - [ ] Implement Text with Microsoft JhengHei、color、font size、bold、Windows editing and Chinese IME.
 - [ ] Implement pointer-driven rectangular Mosaic／Blur with per-object mode.
 - [ ] Implement pointer-driven Numbered Marker with preserved gaps and configurable next number.

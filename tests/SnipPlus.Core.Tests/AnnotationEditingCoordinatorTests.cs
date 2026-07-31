@@ -295,6 +295,77 @@ public sealed class AnnotationEditingCoordinatorTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Annotation")]
+    public void HighlighterReleaseCommitsFreehandPointsWithSemiTransparentStyle()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectHighlighter(editing, sessionId, selection);
+        var start = HighlighterInput(
+            sessionId,
+            selection,
+            new PhysicalPoint(10, 12),
+            pointerId: 5);
+        var middle = HighlighterInput(
+            sessionId,
+            selection,
+            new PhysicalPoint(20, 18),
+            pointerId: 5);
+        var end = HighlighterInput(
+            sessionId,
+            selection,
+            new PhysicalPoint(32, 24),
+            pointerId: 5);
+
+        var started = editing.PointerPressed(start, selection);
+        var moved = editing.PointerMoved(middle, selection);
+        var committed = editing.PointerReleased(end, selection);
+        var content = (HighlighterStrokeContent)committed.CommittedObject!.Content!;
+
+        Assert.AreEqual(HighlighterPointerResultKind.DraftStarted, started.Kind);
+        Assert.AreEqual(HighlighterPointerResultKind.DraftUpdated, moved.Kind);
+        Assert.AreEqual(HighlighterPointerResultKind.Committed, committed.Kind);
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                new PhysicalPoint(10, 12),
+                new PhysicalPoint(20, 18),
+                new PhysicalPoint(32, 24)
+            },
+            content.Path.Points.ToArray());
+        Assert.AreEqual(new PhysicalRect(10, 12, 32, 24), committed.CommittedObject.Geometry);
+        Assert.IsTrue(content.Style.StrokeColor.A > 0);
+        Assert.IsTrue(content.Style.StrokeColor.A < 255);
+        Assert.AreEqual(1, editing.CurrentAnnotationRevision.Value);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void HighlighterStaleReleasePreservesDraftAndDocument()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectHighlighter(editing, sessionId, selection);
+        editing.PointerPressed(
+            HighlighterInput(sessionId, selection, new PhysicalPoint(10, 10)),
+            selection);
+
+        var stale = editing.PointerReleased(
+            HighlighterInput(
+                sessionId,
+                selection with { SelectionRevision = selection.SelectionRevision + 1 },
+                new PhysicalPoint(20, 20)),
+            selection);
+        var snapshot = editing.CreatePresentationSnapshot(selection);
+
+        Assert.AreEqual(HighlighterPointerResultKind.StaleSelectionRevision, stale.Kind);
+        Assert.IsNotNull(snapshot.DraftHighlighterPoints);
+        Assert.AreEqual(1, snapshot.DraftHighlighterPoints!.Count);
+        Assert.IsEmpty(snapshot.Document.Objects);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
     public void CancelDraftLeavesDocumentEmptyAndNewSessionStartsClean()
     {
         var editing = CreateEditing(out var sessionId, out var selection);
@@ -380,6 +451,24 @@ public sealed class AnnotationEditingCoordinatorTests
         Assert.AreEqual(endStyle, result.ActiveArrowLineEndStyle);
     }
 
+    private static void SelectHighlighter(
+        AnnotationEditingCoordinator editing,
+        Guid sessionId,
+        SelectionVisualState selection)
+    {
+        var result = editing.SelectTool(
+            new EditingToolSelectionRequest(
+                sessionId,
+                selection.CoordinateVersion,
+                selection.SelectionRevision,
+                AnnotationRevision.Initial,
+                EditingToolKind.Highlighter),
+            WorkflowState.Editing,
+            selection);
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, result.Kind);
+        Assert.AreEqual(EditingToolKind.Highlighter, result.ActiveTool);
+    }
+
     private static RectanglePointerResult Commit(
         AnnotationEditingCoordinator editing,
         Guid sessionId,
@@ -424,6 +513,19 @@ public sealed class AnnotationEditingCoordinatorTests
         point);
 
     private static ArrowLinePointerEvent ArrowInput(
+        Guid sessionId,
+        SelectionVisualState selection,
+        PhysicalPoint point,
+        int pointerId = 1,
+        AnnotationRevision? annotationRevision = null) => new(
+        sessionId,
+        selection.CoordinateVersion,
+        selection.SelectionRevision,
+        annotationRevision ?? AnnotationRevision.Initial,
+        pointerId,
+        point);
+
+    private static HighlighterPointerEvent HighlighterInput(
         Guid sessionId,
         SelectionVisualState selection,
         PhysicalPoint point,

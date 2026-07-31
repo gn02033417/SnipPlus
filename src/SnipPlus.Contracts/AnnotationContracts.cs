@@ -92,6 +92,16 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
                     new PhysicalPoint(geometry.Right, geometry.Bottom)),
                 ArrowLineAnnotationStyle.Default);
         }
+        else if (toolKind == AnnotationToolKind.HighlighterStroke)
+        {
+            content ??= new HighlighterStrokeContent(
+                new PhysicalPolyline(
+                [
+                    new PhysicalPoint(geometry.Left, geometry.Top),
+                    new PhysicalPoint(geometry.Right, geometry.Bottom)
+                ]),
+                HighlighterAnnotationStyle.Default);
+        }
         else if (content is not null)
         {
             throw new ArgumentException(
@@ -119,6 +129,22 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
         {
             throw new ArgumentException(
                 "ArrowLine content bounds must match annotation geometry.",
+                nameof(content));
+        }
+
+        if (toolKind == AnnotationToolKind.HighlighterStroke
+            && content is not HighlighterStrokeContent)
+        {
+            throw new ArgumentException(
+                "Highlighter annotation objects require Highlighter content.",
+                nameof(content));
+        }
+
+        if (toolKind == AnnotationToolKind.HighlighterStroke
+            && ((HighlighterStrokeContent)content!).Path.Bounds != geometry)
+        {
+            throw new ArgumentException(
+                "Highlighter content bounds must match annotation geometry.",
                 nameof(content));
         }
 

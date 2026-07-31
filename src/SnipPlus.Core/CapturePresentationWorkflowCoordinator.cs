@@ -111,6 +111,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
     public ArrowLineEndStyle ActiveArrowLineEndStyle =>
         _annotationEditing.ActiveArrowLineEndStyle;
 
+    public HighlighterAnnotationStyle ActiveHighlighterStyle =>
+        _annotationEditing.ActiveHighlighterStyle;
+
     public AnnotationMutationResult AddAnnotationObject(AddAnnotationObjectRequest request) =>
         _annotationDocuments.Add(request);
 
@@ -388,6 +391,33 @@ public sealed class CapturePresentationWorkflowCoordinator :
     public ArrowLinePointerResult PointerReleased(ArrowLinePointerEvent input)
     {
         var result = ForwardArrowLineInput(
+            input,
+            static (editing, value, selection) => editing.PointerReleased(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public HighlighterPointerResult PointerPressed(HighlighterPointerEvent input)
+    {
+        var result = ForwardHighlighterInput(
+            input,
+            static (editing, value, selection) => editing.PointerPressed(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public HighlighterPointerResult PointerMoved(HighlighterPointerEvent input)
+    {
+        var result = ForwardHighlighterInput(
+            input,
+            static (editing, value, selection) => editing.PointerMoved(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public HighlighterPointerResult PointerReleased(HighlighterPointerEvent input)
+    {
+        var result = ForwardHighlighterInput(
             input,
             static (editing, value, selection) => editing.PointerReleased(value, selection));
         ApplyAnnotationPresentation();
@@ -839,6 +869,34 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 CurrentAnnotationDocument,
                 null,
                 "Arrow or line input was ignored until the capture session was ready.")
+            : handler(_annotationEditing, input, selection.State);
+    }
+
+    private HighlighterPointerResult ForwardHighlighterInput(
+        HighlighterPointerEvent input,
+        Func<AnnotationEditingCoordinator, HighlighterPointerEvent, SelectionVisualState, HighlighterPointerResult> handler)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        InitialSelectionCoordinator? selection;
+        lock (_gate)
+        {
+            selection = _inputEnabled ? _selectionCoordinator : null;
+        }
+
+        return selection is null
+            ? new HighlighterPointerResult(
+                HighlighterPointerResultKind.StaleSession,
+                _annotationEditing.ActiveTool,
+                _annotationEditing.ActiveHighlighterStyle,
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision,
+                CurrentAnnotationRevision,
+                null,
+                null,
+                CurrentAnnotationDocument,
+                null,
+                "Highlighter input was ignored until the capture session was ready.")
             : handler(_annotationEditing, input, selection.State);
     }
 

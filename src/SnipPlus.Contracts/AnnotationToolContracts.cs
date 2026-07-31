@@ -4,7 +4,8 @@ public enum EditingToolKind
 {
     Selection,
     Rectangle,
-    ArrowLine
+    ArrowLine,
+    Highlighter
 }
 
 public readonly record struct ArgbColor(byte A, byte R, byte G, byte B)
@@ -149,6 +150,97 @@ public sealed record ArrowLineAnnotationContent : IAnnotationContent
     public ArrowLineAnnotationStyle Style { get; }
 }
 
+public sealed record PhysicalPolyline
+{
+    public PhysicalPolyline(IEnumerable<PhysicalPoint> points)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        var materialized = points.ToArray();
+        if (materialized.Length == 0)
+        {
+            throw new ArgumentException(
+                "A physical polyline must contain at least one point.",
+                nameof(points));
+        }
+
+        Points = Array.AsReadOnly(materialized);
+    }
+
+    public IReadOnlyList<PhysicalPoint> Points { get; }
+
+    public bool HasLength => Points.Count > 1
+        && Points.Zip(Points.Skip(1), static (first, second) => first != second).Any(value => value);
+
+    public PhysicalRect Bounds
+    {
+        get
+        {
+            var left = Points.Min(point => point.X);
+            var top = Points.Min(point => point.Y);
+            var right = Points.Max(point => point.X);
+            var bottom = Points.Max(point => point.Y);
+            return new PhysicalRect(
+                left,
+                top,
+                right > left ? right : right + 1,
+                bottom > top ? bottom : bottom + 1);
+        }
+    }
+}
+
+public sealed record HighlighterAnnotationStyle
+{
+    public HighlighterAnnotationStyle(ArgbColor strokeColor, int strokeThickness)
+    {
+        if (strokeColor.A is 0 or 255)
+        {
+            throw new ArgumentException(
+                "Highlighter stroke color must be visible and semi-transparent.",
+                nameof(strokeColor));
+        }
+
+        if (strokeThickness is < 1 or > 64)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(strokeThickness),
+                "Highlighter stroke thickness must be between 1 and 64 physical pixels.");
+        }
+
+        StrokeColor = strokeColor;
+        StrokeThickness = strokeThickness;
+    }
+
+    public ArgbColor StrokeColor { get; }
+
+    public int StrokeThickness { get; }
+
+    public static HighlighterAnnotationStyle Default => new(
+        new ArgbColor(128, 255, 235, 59),
+        8);
+}
+
+public sealed record HighlighterStrokeContent : IAnnotationContent
+{
+    public HighlighterStrokeContent(
+        PhysicalPolyline path,
+        HighlighterAnnotationStyle style)
+    {
+        Path = path ?? throw new ArgumentNullException(nameof(path));
+        if (!path.HasLength)
+        {
+            throw new ArgumentException(
+                "A Highlighter stroke must contain at least two distinct points.",
+                nameof(path));
+        }
+
+        Style = style ?? throw new ArgumentNullException(nameof(style));
+    }
+
+    public PhysicalPolyline Path { get; }
+
+    public HighlighterAnnotationStyle Style { get; }
+}
+
 public sealed record EditingToolSelectionRequest(
     Guid SessionId,
     string CoordinateVersion,
@@ -257,6 +349,44 @@ public sealed record ArrowLinePointerResult(
     Failure? Failure,
     string Message);
 
+public sealed record HighlighterPointerEvent(
+    Guid SessionId,
+    string CoordinateVersion,
+    int SelectionRevision,
+    AnnotationRevision ExpectedAnnotationRevision,
+    int PointerId,
+    PhysicalPoint GlobalPhysicalPoint);
+
+public enum HighlighterPointerResultKind
+{
+    DraftStarted,
+    DraftUpdated,
+    Committed,
+    IgnoredOutsideSelection,
+    InvalidGeometry,
+    StaleSession,
+    StaleSelectionRevision,
+    StaleAnnotationRevision,
+    PointerMismatch,
+    NoActiveDraft,
+    Cancelled,
+    Failed
+}
+
+public sealed record HighlighterPointerResult(
+    HighlighterPointerResultKind Kind,
+    EditingToolKind ActiveTool,
+    HighlighterAnnotationStyle ActiveStyle,
+    Guid SessionId,
+    string CoordinateVersion,
+    int SelectionRevision,
+    AnnotationRevision AnnotationRevision,
+    IReadOnlyList<PhysicalPoint>? DraftPoints,
+    AnnotationObject? CommittedObject,
+    AnnotationDocument? Document,
+    Failure? Failure,
+    string Message);
+
 public sealed record AnnotationPresentationSnapshot(
     Guid SessionId,
     string CoordinateVersion,
@@ -270,6 +400,10 @@ public sealed record AnnotationPresentationSnapshot(
     public ArrowLineEndStyle ActiveArrowLineEndStyle { get; init; } = ArrowLineEndStyle.Arrow;
 
     public PhysicalLineSegment? DraftArrowLineSegment { get; init; }
+
+    public HighlighterAnnotationStyle ActiveHighlighterStyle { get; init; } = HighlighterAnnotationStyle.Default;
+
+    public IReadOnlyList<PhysicalPoint>? DraftHighlighterPoints { get; init; }
 }
 
 public interface IEditingToolSelectionSink
@@ -295,10 +429,20 @@ public interface IArrowLinePointerInputSink
     ArrowLinePointerResult PointerReleased(ArrowLinePointerEvent input);
 }
 
+public interface IHighlighterPointerInputSink
+{
+    HighlighterPointerResult PointerPressed(HighlighterPointerEvent input);
+
+    HighlighterPointerResult PointerMoved(HighlighterPointerEvent input);
+
+    HighlighterPointerResult PointerReleased(HighlighterPointerEvent input);
+}
+
 public interface IEditingInputRouter :
     ISelectionInputSink,
     IAnnotationPointerInputSink,
     IArrowLinePointerInputSink,
+    IHighlighterPointerInputSink,
     IEditingToolSelectionSink
 {
     EditingToolKind ActiveTool { get; }
@@ -308,4 +452,6 @@ public interface IEditingInputRouter :
     AnnotationRevision CurrentAnnotationRevision { get; }
 
     ArrowLineEndStyle ActiveArrowLineEndStyle { get; }
+
+    HighlighterAnnotationStyle ActiveHighlighterStyle { get; }
 }

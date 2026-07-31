@@ -219,6 +219,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
         Assert.AreEqual(
             typeof(List<Microsoft.UI.Xaml.Shapes.Line>),
             arrowLinePreviewField.FieldType);
+        var highlighterPreviewField = overlaySurface.GetField(
+            "_highlighterPreviews",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.IsNotNull(highlighterPreviewField);
+        Assert.AreEqual(
+            typeof(List<Microsoft.UI.Xaml.FrameworkElement>),
+            highlighterPreviewField.FieldType);
         var apply = overlaySurface.GetMethod(
             "ApplyAnnotation",
             BindingFlags.Instance | BindingFlags.Public);

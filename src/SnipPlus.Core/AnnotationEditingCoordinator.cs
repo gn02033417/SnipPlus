@@ -12,6 +12,11 @@ public interface IArrowLineAnnotationStylePolicy
     ArrowLineAnnotationStyle GetDefaultStyle();
 }
 
+public interface IHighlighterAnnotationStylePolicy
+{
+    HighlighterAnnotationStyle GetDefaultStyle();
+}
+
 public sealed class DefaultRectangleAnnotationStylePolicy : IRectangleAnnotationStylePolicy
 {
     public RectangleAnnotationStyle GetDefaultStyle() => RectangleAnnotationStyle.Default;
@@ -22,6 +27,11 @@ public sealed class DefaultArrowLineAnnotationStylePolicy : IArrowLineAnnotation
     public ArrowLineAnnotationStyle GetDefaultStyle() => ArrowLineAnnotationStyle.Default;
 }
 
+public sealed class DefaultHighlighterAnnotationStylePolicy : IHighlighterAnnotationStylePolicy
+{
+    public HighlighterAnnotationStyle GetDefaultStyle() => HighlighterAnnotationStyle.Default;
+}
+
 public sealed class AnnotationEditingCoordinator
 {
     private readonly object _gate = new();
@@ -29,6 +39,7 @@ public sealed class AnnotationEditingCoordinator
     private readonly Func<AnnotationObjectId> _objectIdFactory;
     private readonly IRectangleAnnotationStylePolicy _stylePolicy;
     private readonly IArrowLineAnnotationStylePolicy _arrowLineStylePolicy;
+    private readonly IHighlighterAnnotationStylePolicy _highlighterStylePolicy;
     private Guid? _sessionId;
     private string _coordinateVersion = string.Empty;
     private EditingToolKind _activeTool = EditingToolKind.Selection;
@@ -36,17 +47,20 @@ public sealed class AnnotationEditingCoordinator
     private int _selectionRevision;
     private RectangleDraft? _draft;
     private ArrowLineDraft? _arrowLineDraft;
+    private HighlighterDraft? _highlighterDraft;
 
     public AnnotationEditingCoordinator(
         AnnotationDocumentCoordinator documents,
         Func<AnnotationObjectId>? objectIdFactory = null,
         IRectangleAnnotationStylePolicy? stylePolicy = null,
-        IArrowLineAnnotationStylePolicy? arrowLineStylePolicy = null)
+        IArrowLineAnnotationStylePolicy? arrowLineStylePolicy = null,
+        IHighlighterAnnotationStylePolicy? highlighterStylePolicy = null)
     {
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
         _objectIdFactory = objectIdFactory ?? AnnotationObjectId.New;
         _stylePolicy = stylePolicy ?? new DefaultRectangleAnnotationStylePolicy();
         _arrowLineStylePolicy = arrowLineStylePolicy ?? new DefaultArrowLineAnnotationStylePolicy();
+        _highlighterStylePolicy = highlighterStylePolicy ?? new DefaultHighlighterAnnotationStylePolicy();
     }
 
     public EditingToolKind ActiveTool
@@ -85,6 +99,9 @@ public sealed class AnnotationEditingCoordinator
         }
     }
 
+    public HighlighterAnnotationStyle ActiveHighlighterStyle =>
+        _highlighterStylePolicy.GetDefaultStyle();
+
     public void BeginSession(SelectionVisualState selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
@@ -98,6 +115,7 @@ public sealed class AnnotationEditingCoordinator
             _arrowLineEndStyle = ArrowLineEndStyle.Arrow;
             _draft = null;
             _arrowLineDraft = null;
+            _highlighterDraft = null;
         }
     }
 
@@ -179,6 +197,7 @@ public sealed class AnnotationEditingCoordinator
 
             _draft = null;
             _arrowLineDraft = null;
+            _highlighterDraft = null;
             return new EditingToolSelectionResult(
                 EditingToolSelectionResultKind.Selected,
                 _activeTool,
@@ -793,6 +812,314 @@ public sealed class AnnotationEditingCoordinator
         }
     }
 
+    public HighlighterPointerResult PointerPressed(
+        HighlighterPointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateHighlighter(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_activeTool != EditingToolKind.Highlighter)
+            {
+                return FailedHighlighter(
+                    input,
+                    "Highlighter input was received while another editing tool is active.");
+            }
+
+            if (_highlighterDraft is not null)
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.PointerMismatch,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Another Highlighter draft is already active.");
+            }
+
+            if (selection.NormalizedPhysicalBounds is not PhysicalRect bounds
+                || !bounds.IsPositive)
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.InvalidGeometry,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Highlighter creation requires a valid locked Selection.");
+            }
+
+            if (!Contains(bounds, input.GlobalPhysicalPoint))
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.IgnoredOutsideSelection,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Highlighter creation starts only inside the current Selection.");
+            }
+
+            _highlighterDraft = new HighlighterDraft(
+                input.PointerId,
+                Array.AsReadOnly([input.GlobalPhysicalPoint]));
+            return HighlighterResult(
+                HighlighterPointerResultKind.DraftStarted,
+                input,
+                _highlighterDraft.Points,
+                null,
+                _documents.Current,
+                null,
+                "Highlighter draft started.");
+        }
+    }
+
+    public HighlighterPointerResult PointerMoved(
+        HighlighterPointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateHighlighter(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_highlighterDraft is null)
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.NoActiveDraft,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "No Highlighter draft is active.");
+            }
+
+            if (_highlighterDraft.PointerId != input.PointerId)
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.PointerMismatch,
+                    input,
+                    _highlighterDraft.Points,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Highlighter pointer input belongs to another pointer.");
+            }
+
+            var points = _highlighterDraft.Points.ToList();
+            if (points[^1] != input.GlobalPhysicalPoint)
+            {
+                points.Add(input.GlobalPhysicalPoint);
+            }
+
+            _highlighterDraft = _highlighterDraft with
+            {
+                Points = Array.AsReadOnly(points.ToArray())
+            };
+            return HighlighterResult(
+                HighlighterPointerResultKind.DraftUpdated,
+                input,
+                _highlighterDraft.Points,
+                null,
+                _documents.Current,
+                null,
+                "Highlighter draft updated.");
+        }
+    }
+
+    public HighlighterPointerResult PointerReleased(
+        HighlighterPointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateHighlighter(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_highlighterDraft is null)
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.NoActiveDraft,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "No Highlighter draft is active.");
+            }
+
+            if (_highlighterDraft.PointerId != input.PointerId)
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.PointerMismatch,
+                    input,
+                    _highlighterDraft.Points,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Highlighter pointer input belongs to another pointer.");
+            }
+
+            var points = _highlighterDraft.Points.ToList();
+            if (points[^1] != input.GlobalPhysicalPoint)
+            {
+                points.Add(input.GlobalPhysicalPoint);
+            }
+
+            var path = new PhysicalPolyline(points);
+            _highlighterDraft = null;
+            if (!path.HasLength)
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.InvalidGeometry,
+                    input,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Highlighter geometry must contain distinct points.");
+            }
+
+            var document = _documents.Current;
+            if (document is null)
+            {
+                return FailedHighlighter(
+                    input,
+                    "The Annotation Document is unavailable for Highlighter commit.");
+            }
+
+            var zOrder = document.Objects.Count == 0
+                ? 0
+                : document.Objects.Max(annotationObject => annotationObject.ZOrder);
+            if (zOrder == int.MaxValue)
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.Failed,
+                    input,
+                    null,
+                    null,
+                    document,
+                    Failure.Create(
+                        FailureCode.AnnotationZOrderOverflow,
+                        FailureCategory.Validation,
+                        FailureRecoverability.RetrySameIntent,
+                        nameof(AnnotationEditingCoordinator),
+                        input.SessionId,
+                        "The next Highlighter annotation Z-order would overflow."),
+                    "The next Highlighter annotation Z-order would overflow.");
+            }
+
+            AnnotationObject annotationObject;
+            try
+            {
+                annotationObject = new AnnotationObject(
+                    _objectIdFactory(),
+                    input.SessionId,
+                    AnnotationToolKind.HighlighterStroke,
+                    path.Bounds,
+                    document.Objects.Count == 0 ? 0 : zOrder + 1,
+                    new HighlighterStrokeContent(
+                        path,
+                        _highlighterStylePolicy.GetDefaultStyle()));
+            }
+            catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.Failed,
+                    input,
+                    null,
+                    null,
+                    document,
+                    Failure.Create(
+                        FailureCode.AnnotationZOrderOverflow,
+                        FailureCategory.Validation,
+                        FailureRecoverability.RetrySameIntent,
+                        nameof(AnnotationEditingCoordinator),
+                        input.SessionId,
+                        exception.Message),
+                    "The Highlighter annotation could not be created.");
+            }
+
+            var mutation = _documents.Add(new AddAnnotationObjectRequest(
+                input.SessionId,
+                input.ExpectedAnnotationRevision,
+                annotationObject));
+            if (mutation is AnnotationMutationResult.Succeeded succeeded)
+            {
+                return HighlighterResult(
+                    HighlighterPointerResultKind.Committed,
+                    input,
+                    null,
+                    annotationObject,
+                    succeeded.Document,
+                    null,
+                    "Highlighter annotation committed.");
+            }
+
+            return HighlighterResult(
+                HighlighterPointerResultKind.Failed,
+                input,
+                null,
+                null,
+                mutation.CurrentDocument,
+                Failure.Create(
+                    FailureCode.StaleAnnotationRevision,
+                    FailureCategory.Session,
+                    FailureRecoverability.RetrySameIntent,
+                    nameof(AnnotationEditingCoordinator),
+                    input.SessionId,
+                    "The Annotation Document changed before the Highlighter commit."),
+                "The Highlighter annotation could not be committed because the Annotation Document is stale.");
+        }
+    }
+
+    public HighlighterPointerResult CancelHighlighterDraft(Guid sessionId, string coordinateVersion)
+    {
+        lock (_gate)
+        {
+            var document = _documents.Current;
+            var input = new HighlighterPointerEvent(
+                sessionId,
+                coordinateVersion,
+                _selectionRevision,
+                document?.Revision ?? AnnotationRevision.Initial,
+                _highlighterDraft?.PointerId ?? 0,
+                _highlighterDraft?.Points is { Count: > 0 } points
+                    ? points[^1]
+                    : default);
+            _highlighterDraft = null;
+            return HighlighterResult(
+                HighlighterPointerResultKind.Cancelled,
+                input,
+                null,
+                null,
+                document,
+                null,
+                "Highlighter draft cancelled.");
+        }
+    }
+
     public AnnotationPresentationSnapshot CreatePresentationSnapshot(SelectionVisualState selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
@@ -813,7 +1140,9 @@ public sealed class AnnotationEditingCoordinator
                 document)
             {
                 ActiveArrowLineEndStyle = _arrowLineEndStyle,
-                DraftArrowLineSegment = _arrowLineDraft?.Segment
+                DraftArrowLineSegment = _arrowLineDraft?.Segment,
+                ActiveHighlighterStyle = _highlighterStylePolicy.GetDefaultStyle(),
+                DraftHighlighterPoints = _highlighterDraft?.Points
             };
         }
     }
@@ -832,8 +1161,80 @@ public sealed class AnnotationEditingCoordinator
                 _activeTool = EditingToolKind.Selection;
                 _arrowLineEndStyle = ArrowLineEndStyle.Arrow;
                 _arrowLineDraft = null;
+                _highlighterDraft = null;
             }
         }
+    }
+
+    private HighlighterPointerResult? ValidateHighlighter(
+        HighlighterPointerEvent input,
+        SelectionVisualState selection)
+    {
+        if (input.PointerId <= 0)
+        {
+            return HighlighterResult(
+                HighlighterPointerResultKind.PointerMismatch,
+                input,
+                _highlighterDraft?.Points,
+                null,
+                _documents.Current,
+                null,
+                "Highlighter input must contain a positive pointer identifier.");
+        }
+
+        if (!IsCurrentSession(input.SessionId, input.CoordinateVersion))
+        {
+            return HighlighterResult(
+                HighlighterPointerResultKind.StaleSession,
+                input,
+                _highlighterDraft?.Points,
+                null,
+                _documents.Current,
+                null,
+                "Highlighter input belongs to a stale capture session.");
+        }
+
+        if (input.SelectionRevision != selection.SelectionRevision)
+        {
+            return HighlighterResult(
+                HighlighterPointerResultKind.StaleSelectionRevision,
+                input,
+                _highlighterDraft?.Points,
+                null,
+                _documents.Current,
+                null,
+                "Highlighter input belongs to a stale Selection revision.");
+        }
+
+        var currentRevision = _documents.Current?.Revision ?? AnnotationRevision.Initial;
+        if (input.ExpectedAnnotationRevision != currentRevision)
+        {
+            return HighlighterResult(
+                HighlighterPointerResultKind.StaleAnnotationRevision,
+                input,
+                _highlighterDraft?.Points,
+                null,
+                _documents.Current,
+                null,
+                "Highlighter input belongs to a stale Annotation revision.");
+        }
+
+        if (selection.Status != SelectionStatus.Locked
+            || selection.InteractionMode != SelectionInteractionMode.Locked
+            || selection.NormalizedPhysicalBounds is not PhysicalRect selectionBounds
+            || !selectionBounds.IsPositive)
+        {
+            return HighlighterResult(
+                HighlighterPointerResultKind.InvalidGeometry,
+                input,
+                _highlighterDraft?.Points,
+                null,
+                _documents.Current,
+                null,
+                "Highlighter input requires a valid locked Selection boundary.");
+        }
+
+        return null;
     }
 
     private ArrowLinePointerResult? ValidateArrowLine(
@@ -1055,6 +1456,44 @@ public sealed class AnnotationEditingCoordinator
         failure,
         message);
 
+    private HighlighterPointerResult FailedHighlighter(
+        HighlighterPointerEvent input,
+        string message) => HighlighterResult(
+        HighlighterPointerResultKind.Failed,
+        input,
+        _highlighterDraft?.Points,
+        null,
+        _documents.Current,
+        Failure.Create(
+            FailureCode.InvalidStateTransition,
+            FailureCategory.Validation,
+            FailureRecoverability.RetrySameIntent,
+            nameof(AnnotationEditingCoordinator),
+            input.SessionId,
+            message),
+        message);
+
+    private HighlighterPointerResult HighlighterResult(
+        HighlighterPointerResultKind kind,
+        HighlighterPointerEvent input,
+        IReadOnlyList<PhysicalPoint>? draftPoints,
+        AnnotationObject? committedObject,
+        AnnotationDocument? document,
+        Failure? failure,
+        string message) => new(
+        kind,
+        _activeTool,
+        _highlighterStylePolicy.GetDefaultStyle(),
+        input.SessionId,
+        input.CoordinateVersion,
+        input.SelectionRevision,
+        document?.Revision ?? AnnotationRevision.Initial,
+        draftPoints,
+        committedObject,
+        document,
+        failure,
+        message);
+
     private EditingToolSelectionResult ToolResult(
         EditingToolSelectionResultKind kind,
         EditingToolSelectionRequest request,
@@ -1101,4 +1540,8 @@ public sealed class AnnotationEditingCoordinator
     }
 
     private sealed record ArrowLineDraft(int PointerId, PhysicalLineSegment Segment);
+
+    private sealed record HighlighterDraft(
+        int PointerId,
+        IReadOnlyList<PhysicalPoint> Points);
 }
