@@ -6,7 +6,8 @@ public enum EditingToolKind
     Rectangle,
     ArrowLine,
     Highlighter,
-    Text
+    Text,
+    PrivacyRegion
 }
 
 public readonly record struct ArgbColor(byte A, byte R, byte G, byte B)
@@ -250,6 +251,8 @@ public sealed record EditingToolSelectionRequest(
     EditingToolKind Tool)
 {
     public ArrowLineEndStyle RequestedArrowLineEndStyle { get; init; } = ArrowLineEndStyle.Arrow;
+
+    public PrivacyRegionMode? RequestedPrivacyRegionMode { get; init; }
 }
 
 public enum EditingToolSelectionResultKind
@@ -275,6 +278,10 @@ public sealed record EditingToolSelectionResult(
     public ArrowLineEndStyle ActiveArrowLineEndStyle { get; init; } = ArrowLineEndStyle.Arrow;
 
     public TextAnnotationStyle ActiveTextStyle { get; init; } = TextAnnotationStyle.Default;
+
+    public PrivacyRegionMode? ActivePrivacyRegionMode { get; init; }
+
+    public PrivacyRegionEffectParameters? ActivePrivacyRegionEffectParameters { get; init; }
 }
 
 public sealed record RectanglePointerEvent(
@@ -410,7 +417,17 @@ public sealed record AnnotationPresentationSnapshot(
 
     public TextAnnotationStyle ActiveTextStyle { get; init; } = TextAnnotationStyle.Default;
 
+    public PrivacyRegionMode? ActivePrivacyRegionMode { get; init; }
+
+    public PrivacyRegionEffectParameters? ActivePrivacyRegionEffectParameters { get; init; }
+
     public TextDraftPresentation? DraftText { get; init; }
+
+    public PrivacyRegionMode? DraftPrivacyRegionMode { get; init; }
+
+    public PrivacyRegionEffectParameters? DraftPrivacyRegionEffectParameters { get; init; }
+
+    public PhysicalRect? DraftPrivacyRegionBounds { get; init; }
 }
 
 public interface IEditingToolSelectionSink
@@ -445,11 +462,28 @@ public interface IHighlighterPointerInputSink
     HighlighterPointerResult PointerReleased(HighlighterPointerEvent input);
 }
 
+public interface IPrivacyRegionPointerInputSink
+{
+    PrivacyRegionPointerResult PointerPressed(PrivacyRegionPointerEvent input);
+
+    PrivacyRegionPointerResult PointerMoved(PrivacyRegionPointerEvent input);
+
+    PrivacyRegionPointerResult PointerReleased(PrivacyRegionPointerEvent input);
+}
+
+public interface IPrivacyRegionModeSelectionSink
+{
+    PrivacyRegionModeSelectionResult SelectPrivacyRegionMode(
+        PrivacyRegionModeSelectionRequest request);
+}
+
 public interface IEditingInputRouter :
     ISelectionInputSink,
     IAnnotationPointerInputSink,
     IArrowLinePointerInputSink,
     IHighlighterPointerInputSink,
+    IPrivacyRegionPointerInputSink,
+    IPrivacyRegionModeSelectionSink,
     ITextDraftInputSink,
     IEditingToolSelectionSink
 {
@@ -464,4 +498,8 @@ public interface IEditingInputRouter :
     HighlighterAnnotationStyle ActiveHighlighterStyle { get; }
 
     TextAnnotationStyle ActiveTextStyle { get; }
+
+    PrivacyRegionMode ActivePrivacyRegionMode { get; }
+
+    PrivacyRegionEffectParameters ActivePrivacyRegionEffectParameters { get; }
 }

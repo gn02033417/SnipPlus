@@ -277,7 +277,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.AreEqual(retainedObject.ObjectId, workflow.CurrentAnnotationDocument.Objects.Single().ObjectId);
         Assert.AreEqual(1, functionBar.FeedbackCalls);
         Assert.AreEqual(
-            "Rectangle annotations are retained; Complete output is not available in this slice.",
+            "Annotations are retained; Complete output is not available in this slice.",
             functionBar.LastFeedback);
         Assert.AreEqual(FunctionBarCommandAvailability.Stage6C, functionBar.LastRequest!.Availability);
         Assert.IsFalse(trace.Entries.Any(entry => entry.CompleteStage == CompleteExecutionStage.Rendering));

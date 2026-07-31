@@ -139,6 +139,10 @@ public sealed record FunctionBarPresentationRequest(
     public ArrowLineEndStyle ActiveArrowLineEndStyle { get; init; } = ArrowLineEndStyle.Arrow;
 
     public IEditingToolSelectionSink? ToolSelectionSink { get; init; }
+
+    public PrivacyRegionMode? ActivePrivacyRegionMode { get; init; }
+
+    public IPrivacyRegionModeSelectionSink? PrivacyRegionModeSelectionSink { get; init; }
 }
 
 public enum FunctionBarPresentationResultKind

@@ -677,6 +677,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly IReadOnlyDictionary<FunctionBarCommand, Button> _buttons;
         private readonly IReadOnlyDictionary<EditingToolKind, RadioButton> _toolButtons;
         private readonly IReadOnlyDictionary<ArrowLineEndStyle, RadioButton> _arrowLineModeButtons;
+        private readonly IReadOnlyDictionary<PrivacyRegionMode, RadioButton> _privacyModeButtons;
         private readonly CancelCommandGate _cancelCommandGate = new();
         private readonly CancelCommandGate _completeCommandGate = new();
         private FunctionBarPresentationRequest _request;
@@ -702,12 +703,18 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 [EditingToolKind.Rectangle] = CreateToolButton("Rectangle"),
                 [EditingToolKind.ArrowLine] = CreateToolButton("Arrow / Line"),
                 [EditingToolKind.Highlighter] = CreateToolButton("Highlighter"),
-                [EditingToolKind.Text] = CreateToolButton("Text")
+                [EditingToolKind.Text] = CreateToolButton("Text"),
+                [EditingToolKind.PrivacyRegion] = CreateToolButton("Mosaic / Blur")
             };
             _arrowLineModeButtons = new Dictionary<ArrowLineEndStyle, RadioButton>
             {
                 [ArrowLineEndStyle.Arrow] = CreateModeButton("Arrow"),
                 [ArrowLineEndStyle.None] = CreateModeButton("Line")
+            };
+            _privacyModeButtons = new Dictionary<PrivacyRegionMode, RadioButton>
+            {
+                [PrivacyRegionMode.Mosaic] = CreatePrivacyModeButton("Mosaic"),
+                [PrivacyRegionMode.Blur] = CreatePrivacyModeButton("Blur")
             };
             _buttons[FunctionBarCommand.Complete].Click += OnCompleteClicked;
             _buttons[FunctionBarCommand.Cancel].Click += OnCancelClicked;
@@ -716,8 +723,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons[EditingToolKind.ArrowLine].Click += OnArrowLineToolClicked;
             _toolButtons[EditingToolKind.Highlighter].Click += OnHighlighterToolClicked;
             _toolButtons[EditingToolKind.Text].Click += OnTextToolClicked;
+            _toolButtons[EditingToolKind.PrivacyRegion].Click += OnPrivacyRegionToolClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click += OnArrowModeClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click += OnLineModeClicked;
+            _privacyModeButtons[PrivacyRegionMode.Mosaic].Click += OnMosaicModeClicked;
+            _privacyModeButtons[PrivacyRegionMode.Blur].Click += OnBlurModeClicked;
             _root.PointerPressed += OnPointerPressed;
             _panel.Children.Add(_feedbackText);
             foreach (var toolButton in _toolButtons.Values)
@@ -726,6 +736,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             foreach (var modeButton in _arrowLineModeButtons.Values)
+            {
+                _panel.Children.Add(modeButton);
+            }
+
+            foreach (var modeButton in _privacyModeButtons.Values)
             {
                 _panel.Children.Add(modeButton);
             }
@@ -778,6 +793,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 pair.Value.IsChecked = pair.Key == request.ActiveArrowLineEndStyle;
                 pair.Value.IsEnabled = request.ToolSelectionSink is not null
                     && request.ActiveTool == EditingToolKind.ArrowLine;
+            }
+
+            foreach (var pair in _privacyModeButtons)
+            {
+                pair.Value.IsChecked = request.ActivePrivacyRegionMode == pair.Key;
+                pair.Value.IsEnabled = request.PrivacyRegionModeSelectionSink is not null
+                    && request.ActiveTool == EditingToolKind.PrivacyRegion;
             }
         }
 
@@ -847,8 +869,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons[EditingToolKind.ArrowLine].Click -= OnArrowLineToolClicked;
             _toolButtons[EditingToolKind.Highlighter].Click -= OnHighlighterToolClicked;
             _toolButtons[EditingToolKind.Text].Click -= OnTextToolClicked;
+            _toolButtons[EditingToolKind.PrivacyRegion].Click -= OnPrivacyRegionToolClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click -= OnArrowModeClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click -= OnLineModeClicked;
+            _privacyModeButtons[PrivacyRegionMode.Mosaic].Click -= OnMosaicModeClicked;
+            _privacyModeButtons[PrivacyRegionMode.Blur].Click -= OnBlurModeClicked;
             _root.PointerPressed -= OnPointerPressed;
             _owner.RemoveFunctionBar(this);
             _root.Opacity = 0;
@@ -1069,15 +1094,25 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private void OnTextToolClicked(object sender, RoutedEventArgs args) =>
             SelectTool(EditingToolKind.Text);
 
+        private void OnPrivacyRegionToolClicked(object sender, RoutedEventArgs args) =>
+            SelectTool(EditingToolKind.PrivacyRegion, privacyMode: _request.ActivePrivacyRegionMode);
+
         private void OnArrowModeClicked(object sender, RoutedEventArgs args) =>
             SelectTool(EditingToolKind.ArrowLine, ArrowLineEndStyle.Arrow);
 
         private void OnLineModeClicked(object sender, RoutedEventArgs args) =>
             SelectTool(EditingToolKind.ArrowLine, ArrowLineEndStyle.None);
 
+        private void OnMosaicModeClicked(object sender, RoutedEventArgs args) =>
+            SelectPrivacyRegionMode(PrivacyRegionMode.Mosaic);
+
+        private void OnBlurModeClicked(object sender, RoutedEventArgs args) =>
+            SelectPrivacyRegionMode(PrivacyRegionMode.Blur);
+
         private void SelectTool(
             EditingToolKind tool,
-            ArrowLineEndStyle arrowLineEndStyle = ArrowLineEndStyle.Arrow)
+            ArrowLineEndStyle arrowLineEndStyle = ArrowLineEndStyle.Arrow,
+            PrivacyRegionMode? privacyMode = null)
         {
             var sink = _request.ToolSelectionSink;
             if (_disposed || sink is null)
@@ -1092,12 +1127,43 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _request.AnnotationRevision,
                 tool)
             {
-                RequestedArrowLineEndStyle = arrowLineEndStyle
+                RequestedArrowLineEndStyle = arrowLineEndStyle,
+                RequestedPrivacyRegionMode = privacyMode
             });
             if (result.Kind != EditingToolSelectionResultKind.Selected)
             {
                 Update(_request);
             }
+        }
+
+        private void SelectPrivacyRegionMode(PrivacyRegionMode mode)
+        {
+            var sink = _request.PrivacyRegionModeSelectionSink;
+            if (_disposed || sink is null)
+            {
+                return;
+            }
+
+            var result = sink.SelectPrivacyRegionMode(new PrivacyRegionModeSelectionRequest(
+                _request.SessionId,
+                _request.CoordinateVersion,
+                _request.Selection.SelectionRevision,
+                _request.AnnotationRevision,
+                mode));
+            if (result.Kind != PrivacyRegionModeSelectionResultKind.Selected)
+            {
+                Update(_request);
+            }
+        }
+
+        private static RadioButton CreatePrivacyModeButton(string label)
+        {
+            var button = CreateModeButton(label);
+            button.GroupName = "SnipPlusPrivacyRegionMode";
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                button,
+                $"Privacy Region mode {label}");
+            return button;
         }
 
         private void OnPointerPressed(object sender, PointerRoutedEventArgs args) =>
@@ -1129,6 +1195,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private RectanglePointerResult _lastRectangleResult;
         private ArrowLinePointerResult _lastArrowLineResult;
         private HighlighterPointerResult _lastHighlighterResult;
+        private PrivacyRegionPointerResult _lastPrivacyRegionResult;
         private TextDraftResult _lastTextResult;
         private TextDraftRequest? _textRequest;
         private int? _activePointerId;
@@ -1138,6 +1205,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private AnnotationRevision? _arrowLineAnnotationRevision;
         private int? _highlighterSelectionRevision;
         private AnnotationRevision? _highlighterAnnotationRevision;
+        private int? _privacySelectionRevision;
+        private AnnotationRevision? _privacyAnnotationRevision;
         private bool _releaseConsumed;
 
         public SessionInputBoundary(
@@ -1201,6 +1270,24 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 null,
                 null,
                 "No Highlighter input has been accepted.");
+            _lastPrivacyRegionResult = new PrivacyRegionPointerResult(
+                PrivacyRegionPointerResultKind.NoActiveDraft,
+                editingRouter?.ActiveTool ?? EditingToolKind.Selection,
+                editingRouter?.ActivePrivacyRegionMode ?? PrivacyRegionMode.Mosaic,
+                editingRouter?.ActivePrivacyRegionEffectParameters
+                    ?? new(
+                        PrivacyRegionEffectParameters.MinMosaicBlockSize,
+                        PrivacyRegionEffectParameters.MinBlurRadius),
+                sessionId,
+                coordinateVersion,
+                editingRouter?.CurrentSelectionRevision ?? 0,
+                editingRouter?.CurrentAnnotationRevision ?? AnnotationRevision.Initial,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "No Privacy Region input has been accepted.");
             _lastTextResult = new TextDraftResult(
                 TextDraftResultKind.NoActiveDraft,
                 editingRouter?.ActiveTool ?? EditingToolKind.Selection,
@@ -1228,6 +1315,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public bool UsesTextTool =>
             _editingRouter?.ActiveTool == EditingToolKind.Text;
+
+        public bool UsesPrivacyRegionTool =>
+            _editingRouter?.ActiveTool == EditingToolKind.PrivacyRegion;
 
         public TextDraftResult PointerPressedText(SelectionPointerEvent input)
         {
@@ -1515,6 +1605,42 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return result;
         }
 
+        public PrivacyRegionPointerResult PointerPressedPrivacyRegion(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastPrivacyRegionResult;
+            }
+
+            lock (_gate)
+            {
+                if (_activePointerId is not null)
+                {
+                    return _lastPrivacyRegionResult with
+                    {
+                        Kind = PrivacyRegionPointerResultKind.PointerMismatch,
+                        Message = "Another pointer interaction is already active."
+                    };
+                }
+            }
+
+            var result = _editingRouter.PointerPressed(ToPrivacyRegionInput(input));
+            lock (_gate)
+            {
+                _lastPrivacyRegionResult = result;
+                if (result.Kind == PrivacyRegionPointerResultKind.DraftStarted)
+                {
+                    _activePointerId = input.PointerId;
+                    _privacySelectionRevision = _editingRouter.CurrentSelectionRevision;
+                    _privacyAnnotationRevision = _editingRouter.CurrentAnnotationRevision;
+                    _releaseConsumed = false;
+                }
+            }
+
+            return result;
+        }
+
         public SelectionInputResult PointerMoved(SelectionPointerEvent input)
         {
             ArgumentNullException.ThrowIfNull(input);
@@ -1576,6 +1702,24 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             lock (_gate)
             {
                 _lastHighlighterResult = result;
+            }
+
+            return result;
+        }
+
+        public PrivacyRegionPointerResult PointerMovedPrivacyRegion(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastPrivacyRegionResult;
+            }
+
+            var result = _editingRouter.PointerMoved(
+                ToPrivacyRegionInput(NormalizePointer(input)));
+            lock (_gate)
+            {
+                _lastPrivacyRegionResult = result;
             }
 
             return result;
@@ -1697,6 +1841,37 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return result;
         }
 
+        public PrivacyRegionPointerResult PointerReleasedPrivacyRegion(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastPrivacyRegionResult;
+            }
+
+            lock (_gate)
+            {
+                if (_releaseConsumed || _activePointerId is null)
+                {
+                    return _lastPrivacyRegionResult;
+                }
+
+                _releaseConsumed = true;
+            }
+
+            var result = _editingRouter.PointerReleased(
+                ToPrivacyRegionInput(NormalizePointer(input)));
+            lock (_gate)
+            {
+                _lastPrivacyRegionResult = result;
+                _activePointerId = null;
+                _privacySelectionRevision = null;
+                _privacyAnnotationRevision = null;
+            }
+
+            return result;
+        }
+
         public SelectionInputResult PointerReleasedFromNative(PhysicalPoint point) =>
             PointerReleased(new SelectionPointerEvent(
                 _sessionId,
@@ -1725,6 +1900,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 GetActivePointerId(),
                 point));
 
+        public PrivacyRegionPointerResult PointerReleasedPrivacyRegionFromNative(PhysicalPoint point) =>
+            PointerReleasedPrivacyRegion(new SelectionPointerEvent(
+                _sessionId,
+                _coordinateVersion,
+                GetActivePointerId(),
+                point));
+
         public SelectionInputResult Escape(Guid sessionId, string coordinateVersion)
         {
             var result = _inner.Escape(sessionId, coordinateVersion);
@@ -1739,6 +1921,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _arrowLineAnnotationRevision = null;
                 _highlighterSelectionRevision = null;
                 _highlighterAnnotationRevision = null;
+                _privacySelectionRevision = null;
+                _privacyAnnotationRevision = null;
                 _lastRectangleResult = _editingRouter is null
                     ? _lastRectangleResult
                     : _lastRectangleResult with
@@ -1764,6 +1948,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                         ActiveTool = _editingRouter.ActiveTool,
                         ActiveStyle = _editingRouter.ActiveHighlighterStyle,
                         Message = "Highlighter input cancelled with the capture session."
+                    };
+                _lastPrivacyRegionResult = _editingRouter is null
+                    ? _lastPrivacyRegionResult
+                    : _lastPrivacyRegionResult with
+                    {
+                        Kind = PrivacyRegionPointerResultKind.Cancelled,
+                        ActiveTool = _editingRouter.ActiveTool,
+                        ActiveMode = _editingRouter.ActivePrivacyRegionMode,
+                        ActiveEffectParameters = _editingRouter.ActivePrivacyRegionEffectParameters,
+                        Message = "Privacy Region input cancelled with the capture session."
                     };
             }
 
@@ -1820,6 +2014,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     ?? _editingRouter?.CurrentSelectionRevision
                     ?? 0,
                 _highlighterAnnotationRevision
+                    ?? _editingRouter?.CurrentAnnotationRevision
+                    ?? AnnotationRevision.Initial,
+                input.PointerId,
+                input.GlobalPhysicalPoint);
+
+        private PrivacyRegionPointerEvent ToPrivacyRegionInput(SelectionPointerEvent input) =>
+            new(
+                input.SessionId,
+                input.CoordinateVersion,
+                _privacySelectionRevision
+                    ?? _editingRouter?.CurrentSelectionRevision
+                    ?? 0,
+                _privacyAnnotationRevision
                     ?? _editingRouter?.CurrentAnnotationRevision
                     ?? AnnotationRevision.Initial,
                 input.PointerId,
@@ -1897,6 +2104,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly List<Line> _arrowLinePreviews = new();
         private readonly List<FrameworkElement> _highlighterPreviews = new();
         private readonly List<TextBlock> _textPreviews = new();
+        private readonly List<PrivacyPreview> _privacyPreviews = new();
         private readonly Grid _textEditorHost = new()
         {
             Visibility = Visibility.Collapsed,
@@ -2242,6 +2450,15 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             var selection = snapshot.SelectionPhysicalBounds;
             foreach (var annotationObject in snapshot.Document.Objects)
             {
+                if (annotationObject.ToolKind == AnnotationToolKind.PrivacyRegion
+                    && annotationObject.Content is PrivacyRegionAnnotationContent privacyContent)
+                {
+                    AddPrivacyPreview(annotationObject.Geometry, privacyContent, selection);
+                }
+            }
+
+            foreach (var annotationObject in snapshot.Document.Objects)
+            {
                 if (annotationObject.ToolKind == AnnotationToolKind.Rectangle
                     && annotationObject.Content is RectangleAnnotationContent content)
                 {
@@ -2295,6 +2512,17 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     selection);
             }
 
+            if (snapshot.DraftPrivacyRegionBounds is PhysicalRect draftPrivacyRegion
+                && draftPrivacyRegion.IsPositive
+                && snapshot.DraftPrivacyRegionMode is PrivacyRegionMode draftPrivacyMode
+                && snapshot.DraftPrivacyRegionEffectParameters is PrivacyRegionEffectParameters draftPrivacyParameters)
+            {
+                AddPrivacyPreview(
+                    draftPrivacyRegion,
+                    new PrivacyRegionAnnotationContent(draftPrivacyMode, draftPrivacyParameters),
+                    selection);
+            }
+
             if (snapshot.DraftText is TextDraftPresentation draftText)
             {
                 ShowTextEditor(draftText, selection);
@@ -2307,6 +2535,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _canvas.Cursor = snapshot.ActiveTool is EditingToolKind.Rectangle
                 or EditingToolKind.ArrowLine
                 or EditingToolKind.Highlighter
+                or EditingToolKind.PrivacyRegion
                 ? InputSystemCursor.Create(InputSystemCursorShape.Cross)
                 : InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         }
@@ -2352,6 +2581,72 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 visible.Height / _rasterizationScale);
             _textPreviews.Add(text);
             _canvas.Children.Add(text);
+        }
+
+        private void AddPrivacyPreview(
+            PhysicalRect geometry,
+            PrivacyRegionAnnotationContent content,
+            PhysicalRect? selection)
+        {
+            var visible = geometry.Intersection(_descriptor.PhysicalBoundsInVirtualDesktop);
+            if (selection is PhysicalRect selectionBounds)
+            {
+                visible = visible.Intersection(selectionBounds);
+            }
+
+            if (!visible.IsPositive
+                || _descriptor.Frame.FrozenFrame.ImageResult is not SoftwareBitmapImageResult source)
+            {
+                return;
+            }
+
+            SoftwareBitmapImageResult preview;
+            try
+            {
+                preview = FrozenPrivacyEffectRenderer.Render(
+                    source,
+                    _descriptor.PhysicalBoundsInVirtualDesktop,
+                    visible,
+                    content);
+            }
+            catch
+            {
+                return;
+            }
+
+            var image = new Image
+            {
+                Stretch = Stretch.Fill,
+                IsHitTestVisible = false,
+                Visibility = Visibility.Visible
+            };
+            SetCanvasRectangle(
+                image,
+                (visible.Left - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                    / _rasterizationScale,
+                (visible.Top - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                    / _rasterizationScale,
+                visible.Width / _rasterizationScale,
+                visible.Height / _rasterizationScale);
+            _privacyPreviews.Add(new PrivacyPreview(image, preview));
+            _canvas.Children.Add(image);
+            _ = PresentPrivacyPreviewAsync(image, preview);
+        }
+
+        private static async Task PresentPrivacyPreviewAsync(
+            Image image,
+            SoftwareBitmapImageResult preview)
+        {
+            try
+            {
+                await WinUiImagePresentationAdapter
+                    .PresentAsync(image, preview, CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+            catch
+            {
+                image.Source = null;
+            }
         }
 
         private void ShowTextEditor(
@@ -2693,6 +2988,14 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             _textPreviews.Clear();
+            foreach (var preview in _privacyPreviews)
+            {
+                preview.Image.Source = null;
+                _canvas.Children.Remove(preview.Image);
+                preview.ImageResult.Dispose();
+            }
+
+            _privacyPreviews.Clear();
         }
 
         private static bool Contains(PhysicalRect bounds, PhysicalPoint point) =>
@@ -2700,6 +3003,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             && point.X <= bounds.Right
             && point.Y >= bounds.Top
             && point.Y <= bounds.Bottom;
+
+        private sealed record PrivacyPreview(
+            Image Image,
+            SoftwareBitmapImageResult ImageResult);
 
         private static bool TryClipLine(
             PhysicalLineSegment segment,
@@ -2844,6 +3151,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 : _inputBoundary.UsesHighlighterTool
                 ? _inputBoundary.PointerPressedHighlighter(pointer).Kind
                     == HighlighterPointerResultKind.DraftStarted
+                : _inputBoundary.UsesPrivacyRegionTool
+                ? _inputBoundary.PointerPressedPrivacyRegion(pointer).Kind
+                    == PrivacyRegionPointerResultKind.DraftStarted
                 : _inputBoundary.UsesArrowLineTool
                 ? _inputBoundary.PointerPressedArrowLine(pointer).Kind
                     == ArrowLinePointerResultKind.DraftStarted
@@ -2883,6 +3193,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             {
                 _inputBoundary.PointerMovedHighlighter(pointer);
             }
+            else if (_inputBoundary.UsesPrivacyRegionTool)
+            {
+                _inputBoundary.PointerMovedPrivacyRegion(pointer);
+            }
             else if (_inputBoundary.UsesArrowLineTool)
             {
                 _inputBoundary.PointerMovedArrowLine(pointer);
@@ -2919,6 +3233,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             if (_inputBoundary.UsesHighlighterTool)
             {
                 _inputBoundary.PointerReleasedHighlighter(pointer);
+            }
+            else if (_inputBoundary.UsesPrivacyRegionTool)
+            {
+                _inputBoundary.PointerReleasedPrivacyRegion(pointer);
             }
             else if (_inputBoundary.UsesArrowLineTool)
             {
@@ -3190,6 +3508,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     if (_inputBoundary.UsesHighlighterTool)
                     {
                         _inputBoundary.PointerReleasedHighlighterFromNative(point);
+                    }
+                    else if (_inputBoundary.UsesPrivacyRegionTool)
+                    {
+                        _inputBoundary.PointerReleasedPrivacyRegionFromNative(point);
                     }
                     else if (_inputBoundary.UsesArrowLineTool)
                     {

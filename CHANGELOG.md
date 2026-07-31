@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added — Stage 7F Pointer-driven Mosaic／Blur Creation (2026-07-31)
+
+- Added platform-neutral `PrivacyRegion` contracts for immutable Mosaic／Blur effect parameters, per-object mode, revision-aware mode selection, pointer draft／commit／cancel outcomes and presentation snapshot state. The effect policy is owned by Core; no WinUI or Windows-specific type crosses the Contracts boundary.
+- Added Core-owned rectangular Privacy Region lifecycle: pointer press must begin inside the locked Selection, the draft may cross the Selection while dragging, release commits one immutable `PrivacyRegion` object with Frozen Virtual Desktop geometry, and stale session／Selection／Annotation revisions, pointer mismatch, invalid geometry and cancellation do not mutate the document. Mode changes clear only the active draft and preserve committed objects.
+- Added Windows Function Bar Mosaic／Blur controls and per-display overlay preview from the existing frozen `SoftwareBitmap`. The renderer applies deterministic BGRA8 premultiplied Mosaic／Blur pixels to the visible physical intersection only; it does not capture a second frame, create a new top-level window or perform final annotation-aware output.
+- Added deterministic Contracts／Core／Windows coverage for effect-parameter validation, typed content, mode policy, draft／commit／stale／zero-size cleanup, negative physical coordinates and deterministic Mosaic／Blur pixels. Locked restore succeeded; Release x64 solution build succeeded with `0` warnings／`0` errors; filtered non-interactive tests passed `197/197` with `0` failures／`0` skips.
+- Limited C# formatting verification and `git diff --check` passed. A Development MSIX build was attempted, but the generated package was unsigned and no matching development certificate was available in the workspace; automated packaged runtime verification is therefore `blocked`／`Pending`. No SnipPlus GUI, external GUI fixture, real desktop screenshot or Clipboard payload was used.
+
 ### Added — Stage 7E Pointer-driven Text Creation (2026-07-31)
 
 - Added platform-neutral immutable `TextAnnotationStyle`／`TextAnnotationContent` contracts with Microsoft JhengHei default, finite centralized font-size range, visible `ArgbColor`, bold state, physical Frozen Virtual Desktop anchor／bounds, Unicode content and normalized line endings. Added revision-aware typed Text draft requests／outcomes and `EditingToolKind.Text` without WinUI types in Contracts/Core.

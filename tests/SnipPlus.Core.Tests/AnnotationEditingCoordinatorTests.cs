@@ -514,18 +514,195 @@ public sealed class AnnotationEditingCoordinatorTests
         Assert.AreEqual(EditingToolKind.Selection, snapshot.ActiveTool);
     }
 
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void PrivacyRegionUsesCentralPolicyAndModeSwitchDoesNotMutateDocument()
+    {
+        var policy = new TestPrivacyPolicy(
+            PrivacyRegionMode.Blur,
+            new PrivacyRegionEffectParameters(6, 3));
+        var editing = CreateEditing(out var sessionId, out var selection, privacyRegionEffectPolicy: policy);
+
+        var selected = SelectPrivacy(editing, sessionId, selection);
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, selected.Kind);
+        Assert.AreEqual(PrivacyRegionMode.Blur, selected.ActivePrivacyRegionMode);
+        Assert.AreEqual(6, selected.ActivePrivacyRegionEffectParameters!.MosaicBlockSize);
+        Assert.AreEqual(3, selected.ActivePrivacyRegionEffectParameters.BlurRadius);
+
+        var switched = editing.SelectPrivacyRegionMode(
+            new PrivacyRegionModeSelectionRequest(
+                sessionId,
+                selection.CoordinateVersion,
+                selection.SelectionRevision,
+                AnnotationRevision.Initial,
+                PrivacyRegionMode.Mosaic),
+            WorkflowState.Editing,
+            selection);
+
+        Assert.AreEqual(PrivacyRegionModeSelectionResultKind.Selected, switched.Kind);
+        Assert.AreEqual(PrivacyRegionMode.Mosaic, switched.ActiveMode);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+        Assert.IsEmpty(editing.CreatePresentationSnapshot(selection).Document.Objects);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void PrivacyRegionDragCommitsOneObjectPerReleaseWithSelectedEffect()
+    {
+        var firstId = new AnnotationObjectId(Guid.Parse("00000000-0000-0000-0000-000000000031"));
+        var secondId = new AnnotationObjectId(Guid.Parse("00000000-0000-0000-0000-000000000032"));
+        var ids = new Queue<AnnotationObjectId>(new[] { firstId, secondId });
+        var editing = CreateEditing(
+            out var sessionId,
+            out var selection,
+            () => ids.Dequeue());
+        SelectPrivacy(editing, sessionId, selection, PrivacyRegionMode.Mosaic);
+
+        var mosaic = CommitPrivacy(
+            editing,
+            sessionId,
+            selection,
+            new PhysicalPoint(10, 12),
+            new PhysicalPoint(30, 32),
+            4);
+        Assert.AreEqual(PrivacyRegionPointerResultKind.Committed, mosaic.Kind);
+        Assert.AreEqual(new PhysicalRect(10, 12, 30, 32), mosaic.CommittedObject!.Geometry);
+        Assert.AreEqual(
+            PrivacyRegionMode.Mosaic,
+            ((PrivacyRegionAnnotationContent)mosaic.CommittedObject.Content!).Mode);
+        Assert.AreEqual(new AnnotationRevision(1), editing.CurrentAnnotationRevision);
+
+        var switched = editing.SelectPrivacyRegionMode(
+            new PrivacyRegionModeSelectionRequest(
+                sessionId,
+                selection.CoordinateVersion,
+                selection.SelectionRevision,
+                editing.CurrentAnnotationRevision,
+                PrivacyRegionMode.Blur),
+            WorkflowState.Editing,
+            selection);
+        Assert.AreEqual(PrivacyRegionModeSelectionResultKind.Selected, switched.Kind);
+
+        var blur = CommitPrivacy(
+            editing,
+            sessionId,
+            selection,
+            new PhysicalPoint(40, 42),
+            new PhysicalPoint(60, 62),
+            5);
+        Assert.AreEqual(PrivacyRegionPointerResultKind.Committed, blur.Kind);
+        Assert.AreEqual(
+            PrivacyRegionMode.Blur,
+            ((PrivacyRegionAnnotationContent)blur.CommittedObject!.Content!).Mode);
+        Assert.AreEqual(2, blur.Document!.Objects.Count);
+        Assert.AreEqual(new AnnotationRevision(2), editing.CurrentAnnotationRevision);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void PrivacyRegionStaleAndZeroSizeInputsDoNotLeaveDraftOrMutateDocument()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectPrivacy(editing, sessionId, selection);
+
+        var outside = editing.PointerPressed(
+            PrivacyInput(sessionId, selection, new PhysicalPoint(99, 99)),
+            selection);
+        Assert.AreEqual(PrivacyRegionPointerResultKind.IgnoredOutsideSelection, outside.Kind);
+
+        var point = new PhysicalPoint(20, 20);
+        var started = editing.PointerPressed(PrivacyInput(sessionId, selection, point), selection);
+        Assert.AreEqual(PrivacyRegionPointerResultKind.DraftStarted, started.Kind);
+        var stale = editing.PointerMoved(
+            PrivacyInput(
+                sessionId,
+                selection with { SelectionRevision = selection.SelectionRevision + 1 },
+                new PhysicalPoint(30, 30)),
+            selection);
+        Assert.AreEqual(PrivacyRegionPointerResultKind.StaleSelectionRevision, stale.Kind);
+
+        var zeroSize = editing.PointerReleased(
+            PrivacyInput(sessionId, selection, point),
+            selection);
+        Assert.AreEqual(PrivacyRegionPointerResultKind.InvalidGeometry, zeroSize.Kind);
+        Assert.IsNull(editing.CreatePresentationSnapshot(selection).DraftPrivacyRegionBounds);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+        Assert.IsEmpty(editing.CreatePresentationSnapshot(selection).Document.Objects);
+    }
+
     private static AnnotationEditingCoordinator CreateEditing(
         out Guid sessionId,
         out SelectionVisualState selection,
-        Func<AnnotationObjectId>? objectIdFactory = null)
+        Func<AnnotationObjectId>? objectIdFactory = null,
+        IPrivacyRegionEffectPolicy? privacyRegionEffectPolicy = null)
     {
         sessionId = Guid.NewGuid();
         selection = LockedSelection(sessionId, 4);
         var documents = new AnnotationDocumentCoordinator();
-        var editing = new AnnotationEditingCoordinator(documents, objectIdFactory);
+        var editing = new AnnotationEditingCoordinator(
+            documents,
+            objectIdFactory,
+            privacyRegionEffectPolicy: privacyRegionEffectPolicy);
         editing.BeginSession(selection);
         return editing;
     }
+
+    private static EditingToolSelectionResult SelectPrivacy(
+        AnnotationEditingCoordinator editing,
+        Guid sessionId,
+        SelectionVisualState selection,
+        PrivacyRegionMode? mode = null)
+    {
+        var result = editing.SelectTool(
+            new EditingToolSelectionRequest(
+                sessionId,
+                selection.CoordinateVersion,
+                selection.SelectionRevision,
+                editing.CurrentAnnotationRevision,
+                EditingToolKind.PrivacyRegion)
+            {
+                RequestedPrivacyRegionMode = mode
+            },
+            WorkflowState.Editing,
+            selection);
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, result.Kind);
+        return result;
+    }
+
+    private static PrivacyRegionPointerResult CommitPrivacy(
+        AnnotationEditingCoordinator editing,
+        Guid sessionId,
+        SelectionVisualState selection,
+        PhysicalPoint start,
+        PhysicalPoint end,
+        int pointerId)
+    {
+        editing.PointerPressed(
+            PrivacyInput(sessionId, selection, start, pointerId, editing.CurrentAnnotationRevision),
+            selection);
+        editing.PointerMoved(
+            PrivacyInput(sessionId, selection, end, pointerId, editing.CurrentAnnotationRevision),
+            selection);
+        return editing.PointerReleased(
+            PrivacyInput(sessionId, selection, end, pointerId, editing.CurrentAnnotationRevision),
+            selection);
+    }
+
+    private static PrivacyRegionPointerEvent PrivacyInput(
+        Guid sessionId,
+        SelectionVisualState selection,
+        PhysicalPoint point,
+        int pointerId = 1,
+        AnnotationRevision? annotationRevision = null) => new(
+        sessionId,
+        selection.CoordinateVersion,
+        selection.SelectionRevision,
+        annotationRevision ?? AnnotationRevision.Initial,
+        pointerId,
+        point);
 
     private static SelectionVisualState LockedSelection(Guid sessionId, int revision) => new()
     {
@@ -698,4 +875,25 @@ public sealed class AnnotationEditingCoordinatorTests
         {
             DraftId = draftId ?? Guid.Empty
         };
+
+    private sealed class TestPrivacyPolicy : IPrivacyRegionEffectPolicy
+    {
+        private readonly PrivacyRegionMode _defaultMode;
+        private readonly PrivacyRegionEffectParameters _parameters;
+
+        public TestPrivacyPolicy(
+            PrivacyRegionMode defaultMode,
+            PrivacyRegionEffectParameters parameters)
+        {
+            _defaultMode = defaultMode;
+            _parameters = parameters;
+        }
+
+        public PrivacyRegionMode GetDefaultMode() => _defaultMode;
+
+        public PrivacyRegionEffectParameters GetParameters(PrivacyRegionMode mode) =>
+            mode is PrivacyRegionMode.Mosaic or PrivacyRegionMode.Blur
+                ? _parameters
+                : throw new ArgumentOutOfRangeException(nameof(mode));
+    }
 }

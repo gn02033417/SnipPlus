@@ -117,6 +117,12 @@ public sealed class CapturePresentationWorkflowCoordinator :
     public TextAnnotationStyle ActiveTextStyle =>
         _annotationEditing.ActiveTextStyle;
 
+    public PrivacyRegionMode ActivePrivacyRegionMode =>
+        _annotationEditing.ActivePrivacyRegionMode;
+
+    public PrivacyRegionEffectParameters ActivePrivacyRegionEffectParameters =>
+        _annotationEditing.ActivePrivacyRegionEffectParameters;
+
     public AnnotationMutationResult AddAnnotationObject(AddAnnotationObjectRequest request) =>
         _annotationDocuments.Add(request);
 
@@ -427,6 +433,33 @@ public sealed class CapturePresentationWorkflowCoordinator :
         return result;
     }
 
+    public PrivacyRegionPointerResult PointerPressed(PrivacyRegionPointerEvent input)
+    {
+        var result = ForwardPrivacyRegionInput(
+            input,
+            static (editing, value, selection) => editing.PointerPressed(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public PrivacyRegionPointerResult PointerMoved(PrivacyRegionPointerEvent input)
+    {
+        var result = ForwardPrivacyRegionInput(
+            input,
+            static (editing, value, selection) => editing.PointerMoved(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public PrivacyRegionPointerResult PointerReleased(PrivacyRegionPointerEvent input)
+    {
+        var result = ForwardPrivacyRegionInput(
+            input,
+            static (editing, value, selection) => editing.PointerReleased(value, selection));
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
     public TextDraftResult BeginTextDraft(TextDraftPointerEvent input)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -579,6 +612,45 @@ public sealed class CapturePresentationWorkflowCoordinator :
         return result;
     }
 
+    public PrivacyRegionModeSelectionResult SelectPrivacyRegionMode(
+        PrivacyRegionModeSelectionRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        InitialSelectionCoordinator? selection;
+        lock (_gate)
+        {
+            selection = _selectionCoordinator;
+        }
+
+        if (selection is null)
+        {
+            return new PrivacyRegionModeSelectionResult(
+                PrivacyRegionModeSelectionResultKind.StaleSession,
+                ActiveTool,
+                ActivePrivacyRegionMode,
+                ActivePrivacyRegionEffectParameters,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                CurrentAnnotationRevision,
+                null,
+                "The Privacy Region mode request belongs to a stale capture session.");
+        }
+
+        var result = _annotationEditing.SelectPrivacyRegionMode(
+            request,
+            _stateAuthority.CurrentState,
+            selection.State);
+        if (result.Kind == PrivacyRegionModeSelectionResultKind.Selected)
+        {
+            _overlayCoordinator.ApplyAnnotation(
+                _annotationEditing.CreatePresentationSnapshot(selection.State));
+            _functionBarPresentation?.Reposition(CreateFunctionBarRequest(selection.State));
+        }
+
+        return result;
+    }
+
     public FunctionBarCommandResult Execute(FunctionBarCommandRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -693,14 +765,14 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 session.SessionId,
                 session.VirtualDesktopSnapshot.CoordinateVersion,
                 currentSelection.SelectionRevision,
-                "Rectangle annotations are retained; Complete output is not available in this slice.");
+                "Annotations are retained; Complete output is not available in this slice.");
             return new FunctionBarCommandResult(
                 request.Command,
                 FunctionBarCommandResultKind.AnnotationOutputNotSupported,
                 _stateAuthority.CurrentState,
                 currentSelection.SelectionRevision,
                 failure,
-                "Rectangle annotations are retained; Complete output is not available in this slice.");
+                "Annotations are retained; Complete output is not available in this slice.");
         }
 
         if (_finalRenderer is null
@@ -1004,6 +1076,36 @@ public sealed class CapturePresentationWorkflowCoordinator :
             : handler(_annotationEditing, input, selection.State);
     }
 
+    private PrivacyRegionPointerResult ForwardPrivacyRegionInput(
+        PrivacyRegionPointerEvent input,
+        Func<AnnotationEditingCoordinator, PrivacyRegionPointerEvent, SelectionVisualState, PrivacyRegionPointerResult> handler)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        InitialSelectionCoordinator? selection;
+        lock (_gate)
+        {
+            selection = _inputEnabled ? _selectionCoordinator : null;
+        }
+
+        return selection is null
+            ? new PrivacyRegionPointerResult(
+                PrivacyRegionPointerResultKind.StaleSession,
+                _annotationEditing.ActiveTool,
+                _annotationEditing.ActivePrivacyRegionMode,
+                _annotationEditing.ActivePrivacyRegionEffectParameters,
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision,
+                CurrentAnnotationRevision,
+                null,
+                null,
+                null,
+                CurrentAnnotationDocument,
+                null,
+                "Privacy Region input was ignored until the capture session was ready.")
+            : handler(_annotationEditing, input, selection.State);
+    }
+
     private void ApplyAnnotationPresentation()
     {
         var selection = CurrentSelection;
@@ -1170,7 +1272,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
             ActiveTool = _annotationEditing.ActiveTool,
             AnnotationRevision = _annotationEditing.CurrentAnnotationRevision,
             ActiveArrowLineEndStyle = _annotationEditing.ActiveArrowLineEndStyle,
-            ToolSelectionSink = this
+            ToolSelectionSink = this,
+            ActivePrivacyRegionMode = _annotationEditing.ActivePrivacyRegionMode,
+            PrivacyRegionModeSelectionSink = this
         };
 
     private async ValueTask CompleteAsync(

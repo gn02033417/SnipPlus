@@ -53,7 +53,7 @@ Work in order. Do not begin a later item while an earlier prerequisite is unreso
 - [x] Implement pointer-driven Arrow／Line creation／draft preview／commit with Arrow／Line mode; object editing、other tools、annotation-aware final render and runtime acceptance remain incomplete, so FR-018 is still `Partial`.
 - [x] Implement pointer-driven semi-transparent Highlighter stroke creation／draft preview／commit; object editing、other tools、annotation-aware final render and runtime acceptance remain incomplete, so FR-019 is still `Partial`.
 - [x] Implement pointer-driven Text draft／content update／commit／discard with Microsoft JhengHei default, Unicode-safe Core contracts and a native Windows TextBox preview; packaged Windows／Chinese IME runtime acceptance, style picker and existing-object editing remain incomplete, so FR-020 is still `Partial`.
-- [ ] Implement pointer-driven rectangular Mosaic／Blur with per-object mode.
+- [x] Implement pointer-driven rectangular Mosaic／Blur draft／commit／deterministic frozen-frame preview with per-object mode; object editing、annotation-aware final render and packaged runtime acceptance remain incomplete, so FR-021 is still `Partial`.
 - [ ] Implement pointer-driven Numbered Marker with preserved gaps and configurable next number.
 - [ ] Implement pointer object selection、move、resize、style changes and delete.
 - [ ] Implement function-bar Annotation-only Undo／Redo.

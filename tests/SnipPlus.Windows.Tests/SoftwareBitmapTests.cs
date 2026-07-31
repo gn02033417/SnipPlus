@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SnipPlus.Contracts;
 using SnipPlus.Windows;
 using Windows.Storage.Streams;
@@ -65,6 +65,83 @@ public sealed class SoftwareBitmapTests
             SoftwareBitmapCropper.Crop(source, new PhysicalRect(1, 1, 1, 3), Guid.NewGuid(), DateTimeOffset.UnixEpoch));
         AssertOutOfRange(() =>
             SoftwareBitmapCropper.Crop(source, new PhysicalRect(0, 0, 5, 4), Guid.NewGuid(), DateTimeOffset.UnixEpoch));
+    }
+
+    [TestMethod]
+    [TestCategory("Rendering")]
+    public void FrozenMosaicPreviewUsesTheRequestedNegativeCoordinateBounds()
+    {
+        var sourcePixels = new byte[]
+        {
+            1, 0, 0, 255, 2, 0, 0, 255, 3, 0, 0, 255, 4, 0, 0, 255,
+            5, 0, 0, 255, 6, 0, 0, 255, 7, 0, 0, 255, 8, 0, 0, 255
+        };
+        var sourceBounds = new PhysicalRect(-2, 10, 2, 12);
+        using var source = SoftwareBitmapFactory.CreateFromPremultipliedBgra(
+            sourcePixels,
+            CreateMetadata(4, 2, 16) with
+            {
+                SourcePhysicalBounds = sourceBounds,
+                CropPhysicalBounds = sourceBounds
+            });
+        using var preview = FrozenPrivacyEffectRenderer.Render(
+            source,
+            sourceBounds,
+            sourceBounds,
+            new PrivacyRegionAnnotationContent(
+                PrivacyRegionMode.Mosaic,
+                new PrivacyRegionEffectParameters(2, 2)));
+
+        using var lease = preview.AcquireBitmapLease();
+        CollectionAssert.AreEqual(
+            new byte[]
+            {
+                3, 0, 0, 255, 3, 0, 0, 255, 5, 0, 0, 255, 5, 0, 0, 255,
+                3, 0, 0, 255, 3, 0, 0, 255, 5, 0, 0, 255, 5, 0, 0, 255
+            },
+            ReadPixels(lease.Bitmap));
+        Assert.AreEqual(sourceBounds, preview.Metadata.CropPhysicalBounds);
+        Assert.AreEqual(sourceBounds, preview.Metadata.SourcePhysicalBounds);
+    }
+
+    [TestMethod]
+    [TestCategory("Rendering")]
+    public void FrozenBlurPreviewIsDeterministicAndKeepsCanonicalMetadata()
+    {
+        var sourceBounds = new PhysicalRect(20, -4, 23, -3);
+        using var source = SoftwareBitmapFactory.CreateFromPremultipliedBgra(
+            new byte[]
+            {
+                0, 0, 0, 255,
+                100, 0, 0, 255,
+                200, 0, 0, 255
+            },
+            CreateMetadata(3, 1, 12) with
+            {
+                SourcePhysicalBounds = sourceBounds,
+                CropPhysicalBounds = sourceBounds
+            });
+        using var preview = FrozenPrivacyEffectRenderer.Render(
+            source,
+            sourceBounds,
+            sourceBounds,
+            new PrivacyRegionAnnotationContent(
+                PrivacyRegionMode.Blur,
+                new PrivacyRegionEffectParameters(2, 1)));
+
+        using var lease = preview.AcquireBitmapLease();
+        CollectionAssert.AreEqual(
+            new byte[]
+            {
+                33, 0, 0, 255,
+                100, 0, 0, 255,
+                166, 0, 0, 255
+            },
+            ReadPixels(lease.Bitmap));
+        Assert.AreEqual(ImagePixelFormat.Bgra8, preview.Metadata.PixelFormat);
+        Assert.AreEqual(ImageAlphaMode.Premultiplied, preview.Metadata.AlphaMode);
+        Assert.AreEqual(ImageColorSpace.SrgbSdr, preview.Metadata.ColorSpace);
+        Assert.AreEqual(source.Metadata.CapturedAt, preview.Metadata.CapturedAt);
     }
 
     [TestMethod]

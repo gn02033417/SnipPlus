@@ -22,6 +22,13 @@ public interface ITextAnnotationStylePolicy
     TextAnnotationStyle GetDefaultStyle();
 }
 
+public interface IPrivacyRegionEffectPolicy
+{
+    PrivacyRegionMode GetDefaultMode();
+
+    PrivacyRegionEffectParameters GetParameters(PrivacyRegionMode mode);
+}
+
 public sealed class DefaultRectangleAnnotationStylePolicy : IRectangleAnnotationStylePolicy
 {
     public RectangleAnnotationStyle GetDefaultStyle() => RectangleAnnotationStyle.Default;
@@ -42,6 +49,18 @@ public sealed class DefaultTextAnnotationStylePolicy : ITextAnnotationStylePolic
     public TextAnnotationStyle GetDefaultStyle() => TextAnnotationStyle.Default;
 }
 
+public sealed class DefaultPrivacyRegionEffectPolicy : IPrivacyRegionEffectPolicy
+{
+    public PrivacyRegionMode GetDefaultMode() => PrivacyRegionMode.Mosaic;
+
+    public PrivacyRegionEffectParameters GetParameters(PrivacyRegionMode mode) => mode switch
+    {
+        PrivacyRegionMode.Mosaic => new PrivacyRegionEffectParameters(12, 8),
+        PrivacyRegionMode.Blur => new PrivacyRegionEffectParameters(12, 8),
+        _ => throw new ArgumentOutOfRangeException(nameof(mode))
+    };
+}
+
 public sealed class AnnotationEditingCoordinator
 {
     private readonly object _gate = new();
@@ -51,16 +70,20 @@ public sealed class AnnotationEditingCoordinator
     private readonly IArrowLineAnnotationStylePolicy _arrowLineStylePolicy;
     private readonly IHighlighterAnnotationStylePolicy _highlighterStylePolicy;
     private readonly ITextAnnotationStylePolicy _textStylePolicy;
+    private readonly IPrivacyRegionEffectPolicy _privacyRegionEffectPolicy;
     private readonly Func<Guid> _textDraftIdFactory;
+    private readonly Func<Guid> _privacyDraftIdFactory;
     private Guid? _sessionId;
     private string _coordinateVersion = string.Empty;
     private EditingToolKind _activeTool = EditingToolKind.Selection;
     private ArrowLineEndStyle _arrowLineEndStyle = ArrowLineEndStyle.Arrow;
+    private PrivacyRegionMode _privacyRegionMode;
     private int _selectionRevision;
     private RectangleDraft? _draft;
     private ArrowLineDraft? _arrowLineDraft;
     private HighlighterDraft? _highlighterDraft;
     private TextDraft? _textDraft;
+    private PrivacyRegionDraft? _privacyRegionDraft;
 
     public AnnotationEditingCoordinator(
         AnnotationDocumentCoordinator documents,
@@ -69,7 +92,9 @@ public sealed class AnnotationEditingCoordinator
         IArrowLineAnnotationStylePolicy? arrowLineStylePolicy = null,
         IHighlighterAnnotationStylePolicy? highlighterStylePolicy = null,
         ITextAnnotationStylePolicy? textStylePolicy = null,
-        Func<Guid>? textDraftIdFactory = null)
+        Func<Guid>? textDraftIdFactory = null,
+        IPrivacyRegionEffectPolicy? privacyRegionEffectPolicy = null,
+        Func<Guid>? privacyDraftIdFactory = null)
     {
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
         _objectIdFactory = objectIdFactory ?? AnnotationObjectId.New;
@@ -77,7 +102,10 @@ public sealed class AnnotationEditingCoordinator
         _arrowLineStylePolicy = arrowLineStylePolicy ?? new DefaultArrowLineAnnotationStylePolicy();
         _highlighterStylePolicy = highlighterStylePolicy ?? new DefaultHighlighterAnnotationStylePolicy();
         _textStylePolicy = textStylePolicy ?? new DefaultTextAnnotationStylePolicy();
+        _privacyRegionEffectPolicy = privacyRegionEffectPolicy ?? new DefaultPrivacyRegionEffectPolicy();
         _textDraftIdFactory = textDraftIdFactory ?? Guid.NewGuid;
+        _privacyDraftIdFactory = privacyDraftIdFactory ?? Guid.NewGuid;
+        _privacyRegionMode = _privacyRegionEffectPolicy.GetDefaultMode();
     }
 
     public EditingToolKind ActiveTool
@@ -122,6 +150,20 @@ public sealed class AnnotationEditingCoordinator
     public TextAnnotationStyle ActiveTextStyle =>
         _textDraft?.Style ?? _textStylePolicy.GetDefaultStyle();
 
+    public PrivacyRegionMode ActivePrivacyRegionMode
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _privacyRegionMode;
+            }
+        }
+    }
+
+    public PrivacyRegionEffectParameters ActivePrivacyRegionEffectParameters =>
+        _privacyRegionEffectPolicy.GetParameters(ActivePrivacyRegionMode);
+
     public void BeginSession(SelectionVisualState selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
@@ -133,10 +175,12 @@ public sealed class AnnotationEditingCoordinator
             _selectionRevision = selection.SelectionRevision;
             _activeTool = EditingToolKind.Selection;
             _arrowLineEndStyle = ArrowLineEndStyle.Arrow;
+            _privacyRegionMode = _privacyRegionEffectPolicy.GetDefaultMode();
             _draft = null;
             _arrowLineDraft = null;
             _highlighterDraft = null;
             _textDraft = null;
+            _privacyRegionDraft = null;
         }
     }
 
@@ -154,6 +198,7 @@ public sealed class AnnotationEditingCoordinator
                 if (_selectionRevision != selection.SelectionRevision)
                 {
                     _textDraft = null;
+                    _privacyRegionDraft = null;
                 }
 
                 _selectionRevision = selection.SelectionRevision;
@@ -215,16 +260,51 @@ public sealed class AnnotationEditingCoordinator
                     "The editing tool request belongs to a stale Annotation revision.");
             }
 
+            if (!Enum.IsDefined(request.Tool))
+            {
+                return ToolResult(
+                    EditingToolSelectionResultKind.Failed,
+                    request,
+                    CreateFailure(
+                        request.SessionId,
+                        FailureCode.InvalidStateTransition,
+                        "The requested editing tool is not supported."),
+                    "The requested editing tool is not supported.");
+            }
+
+            var nextPrivacyMode = _privacyRegionMode;
+            if (request.Tool == EditingToolKind.PrivacyRegion)
+            {
+                nextPrivacyMode = request.RequestedPrivacyRegionMode
+                    ?? (_activeTool == EditingToolKind.PrivacyRegion
+                        ? _privacyRegionMode
+                        : _privacyRegionEffectPolicy.GetDefaultMode());
+                if (!TryGetPrivacyParameters(nextPrivacyMode, out _, out var privacyFailure))
+                {
+                    return ToolResult(
+                        EditingToolSelectionResultKind.Failed,
+                        request,
+                        privacyFailure,
+                        "The Privacy Region effect parameters are invalid.");
+                }
+            }
+
             _activeTool = request.Tool;
             if (request.Tool == EditingToolKind.ArrowLine)
             {
                 _arrowLineEndStyle = request.RequestedArrowLineEndStyle;
             }
 
+            if (request.Tool == EditingToolKind.PrivacyRegion)
+            {
+                _privacyRegionMode = nextPrivacyMode;
+            }
+
             _draft = null;
             _arrowLineDraft = null;
             _highlighterDraft = null;
             _textDraft = null;
+            _privacyRegionDraft = null;
             return new EditingToolSelectionResult(
                 EditingToolSelectionResultKind.Selected,
                 _activeTool,
@@ -236,8 +316,78 @@ public sealed class AnnotationEditingCoordinator
                 $"The {_activeTool} editing tool is active.")
             {
                 ActiveArrowLineEndStyle = _arrowLineEndStyle,
-                ActiveTextStyle = _textStylePolicy.GetDefaultStyle()
+                ActiveTextStyle = _textStylePolicy.GetDefaultStyle(),
+                ActivePrivacyRegionMode = _privacyRegionMode,
+                ActivePrivacyRegionEffectParameters = _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode)
             };
+        }
+    }
+
+    public PrivacyRegionModeSelectionResult SelectPrivacyRegionMode(
+        PrivacyRegionModeSelectionRequest request,
+        WorkflowState currentState,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            if (currentState != WorkflowState.Editing || _activeTool != EditingToolKind.PrivacyRegion)
+            {
+                return PrivacyModeResult(
+                    PrivacyRegionModeSelectionResultKind.InvalidWorkflowState,
+                    request,
+                    CreateFailure(
+                        request.SessionId,
+                        FailureCode.InvalidStateTransition,
+                        "Privacy Region mode can only change while the Privacy Region tool is active."),
+                    "Privacy Region mode can only change while the Privacy Region tool is active.");
+            }
+
+            if (!IsCurrentSession(request.SessionId, request.CoordinateVersion))
+            {
+                return PrivacyModeResult(
+                    PrivacyRegionModeSelectionResultKind.StaleSession,
+                    request,
+                    null,
+                    "The Privacy Region mode request belongs to a stale capture session.");
+            }
+
+            if (request.SelectionRevision != selection.SelectionRevision)
+            {
+                return PrivacyModeResult(
+                    PrivacyRegionModeSelectionResultKind.StaleSelectionRevision,
+                    request,
+                    null,
+                    "The Privacy Region mode request belongs to a stale Selection revision.");
+            }
+
+            var currentRevision = _documents.Current?.Revision ?? AnnotationRevision.Initial;
+            if (request.ExpectedAnnotationRevision != currentRevision)
+            {
+                return PrivacyModeResult(
+                    PrivacyRegionModeSelectionResultKind.StaleAnnotationRevision,
+                    request,
+                    null,
+                    "The Privacy Region mode request belongs to a stale Annotation revision.");
+            }
+
+            if (!TryGetPrivacyParameters(request.Mode, out _, out var failure))
+            {
+                return PrivacyModeResult(
+                    PrivacyRegionModeSelectionResultKind.InvalidEffectParameters,
+                    request,
+                    failure,
+                    "The Privacy Region effect parameters are invalid.");
+            }
+
+            _privacyRegionMode = request.Mode;
+            _privacyRegionDraft = null;
+            return PrivacyModeResult(
+                PrivacyRegionModeSelectionResultKind.Selected,
+                request,
+                null,
+                $"Privacy Region mode {request.Mode} is active.");
         }
     }
 
@@ -842,6 +992,375 @@ public sealed class AnnotationEditingCoordinator
                 document,
                 null,
                 "Rectangle draft cancelled.");
+        }
+    }
+
+    public PrivacyRegionPointerResult PointerPressed(
+        PrivacyRegionPointerEvent input,
+        SelectionVisualState selection) => BeginPrivacyRegionDraft(input, selection);
+
+    public PrivacyRegionPointerResult BeginPrivacyRegionDraft(
+        PrivacyRegionPointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidatePrivacyRegion(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_activeTool != EditingToolKind.PrivacyRegion)
+            {
+                return FailedPrivacyRegion(
+                    input,
+                    "Privacy Region input was received while another editing tool is active.");
+            }
+
+            if (_privacyRegionDraft is not null)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.DraftMismatch,
+                    input,
+                    _privacyRegionDraft.Bounds,
+                    null,
+                    _privacyRegionDraft.DraftId,
+                    _documents.Current,
+                    null,
+                    "A Privacy Region draft is already active.");
+            }
+
+            if (selection.NormalizedPhysicalBounds is not PhysicalRect bounds
+                || !bounds.IsPositive)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.InvalidGeometry,
+                    input,
+                    null,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Privacy Region creation requires a valid locked Selection.");
+            }
+
+            if (!Contains(bounds, input.GlobalPhysicalPoint))
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.IgnoredOutsideSelection,
+                    input,
+                    null,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Privacy Region creation starts only inside the current Selection.");
+            }
+
+            if (!TryGetPrivacyParameters(_privacyRegionMode, out var parameters, out var failure))
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.InvalidEffectParameters,
+                    input,
+                    null,
+                    null,
+                    null,
+                    _documents.Current,
+                    failure,
+                    "The Privacy Region effect parameters are invalid.");
+            }
+
+            var draftId = _privacyDraftIdFactory();
+            if (draftId == Guid.Empty)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.Failed,
+                    input,
+                    null,
+                    null,
+                    null,
+                    _documents.Current,
+                    CreateFailure(
+                        input.SessionId,
+                        FailureCode.InvalidStateTransition,
+                        "The Privacy Region draft identifier factory returned an empty identifier."),
+                    "The Privacy Region draft could not be started.");
+            }
+
+            _privacyRegionDraft = new PrivacyRegionDraft(
+                draftId,
+                input.PointerId,
+                input.GlobalPhysicalPoint,
+                input.GlobalPhysicalPoint,
+                _privacyRegionMode,
+                parameters);
+            return PrivacyRegionResult(
+                PrivacyRegionPointerResultKind.DraftStarted,
+                input,
+                _privacyRegionDraft.Bounds,
+                null,
+                draftId,
+                _documents.Current,
+                null,
+                "Privacy Region draft started.");
+        }
+    }
+
+    public PrivacyRegionPointerResult PointerMoved(
+        PrivacyRegionPointerEvent input,
+        SelectionVisualState selection) => UpdatePrivacyRegionDraft(input, selection);
+
+    public PrivacyRegionPointerResult UpdatePrivacyRegionDraft(
+        PrivacyRegionPointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidatePrivacyRegion(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_privacyRegionDraft is null)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.NoActiveDraft,
+                    input,
+                    null,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "No Privacy Region draft is active.");
+            }
+
+            if (_privacyRegionDraft.PointerId != input.PointerId)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.PointerMismatch,
+                    input,
+                    _privacyRegionDraft.Bounds,
+                    null,
+                    _privacyRegionDraft.DraftId,
+                    _documents.Current,
+                    null,
+                    "Privacy Region pointer input belongs to another pointer.");
+            }
+
+            var bounds = Normalize(
+                _privacyRegionDraft.Start,
+                input.GlobalPhysicalPoint);
+            _privacyRegionDraft = _privacyRegionDraft with
+            {
+                Current = input.GlobalPhysicalPoint,
+                Bounds = bounds
+            };
+            return PrivacyRegionResult(
+                bounds.IsPositive
+                    ? PrivacyRegionPointerResultKind.DraftUpdated
+                    : PrivacyRegionPointerResultKind.InvalidGeometry,
+                input,
+                bounds,
+                null,
+                _privacyRegionDraft.DraftId,
+                _documents.Current,
+                null,
+                bounds.IsPositive
+                    ? "Privacy Region draft updated."
+                    : "Privacy Region draft geometry is not positive yet.");
+        }
+    }
+
+    public PrivacyRegionPointerResult PointerReleased(
+        PrivacyRegionPointerEvent input,
+        SelectionVisualState selection) => CommitPrivacyRegionDraft(input, selection);
+
+    public PrivacyRegionPointerResult CommitPrivacyRegionDraft(
+        PrivacyRegionPointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidatePrivacyRegion(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_privacyRegionDraft is null)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.NoActiveDraft,
+                    input,
+                    null,
+                    null,
+                    null,
+                    _documents.Current,
+                    null,
+                    "No Privacy Region draft is active.");
+            }
+
+            if (_privacyRegionDraft.PointerId != input.PointerId)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.PointerMismatch,
+                    input,
+                    _privacyRegionDraft.Bounds,
+                    null,
+                    _privacyRegionDraft.DraftId,
+                    _documents.Current,
+                    null,
+                    "Privacy Region pointer input belongs to another pointer.");
+            }
+
+            var bounds = Normalize(
+                _privacyRegionDraft.Start,
+                input.GlobalPhysicalPoint);
+            var draftId = _privacyRegionDraft.DraftId;
+            var mode = _privacyRegionDraft.Mode;
+            var parameters = _privacyRegionDraft.EffectParameters;
+            _privacyRegionDraft = null;
+            if (!bounds.IsPositive)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.InvalidGeometry,
+                    input,
+                    null,
+                    null,
+                    draftId,
+                    _documents.Current,
+                    null,
+                    "Privacy Region geometry must have positive width and height.");
+            }
+
+            var document = _documents.Current;
+            if (document is null)
+            {
+                return FailedPrivacyRegion(
+                    input,
+                    "The Annotation Document is unavailable for Privacy Region commit.");
+            }
+
+            var zOrder = document.Objects.Count == 0
+                ? 0
+                : document.Objects.Max(annotationObject => annotationObject.ZOrder);
+            if (zOrder == int.MaxValue)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.RevisionOverflow,
+                    input,
+                    null,
+                    null,
+                    draftId,
+                    document,
+                    Failure.Create(
+                        FailureCode.AnnotationZOrderOverflow,
+                        FailureCategory.Validation,
+                        FailureRecoverability.RetrySameIntent,
+                        nameof(AnnotationEditingCoordinator),
+                        input.SessionId,
+                        "The next Privacy Region annotation Z-order would overflow."),
+                    "The Privacy Region annotation could not be committed because its Z-order would overflow.");
+            }
+
+            AnnotationObject annotationObject;
+            try
+            {
+                annotationObject = new AnnotationObject(
+                    _objectIdFactory(),
+                    input.SessionId,
+                    AnnotationToolKind.PrivacyRegion,
+                    bounds,
+                    document.Objects.Count == 0 ? 0 : zOrder + 1,
+                    new PrivacyRegionAnnotationContent(mode, parameters));
+            }
+            catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.Failed,
+                    input,
+                    null,
+                    null,
+                    draftId,
+                    document,
+                    Failure.Create(
+                        FailureCode.InvalidStateTransition,
+                        FailureCategory.Validation,
+                        FailureRecoverability.RetrySameIntent,
+                        nameof(AnnotationEditingCoordinator),
+                        input.SessionId,
+                        exception.Message),
+                    "The Privacy Region annotation could not be created.");
+            }
+
+            var mutation = _documents.Add(new AddAnnotationObjectRequest(
+                input.SessionId,
+                input.ExpectedAnnotationRevision,
+                annotationObject));
+            if (mutation is AnnotationMutationResult.Succeeded succeeded)
+            {
+                return PrivacyRegionResult(
+                    PrivacyRegionPointerResultKind.Committed,
+                    input,
+                    null,
+                    annotationObject,
+                    draftId,
+                    succeeded.Document,
+                    null,
+                    "Privacy Region annotation committed.");
+            }
+
+            return PrivacyRegionResult(
+                PrivacyRegionPointerResultKind.Failed,
+                input,
+                null,
+                null,
+                draftId,
+                mutation.CurrentDocument,
+                Failure.Create(
+                    FailureCode.StaleAnnotationRevision,
+                    FailureCategory.Session,
+                    FailureRecoverability.RetrySameIntent,
+                    nameof(AnnotationEditingCoordinator),
+                    input.SessionId,
+                    "The Annotation Document changed before the Privacy Region commit."),
+                "The Privacy Region annotation could not be committed because the Annotation Document is stale.");
+        }
+    }
+
+    public PrivacyRegionPointerResult CancelPrivacyRegionDraft(
+        Guid sessionId,
+        string coordinateVersion)
+    {
+        lock (_gate)
+        {
+            var document = _documents.Current;
+            var input = new PrivacyRegionPointerEvent(
+                sessionId,
+                coordinateVersion,
+                _selectionRevision,
+                document?.Revision ?? AnnotationRevision.Initial,
+                _privacyRegionDraft?.PointerId ?? 0,
+                _privacyRegionDraft?.Current ?? default);
+            var draftId = _privacyRegionDraft?.DraftId;
+            _privacyRegionDraft = null;
+            return PrivacyRegionResult(
+                PrivacyRegionPointerResultKind.Cancelled,
+                input,
+                null,
+                null,
+                draftId,
+                document,
+                null,
+                "Privacy Region draft cancelled.");
         }
     }
 
@@ -1480,6 +1999,11 @@ public sealed class AnnotationEditingCoordinator
                 ActiveHighlighterStyle = _highlighterStylePolicy.GetDefaultStyle(),
                 DraftHighlighterPoints = _highlighterDraft?.Points,
                 ActiveTextStyle = _textStylePolicy.GetDefaultStyle(),
+                ActivePrivacyRegionMode = _privacyRegionMode,
+                ActivePrivacyRegionEffectParameters = _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode),
+                DraftPrivacyRegionMode = _privacyRegionDraft?.Mode,
+                DraftPrivacyRegionEffectParameters = _privacyRegionDraft?.EffectParameters,
+                DraftPrivacyRegionBounds = _privacyRegionDraft?.Bounds,
                 DraftText = _textDraft is null
                     ? null
                     : new TextDraftPresentation(
@@ -1505,9 +2029,11 @@ public sealed class AnnotationEditingCoordinator
                 _selectionRevision = 0;
                 _activeTool = EditingToolKind.Selection;
                 _arrowLineEndStyle = ArrowLineEndStyle.Arrow;
+                _privacyRegionMode = _privacyRegionEffectPolicy.GetDefaultMode();
                 _arrowLineDraft = null;
                 _highlighterDraft = null;
                 _textDraft = null;
+                _privacyRegionDraft = null;
             }
         }
     }
@@ -1731,6 +2257,185 @@ public sealed class AnnotationEditingCoordinator
             checked((int)right),
             checked((int)bottom));
     }
+
+    private PrivacyRegionPointerResult? ValidatePrivacyRegion(
+        PrivacyRegionPointerEvent input,
+        SelectionVisualState selection)
+    {
+        if (input.PointerId <= 0)
+        {
+            return PrivacyRegionResult(
+                PrivacyRegionPointerResultKind.PointerMismatch,
+                input,
+                _privacyRegionDraft?.Bounds,
+                null,
+                _privacyRegionDraft?.DraftId,
+                _documents.Current,
+                null,
+                "Privacy Region input must contain a positive pointer identifier.");
+        }
+
+        if (!IsCurrentSession(input.SessionId, input.CoordinateVersion))
+        {
+            return PrivacyRegionResult(
+                PrivacyRegionPointerResultKind.StaleSession,
+                input,
+                _privacyRegionDraft?.Bounds,
+                null,
+                _privacyRegionDraft?.DraftId,
+                _documents.Current,
+                null,
+                "Privacy Region input belongs to a stale capture session.");
+        }
+
+        if (input.SelectionRevision != selection.SelectionRevision)
+        {
+            return PrivacyRegionResult(
+                PrivacyRegionPointerResultKind.StaleSelectionRevision,
+                input,
+                _privacyRegionDraft?.Bounds,
+                null,
+                _privacyRegionDraft?.DraftId,
+                _documents.Current,
+                null,
+                "Privacy Region input belongs to a stale Selection revision.");
+        }
+
+        var currentRevision = _documents.Current?.Revision ?? AnnotationRevision.Initial;
+        if (input.ExpectedAnnotationRevision != currentRevision)
+        {
+            return PrivacyRegionResult(
+                PrivacyRegionPointerResultKind.StaleAnnotationRevision,
+                input,
+                _privacyRegionDraft?.Bounds,
+                null,
+                _privacyRegionDraft?.DraftId,
+                _documents.Current,
+                null,
+                "Privacy Region input belongs to a stale Annotation revision.");
+        }
+
+        if (!TryGetPrivacyParameters(_privacyRegionMode, out _, out var failure))
+        {
+            return PrivacyRegionResult(
+                PrivacyRegionPointerResultKind.InvalidEffectParameters,
+                input,
+                _privacyRegionDraft?.Bounds,
+                null,
+                _privacyRegionDraft?.DraftId,
+                _documents.Current,
+                failure,
+                "The Privacy Region effect parameters are invalid.");
+        }
+
+        if (_activeTool != EditingToolKind.PrivacyRegion)
+        {
+            return FailedPrivacyRegion(
+                input,
+                "Privacy Region input was received while another editing tool is active.");
+        }
+
+        if (selection.Status != SelectionStatus.Locked
+            || selection.InteractionMode != SelectionInteractionMode.Locked
+            || selection.NormalizedPhysicalBounds is not PhysicalRect selectionBounds
+            || !selectionBounds.IsPositive)
+        {
+            return PrivacyRegionResult(
+                PrivacyRegionPointerResultKind.InvalidGeometry,
+                input,
+                _privacyRegionDraft?.Bounds,
+                null,
+                _privacyRegionDraft?.DraftId,
+                _documents.Current,
+                null,
+                "Privacy Region input requires a valid locked Selection boundary.");
+        }
+
+        return null;
+    }
+
+    private bool TryGetPrivacyParameters(
+        PrivacyRegionMode mode,
+        out PrivacyRegionEffectParameters parameters,
+        out Failure? failure)
+    {
+        parameters = null!;
+        failure = null;
+        if (!Enum.IsDefined(mode))
+        {
+            failure = CreateFailure(
+                _sessionId ?? Guid.Empty,
+                FailureCode.InvalidStateTransition,
+                "The Privacy Region mode is not supported.");
+            return false;
+        }
+
+        try
+        {
+            parameters = _privacyRegionEffectPolicy.GetParameters(mode);
+            return parameters is not null;
+        }
+        catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+        {
+            failure = CreateFailure(
+                _sessionId ?? Guid.Empty,
+                FailureCode.InvalidStateTransition,
+                exception.Message);
+            return false;
+        }
+    }
+
+    private PrivacyRegionPointerResult FailedPrivacyRegion(
+        PrivacyRegionPointerEvent input,
+        string message) => PrivacyRegionResult(
+        PrivacyRegionPointerResultKind.Failed,
+        input,
+        _privacyRegionDraft?.Bounds,
+        null,
+        _privacyRegionDraft?.DraftId,
+        _documents.Current,
+        CreateFailure(input.SessionId, FailureCode.InvalidStateTransition, message),
+        message);
+
+    private PrivacyRegionPointerResult PrivacyRegionResult(
+        PrivacyRegionPointerResultKind kind,
+        PrivacyRegionPointerEvent input,
+        PhysicalRect? draftBounds,
+        AnnotationObject? committedObject,
+        Guid? draftId,
+        AnnotationDocument? document,
+        Failure? failure,
+        string message) => new(
+        kind,
+        _activeTool,
+        _privacyRegionMode,
+        _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode),
+        input.SessionId,
+        input.CoordinateVersion,
+        input.SelectionRevision,
+        document?.Revision ?? _documents.Current?.Revision ?? AnnotationRevision.Initial,
+        draftId,
+        draftBounds,
+        committedObject,
+        document,
+        failure,
+        message);
+
+    private PrivacyRegionModeSelectionResult PrivacyModeResult(
+        PrivacyRegionModeSelectionResultKind kind,
+        PrivacyRegionModeSelectionRequest request,
+        Failure? failure,
+        string message) => new(
+        kind,
+        _activeTool,
+        _privacyRegionMode,
+        _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode),
+        request.SessionId,
+        request.CoordinateVersion,
+        request.SelectionRevision,
+        _documents.Current?.Revision ?? AnnotationRevision.Initial,
+        failure,
+        message);
 
     private HighlighterPointerResult? ValidateHighlighter(
         HighlighterPointerEvent input,
@@ -2074,7 +2779,9 @@ public sealed class AnnotationEditingCoordinator
         failure,
         message)
         {
-            ActiveArrowLineEndStyle = _arrowLineEndStyle
+            ActiveArrowLineEndStyle = _arrowLineEndStyle,
+            ActivePrivacyRegionMode = _privacyRegionMode,
+            ActivePrivacyRegionEffectParameters = _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode)
         };
 
     private static bool Contains(PhysicalRect bounds, PhysicalPoint point) =>
@@ -2115,4 +2822,15 @@ public sealed class AnnotationEditingCoordinator
         TextDraftRequest Request,
         string Text,
         TextAnnotationStyle Style);
+
+    private sealed record PrivacyRegionDraft(
+        Guid DraftId,
+        int PointerId,
+        PhysicalPoint Start,
+        PhysicalPoint Current,
+        PrivacyRegionMode Mode,
+        PrivacyRegionEffectParameters EffectParameters)
+    {
+        public PhysicalRect Bounds { get; init; } = new(Start.X, Start.Y, Start.X, Start.Y);
+    }
 }

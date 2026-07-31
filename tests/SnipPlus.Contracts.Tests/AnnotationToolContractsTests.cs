@@ -17,7 +17,8 @@ public sealed class AnnotationToolContractsTests
                 EditingToolKind.Rectangle,
                 EditingToolKind.ArrowLine,
                 EditingToolKind.Highlighter,
-                EditingToolKind.Text
+                EditingToolKind.Text,
+                EditingToolKind.PrivacyRegion
             },
             Enum.GetValues<EditingToolKind>());
         Assert.IsFalse(Enum.IsDefined(AnnotationToolKind.Rectangle.GetType(), "Selection"));
@@ -138,6 +139,48 @@ public sealed class AnnotationToolContractsTests
             sessionId,
             AnnotationToolKind.HighlighterStroke,
             new PhysicalRect(1, 2, 10, 20),
+            0,
+            new RectangleAnnotationContent(RectangleAnnotationStyle.Default)));
+    }
+
+    [TestMethod]
+    [TestCategory("Contract")]
+    public void PrivacyRegionContentCarriesValidatedModeAndParameters()
+    {
+        var parameters = new PrivacyRegionEffectParameters(6, 3);
+        var content = new PrivacyRegionAnnotationContent(PrivacyRegionMode.Blur, parameters);
+
+        Assert.AreEqual(PrivacyRegionMode.Blur, content.Mode);
+        Assert.AreSame(parameters, content.EffectParameters);
+        AssertThrows<ArgumentOutOfRangeException>(() =>
+            _ = new PrivacyRegionEffectParameters(1, 3));
+        AssertThrows<ArgumentOutOfRangeException>(() =>
+            _ = new PrivacyRegionEffectParameters(6, double.NaN));
+    }
+
+    [TestMethod]
+    [TestCategory("Contract")]
+    public void PrivacyRegionObjectRejectsMismatchedContent()
+    {
+        var sessionId = Guid.NewGuid();
+        var geometry = new PhysicalRect(1, 2, 10, 20);
+        var content = new PrivacyRegionAnnotationContent(
+            PrivacyRegionMode.Mosaic,
+            new PrivacyRegionEffectParameters(4, 2));
+        var accepted = new AnnotationObject(
+            AnnotationObjectId.New(),
+            sessionId,
+            AnnotationToolKind.PrivacyRegion,
+            geometry,
+            0,
+            content);
+
+        Assert.AreSame(content, accepted.Content);
+        AssertThrows<ArgumentException>(() => _ = new AnnotationObject(
+            AnnotationObjectId.New(),
+            sessionId,
+            AnnotationToolKind.PrivacyRegion,
+            geometry,
             0,
             new RectangleAnnotationContent(RectangleAnnotationStyle.Default)));
     }

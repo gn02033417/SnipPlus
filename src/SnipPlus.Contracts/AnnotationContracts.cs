@@ -109,7 +109,16 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
                 "Text annotation objects require Text content.",
                 nameof(content));
         }
-        else if (toolKind != AnnotationToolKind.Text && content is not null)
+        else if (toolKind == AnnotationToolKind.PrivacyRegion
+            && content is null)
+        {
+            throw new ArgumentException(
+                "Privacy Region annotation objects require Privacy Region content.",
+                nameof(content));
+        }
+        else if (toolKind != AnnotationToolKind.Text
+            && toolKind != AnnotationToolKind.PrivacyRegion
+            && content is not null)
         {
             throw new ArgumentException(
                 "Only supported annotation objects can carry annotation content.",
@@ -168,6 +177,14 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
         {
             throw new ArgumentException(
                 "Text content bounds must match annotation geometry.",
+                nameof(content));
+        }
+
+        if (toolKind == AnnotationToolKind.PrivacyRegion
+            && content is not PrivacyRegionAnnotationContent)
+        {
+            throw new ArgumentException(
+                "Privacy Region annotation objects require Privacy Region content.",
                 nameof(content));
         }
 
