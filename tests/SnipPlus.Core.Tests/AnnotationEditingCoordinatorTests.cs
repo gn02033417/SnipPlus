@@ -57,6 +57,133 @@ public sealed class AnnotationEditingCoordinatorTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Annotation")]
+    public void TextClickInsideSelectionStartsDraftWithoutDocumentRevision()
+    {
+        var draftId = Guid.Parse("00000000-0000-0000-0000-000000000010");
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectText(editing, sessionId, selection);
+
+        var result = editing.BeginTextDraft(
+            TextInput(sessionId, selection, new PhysicalPoint(10, 12), draftId),
+            selection);
+
+        Assert.AreEqual(TextDraftResultKind.DraftStarted, result.Kind);
+        Assert.AreEqual(draftId, result.Request!.DraftId);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+        Assert.IsEmpty(result.Document!.Objects);
+        Assert.IsNotNull(editing.CreatePresentationSnapshot(selection).DraftText);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void TextOutsideSelectionAndStaleRequestDoNotCreateDraft()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectText(editing, sessionId, selection);
+
+        var outside = editing.BeginTextDraft(
+            TextInput(sessionId, selection, new PhysicalPoint(99, 99)),
+            selection);
+        var stale = editing.BeginTextDraft(
+            TextInput(
+                sessionId,
+                selection with { SelectionRevision = selection.SelectionRevision + 1 },
+                new PhysicalPoint(10, 10)),
+            selection);
+
+        Assert.AreEqual(TextDraftResultKind.IgnoredOutsideSelection, outside.Kind);
+        Assert.AreEqual(TextDraftResultKind.StaleSelectionRevision, stale.Kind);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+        Assert.IsNull(editing.CreatePresentationSnapshot(selection).DraftText);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void TextDraftPreservesUnicodeAndNormalizesLineEndings()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectText(editing, sessionId, selection);
+        var started = editing.BeginTextDraft(
+            TextInput(sessionId, selection, new PhysicalPoint(10, 12)),
+            selection);
+
+        var updated = editing.UpdateTextDraftContent(
+            started.Request!,
+            "第一行\r\n第二行 😀",
+            selection);
+
+        Assert.AreEqual(TextDraftResultKind.DraftUpdated, updated.Kind);
+        Assert.AreEqual("第一行\n第二行 😀", updated.Text);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void EmptyTextCommitKeepsDraftAndValidCommitAddsOneObject()
+    {
+        var objectId = new AnnotationObjectId(Guid.Parse("00000000-0000-0000-0000-000000000020"));
+        var editing = CreateEditing(out var sessionId, out var selection, () => objectId);
+        SelectText(editing, sessionId, selection);
+        var started = editing.BeginTextDraft(
+            TextInput(sessionId, selection, new PhysicalPoint(10, 12)),
+            selection);
+
+        var empty = editing.CommitTextDraft(started.Request!, selection);
+        var updated = editing.UpdateTextDraftContent(started.Request!, "完成 😀", selection);
+        var committed = editing.CommitTextDraft(updated.Request!, selection);
+        var duplicate = editing.CommitTextDraft(updated.Request!, selection);
+
+        Assert.AreEqual(TextDraftResultKind.EmptyText, empty.Kind);
+        Assert.AreEqual(TextDraftResultKind.DraftUpdated, updated.Kind);
+        Assert.AreEqual(TextDraftResultKind.Committed, committed.Kind);
+        Assert.AreEqual(objectId, committed.CommittedObject!.ObjectId);
+        Assert.AreEqual(AnnotationToolKind.Text, committed.CommittedObject.ToolKind);
+        Assert.AreEqual("完成 😀", ((TextAnnotationContent)committed.CommittedObject.Content!).Text);
+        Assert.AreEqual(1, committed.Document!.Objects.Count);
+        Assert.AreEqual(new AnnotationRevision(1), editing.CurrentAnnotationRevision);
+        Assert.AreEqual(TextDraftResultKind.NoActiveDraft, duplicate.Kind);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
+    public void TextDraftCancelAndToolSwitchClearDraftWithoutMutation()
+    {
+        var editing = CreateEditing(out var sessionId, out var selection);
+        SelectText(editing, sessionId, selection);
+        var started = editing.BeginTextDraft(
+            TextInput(sessionId, selection, new PhysicalPoint(10, 12)),
+            selection);
+        var cancelled = editing.CancelTextDraft(started.Request!, selection);
+
+        Assert.AreEqual(TextDraftResultKind.Cancelled, cancelled.Kind);
+        Assert.IsNull(editing.CreatePresentationSnapshot(selection).DraftText);
+
+        var restarted = editing.BeginTextDraft(
+            TextInput(sessionId, selection, new PhysicalPoint(10, 12)),
+            selection);
+        var switched = editing.SelectTool(
+            new EditingToolSelectionRequest(
+                sessionId,
+                selection.CoordinateVersion,
+                selection.SelectionRevision,
+                AnnotationRevision.Initial,
+                EditingToolKind.Rectangle),
+            WorkflowState.Editing,
+            selection);
+
+        Assert.AreEqual(TextDraftResultKind.DraftStarted, restarted.Kind);
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, switched.Kind);
+        Assert.IsNull(editing.CreatePresentationSnapshot(selection).DraftText);
+        Assert.AreEqual(AnnotationRevision.Initial, editing.CurrentAnnotationRevision);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Annotation")]
     public void PressOutsideSelectionIsIgnoredAndDoesNotCreateDraftOrRevision()
     {
         var editing = CreateEditing(out var sessionId, out var selection);
@@ -469,6 +596,24 @@ public sealed class AnnotationEditingCoordinatorTests
         Assert.AreEqual(EditingToolKind.Highlighter, result.ActiveTool);
     }
 
+    private static void SelectText(
+        AnnotationEditingCoordinator editing,
+        Guid sessionId,
+        SelectionVisualState selection)
+    {
+        var result = editing.SelectTool(
+            new EditingToolSelectionRequest(
+                sessionId,
+                selection.CoordinateVersion,
+                selection.SelectionRevision,
+                AnnotationRevision.Initial,
+                EditingToolKind.Text),
+            WorkflowState.Editing,
+            selection);
+        Assert.AreEqual(EditingToolSelectionResultKind.Selected, result.Kind);
+        Assert.AreEqual(EditingToolKind.Text, result.ActiveTool);
+    }
+
     private static RectanglePointerResult Commit(
         AnnotationEditingCoordinator editing,
         Guid sessionId,
@@ -537,4 +682,20 @@ public sealed class AnnotationEditingCoordinatorTests
         annotationRevision ?? AnnotationRevision.Initial,
         pointerId,
         point);
+
+    private static TextDraftPointerEvent TextInput(
+        Guid sessionId,
+        SelectionVisualState selection,
+        PhysicalPoint point,
+        Guid? draftId = null,
+        AnnotationRevision? annotationRevision = null) => new(
+        sessionId,
+        selection.CoordinateVersion,
+        selection.SelectionRevision,
+        annotationRevision ?? AnnotationRevision.Initial,
+        1,
+        point)
+        {
+            DraftId = draftId ?? Guid.Empty
+        };
 }

@@ -114,6 +114,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
     public HighlighterAnnotationStyle ActiveHighlighterStyle =>
         _annotationEditing.ActiveHighlighterStyle;
 
+    public TextAnnotationStyle ActiveTextStyle =>
+        _annotationEditing.ActiveTextStyle;
+
     public AnnotationMutationResult AddAnnotationObject(AddAnnotationObjectRequest request) =>
         _annotationDocuments.Add(request);
 
@@ -421,6 +424,107 @@ public sealed class CapturePresentationWorkflowCoordinator :
             input,
             static (editing, value, selection) => editing.PointerReleased(value, selection));
         ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public TextDraftResult BeginTextDraft(TextDraftPointerEvent input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var selection = CurrentSelection;
+        if (selection is null)
+        {
+            return StaleTextResult(
+                TextDraftResultKind.StaleSession,
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision,
+                "Text input was ignored until the capture session was ready.");
+        }
+
+        var result = _annotationEditing.BeginTextDraft(input, selection);
+        ApplyTextPresentation();
+        return result;
+    }
+
+    public TextDraftResult UpdateTextDraftContent(TextDraftRequest request, string text)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var selection = CurrentSelection;
+        if (selection is null)
+        {
+            return StaleTextResult(
+                TextDraftResultKind.StaleSession,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                "Text draft content was ignored because the capture session is no longer active.",
+                request);
+        }
+
+        var result = _annotationEditing.UpdateTextDraftContent(request, text, selection);
+        ApplyTextPresentation();
+        return result;
+    }
+
+    public TextDraftResult UpdateTextDraftStyle(
+        TextDraftRequest request,
+        TextAnnotationStyle? style)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var selection = CurrentSelection;
+        if (selection is null)
+        {
+            return StaleTextResult(
+                TextDraftResultKind.StaleSession,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                "Text draft style was ignored because the capture session is no longer active.",
+                request);
+        }
+
+        var result = _annotationEditing.UpdateTextDraftStyle(request, style, selection);
+        ApplyTextPresentation();
+        return result;
+    }
+
+    public TextDraftResult CommitTextDraft(TextDraftRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var selection = CurrentSelection;
+        if (selection is null)
+        {
+            return StaleTextResult(
+                TextDraftResultKind.StaleSession,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                "Text draft commit was ignored because the capture session is no longer active.",
+                request);
+        }
+
+        var result = _annotationEditing.CommitTextDraft(request, selection);
+        ApplyTextPresentation();
+        return result;
+    }
+
+    public TextDraftResult CancelTextDraft(TextDraftRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var selection = CurrentSelection;
+        if (selection is null)
+        {
+            return StaleTextResult(
+                TextDraftResultKind.StaleSession,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                "Text draft cancellation was ignored because the capture session is no longer active.",
+                request);
+        }
+
+        var result = _annotationEditing.CancelTextDraft(request, selection);
+        ApplyTextPresentation();
         return result;
     }
 
@@ -909,6 +1013,37 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 _annotationEditing.CreatePresentationSnapshot(selection));
         }
     }
+
+    private void ApplyTextPresentation()
+    {
+        ApplyAnnotationPresentation();
+        var selection = CurrentSelection;
+        if (selection is not null && _functionBarPresentation is not null)
+        {
+            _ = _functionBarPresentation.Reposition(CreateFunctionBarRequest(selection));
+        }
+    }
+
+    private TextDraftResult StaleTextResult(
+        TextDraftResultKind kind,
+        Guid sessionId,
+        string coordinateVersion,
+        int selectionRevision,
+        string message,
+        TextDraftRequest? request = null) => new(
+        kind,
+        _annotationEditing.ActiveTool,
+        sessionId,
+        coordinateVersion,
+        selectionRevision,
+        CurrentAnnotationRevision,
+        request,
+        string.Empty,
+        _annotationEditing.ActiveTextStyle,
+        null,
+        CurrentAnnotationDocument,
+        null,
+        message);
 
     private void OnSelectionStateChanged(SelectionVisualState state)
     {

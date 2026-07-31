@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added — Stage 7E Pointer-driven Text Creation (2026-07-31)
+
+- Added platform-neutral immutable `TextAnnotationStyle`／`TextAnnotationContent` contracts with Microsoft JhengHei default, finite centralized font-size range, visible `ArgbColor`, bold state, physical Frozen Virtual Desktop anchor／bounds, Unicode content and normalized line endings. Added revision-aware typed Text draft requests／outcomes and `EditingToolKind.Text` without WinUI types in Contracts/Core.
+- Added Core-owned Text draft lifecycle: Selection-internal pointer click starts one draft, content／style updates remain outside the Annotation Document, empty text remains editable, and one explicit commit creates one Text object／Z-order／Annotation Revision. Cancel、tool switch、Selection revision change and session cleanup clear the draft; stale session／Selection／Annotation revision and draft identity requests are rejected without exceptions.
+- Added Function Bar Text selection and a native per-overlay WinUI `TextBox` editor with Microsoft JhengHei styling, natural text／IME input boundary, explicit Commit／Discard controls, physical anchor mapping and clipped committed preview. No top-level editor window, keyboard shortcut, Text-only Esc interception, style picker, object editing, annotation-aware final render or output change was added.
+- Added deterministic Contracts／Core／Windows coverage for immutable Unicode content, surrogate／emoji preservation, whitespace／line-ending normalization, draft／commit／cancel／stale lifecycle, no premature document mutation, Text Function Bar presence and native editor ownership. Locked restore succeeded; Release x64 solution build succeeded with `0` warnings／`0` errors; filtered non-interactive tests passed `190/190` with `0` failures／`0` skips; limited formatting verification and `git diff --check` passed. No packaged MSIX／GUI／Chinese IME runtime verification was available in this environment, so those items remain Pending／Partial.
+
 ### Added — Stage 7D Pointer-driven Highlighter Creation (2026-07-31)
 
 - Added platform-neutral `Highlighter` tool selection, immutable physical polyline／semi-transparent rounded-stroke style／content contracts, revision-aware pointer requests／outcomes and presentation snapshot state. The stroke is freehand, requires at least two distinct physical points and rejects fully transparent or opaque styles.

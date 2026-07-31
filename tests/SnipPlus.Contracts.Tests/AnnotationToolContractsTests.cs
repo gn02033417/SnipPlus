@@ -16,7 +16,8 @@ public sealed class AnnotationToolContractsTests
                 EditingToolKind.Selection,
                 EditingToolKind.Rectangle,
                 EditingToolKind.ArrowLine,
-                EditingToolKind.Highlighter
+                EditingToolKind.Highlighter,
+                EditingToolKind.Text
             },
             Enum.GetValues<EditingToolKind>());
         Assert.IsFalse(Enum.IsDefined(AnnotationToolKind.Rectangle.GetType(), "Selection"));

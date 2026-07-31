@@ -80,6 +80,34 @@ public sealed class AnnotationContractsTests
 
     [TestMethod]
     [TestCategory("Contract")]
+    public void TextStyleAndContentUseImmutablePhysicalAnchorAndDefaultFont()
+    {
+        var style = TextAnnotationStyle.Default;
+        var content = new TextAnnotationContent(
+            "中文 😀",
+            new PhysicalPoint(10, 12),
+            new PhysicalRect(10, 12, 100, 50),
+            style);
+
+        Assert.AreEqual("Microsoft JhengHei", style.FontFamily);
+        Assert.AreEqual(16, style.FontSize);
+        Assert.AreEqual("中文 😀", content.Text);
+        Assert.AreEqual(new PhysicalPoint(10, 12), content.AnchorInVirtualDesktop);
+        Assert.AreEqual(new PhysicalRect(10, 12, 100, 50), content.BoundsInVirtualDesktop);
+        AssertArgumentException(() => _ = new TextAnnotationStyle(
+            "Microsoft JhengHei",
+            double.NaN,
+            ArgbColor.Red,
+            false));
+        AssertArgumentException(() => _ = new TextAnnotationContent(
+            " ",
+            new PhysicalPoint(10, 12),
+            new PhysicalRect(10, 12, 100, 50),
+            style));
+    }
+
+    [TestMethod]
+    [TestCategory("Contract")]
     public void AnnotationDocumentExposesAnImmutableDeterministicCollection()
     {
         var sessionId = Guid.NewGuid();

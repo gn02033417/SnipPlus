@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
+using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -700,7 +701,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 [EditingToolKind.Selection] = CreateToolButton("Selection"),
                 [EditingToolKind.Rectangle] = CreateToolButton("Rectangle"),
                 [EditingToolKind.ArrowLine] = CreateToolButton("Arrow / Line"),
-                [EditingToolKind.Highlighter] = CreateToolButton("Highlighter")
+                [EditingToolKind.Highlighter] = CreateToolButton("Highlighter"),
+                [EditingToolKind.Text] = CreateToolButton("Text")
             };
             _arrowLineModeButtons = new Dictionary<ArrowLineEndStyle, RadioButton>
             {
@@ -713,6 +715,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons[EditingToolKind.Rectangle].Click += OnRectangleToolClicked;
             _toolButtons[EditingToolKind.ArrowLine].Click += OnArrowLineToolClicked;
             _toolButtons[EditingToolKind.Highlighter].Click += OnHighlighterToolClicked;
+            _toolButtons[EditingToolKind.Text].Click += OnTextToolClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click += OnArrowModeClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click += OnLineModeClicked;
             _root.PointerPressed += OnPointerPressed;
@@ -843,6 +846,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons[EditingToolKind.Rectangle].Click -= OnRectangleToolClicked;
             _toolButtons[EditingToolKind.ArrowLine].Click -= OnArrowLineToolClicked;
             _toolButtons[EditingToolKind.Highlighter].Click -= OnHighlighterToolClicked;
+            _toolButtons[EditingToolKind.Text].Click -= OnTextToolClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click -= OnArrowModeClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click -= OnLineModeClicked;
             _root.PointerPressed -= OnPointerPressed;
@@ -1062,6 +1066,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private void OnHighlighterToolClicked(object sender, RoutedEventArgs args) =>
             SelectTool(EditingToolKind.Highlighter);
 
+        private void OnTextToolClicked(object sender, RoutedEventArgs args) =>
+            SelectTool(EditingToolKind.Text);
+
         private void OnArrowModeClicked(object sender, RoutedEventArgs args) =>
             SelectTool(EditingToolKind.ArrowLine, ArrowLineEndStyle.Arrow);
 
@@ -1122,6 +1129,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private RectanglePointerResult _lastRectangleResult;
         private ArrowLinePointerResult _lastArrowLineResult;
         private HighlighterPointerResult _lastHighlighterResult;
+        private TextDraftResult _lastTextResult;
+        private TextDraftRequest? _textRequest;
         private int? _activePointerId;
         private int? _rectangleSelectionRevision;
         private AnnotationRevision? _rectangleAnnotationRevision;
@@ -1192,6 +1201,20 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 null,
                 null,
                 "No Highlighter input has been accepted.");
+            _lastTextResult = new TextDraftResult(
+                TextDraftResultKind.NoActiveDraft,
+                editingRouter?.ActiveTool ?? EditingToolKind.Selection,
+                sessionId,
+                coordinateVersion,
+                editingRouter?.CurrentSelectionRevision ?? 0,
+                editingRouter?.CurrentAnnotationRevision ?? AnnotationRevision.Initial,
+                null,
+                string.Empty,
+                editingRouter?.ActiveTextStyle ?? TextAnnotationStyle.Default,
+                null,
+                null,
+                null,
+                "No Text draft is active.");
         }
 
         public bool UsesRectangleTool =>
@@ -1202,6 +1225,162 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public bool UsesHighlighterTool =>
             _editingRouter?.ActiveTool == EditingToolKind.Highlighter;
+
+        public bool UsesTextTool =>
+            _editingRouter?.ActiveTool == EditingToolKind.Text;
+
+        public TextDraftResult PointerPressedText(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastTextResult;
+            }
+
+            lock (_gate)
+            {
+                if (_activePointerId is not null)
+                {
+                    return _lastTextResult with
+                    {
+                        Kind = TextDraftResultKind.DraftMismatch,
+                        Message = "Another pointer interaction is already active."
+                    };
+                }
+            }
+
+            var result = _editingRouter.BeginTextDraft(new TextDraftPointerEvent(
+                input.SessionId,
+                input.CoordinateVersion,
+                _editingRouter.CurrentSelectionRevision,
+                _editingRouter.CurrentAnnotationRevision,
+                input.PointerId,
+                input.GlobalPhysicalPoint));
+            lock (_gate)
+            {
+                _lastTextResult = result;
+                _textRequest = result.Request;
+            }
+
+            return result;
+        }
+
+        public TextDraftResult UpdateTextDraftContent(string text)
+        {
+            if (_editingRouter is null)
+            {
+                return _lastTextResult;
+            }
+
+            TextDraftRequest? request;
+            lock (_gate)
+            {
+                request = _textRequest;
+            }
+
+            if (request is null)
+            {
+                return _lastTextResult;
+            }
+
+            var result = _editingRouter.UpdateTextDraftContent(request, text);
+            lock (_gate)
+            {
+                _lastTextResult = result;
+                _textRequest = result.Kind is TextDraftResultKind.Committed
+                    or TextDraftResultKind.Cancelled
+                    ? null
+                    : result.Request;
+            }
+
+            return result;
+        }
+
+        public TextDraftResult UpdateTextDraftStyle(TextAnnotationStyle? style)
+        {
+            if (_editingRouter is null)
+            {
+                return _lastTextResult;
+            }
+
+            TextDraftRequest? request;
+            lock (_gate)
+            {
+                request = _textRequest;
+            }
+
+            if (request is null)
+            {
+                return _lastTextResult;
+            }
+
+            var result = _editingRouter.UpdateTextDraftStyle(request, style);
+            lock (_gate)
+            {
+                _lastTextResult = result;
+                _textRequest = result.Request;
+            }
+
+            return result;
+        }
+
+        public TextDraftResult CommitTextDraft()
+        {
+            if (_editingRouter is null)
+            {
+                return _lastTextResult;
+            }
+
+            TextDraftRequest? request;
+            lock (_gate)
+            {
+                request = _textRequest;
+            }
+
+            if (request is null)
+            {
+                return _lastTextResult;
+            }
+
+            var result = _editingRouter.CommitTextDraft(request);
+            lock (_gate)
+            {
+                _lastTextResult = result;
+                _textRequest = result.Kind == TextDraftResultKind.Committed
+                    ? null
+                    : result.Request;
+            }
+
+            return result;
+        }
+
+        public TextDraftResult CancelTextDraft()
+        {
+            if (_editingRouter is null)
+            {
+                return _lastTextResult;
+            }
+
+            TextDraftRequest? request;
+            lock (_gate)
+            {
+                request = _textRequest;
+            }
+
+            if (request is null)
+            {
+                return _lastTextResult;
+            }
+
+            var result = _editingRouter.CancelTextDraft(request);
+            lock (_gate)
+            {
+                _lastTextResult = result;
+                _textRequest = null;
+            }
+
+            return result;
+        }
 
         public SelectionInputResult PointerPressed(SelectionPointerEvent input)
         {
@@ -1717,6 +1896,30 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly List<Rectangle> _annotationPreviews = new();
         private readonly List<Line> _arrowLinePreviews = new();
         private readonly List<FrameworkElement> _highlighterPreviews = new();
+        private readonly List<TextBlock> _textPreviews = new();
+        private readonly Grid _textEditorHost = new()
+        {
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = true,
+            Background = new SolidColorBrush(ColorHelper.FromArgb(235, 24, 24, 24))
+        };
+        private readonly TextBox _textEditor = new()
+        {
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            IsSpellCheckEnabled = false,
+            IsHitTestVisible = true,
+            MinWidth = 120,
+            MinHeight = 48,
+            Margin = new Thickness(4)
+        };
+        private readonly StackPanel _textEditorActions = new()
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        private readonly Button _textCommitButton = new() { Content = "Commit" };
+        private readonly Button _textCancelButton = new() { Content = "Discard" };
         private readonly IReadOnlyDictionary<SelectionHitTestKind, Rectangle> _handles =
             new Dictionary<SelectionHitTestKind, Rectangle>
             {
@@ -1736,6 +1939,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private WindowProcDelegate? _windowProc;
         private bool _nativeInputBoundaryInstalled;
         private double _rasterizationScale = 1;
+        private bool _updatingTextEditor;
         private bool _disposed;
 
         public string DisplayId => _descriptor.DisplayId;
@@ -1762,6 +1966,27 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _canvas.PointerReleased += OnPointerReleased;
             _canvas.PointerCaptureLost += OnPointerCaptureLost;
             _canvas.KeyDown += OnKeyDown;
+            _textEditor.TextChanged += OnTextEditorTextChanged;
+            _textCommitButton.Click += OnTextCommitClicked;
+            _textCancelButton.Click += OnTextCancelClicked;
+            _textEditorHost.PointerPressed += OnTextEditorPointerPressed;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                _textEditor,
+                "Text annotation editor");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                _textCommitButton,
+                "Commit text annotation");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                _textCancelButton,
+                "Discard text annotation");
+            _textEditorActions.Children.Add(_textCommitButton);
+            _textEditorActions.Children.Add(_textCancelButton);
+            _textEditorHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            _textEditorHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetRow(_textEditor, 0);
+            Grid.SetRow(_textEditorActions, 1);
+            _textEditorHost.Children.Add(_textEditor);
+            _textEditorHost.Children.Add(_textEditorActions);
             _root.Children.Add(_image);
             _root.Children.Add(_canvas);
             _canvas.Children.Add(_maskTop);
@@ -1773,6 +1998,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             {
                 _canvas.Children.Add(handle);
             }
+
+            _canvas.Children.Add(_textEditorHost);
         }
 
         public async ValueTask InitializeAsync(CancellationToken cancellationToken)
@@ -2033,6 +2260,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                         highlighterContent.Style,
                         selection);
                 }
+                else if (annotationObject.ToolKind == AnnotationToolKind.Text
+                    && annotationObject.Content is TextAnnotationContent textContent)
+                {
+                    AddTextPreview(textContent, selection);
+                }
             }
 
             if (snapshot.DraftPhysicalBounds is PhysicalRect draft
@@ -2063,12 +2295,156 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     selection);
             }
 
+            if (snapshot.DraftText is TextDraftPresentation draftText)
+            {
+                ShowTextEditor(draftText, selection);
+            }
+            else
+            {
+                HideTextEditor();
+            }
+
             _canvas.Cursor = snapshot.ActiveTool is EditingToolKind.Rectangle
                 or EditingToolKind.ArrowLine
                 or EditingToolKind.Highlighter
                 ? InputSystemCursor.Create(InputSystemCursorShape.Cross)
                 : InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         }
+
+        private void AddTextPreview(
+            TextAnnotationContent content,
+            PhysicalRect? selection)
+        {
+            var visible = content.BoundsInVirtualDesktop
+                .Intersection(_descriptor.PhysicalBoundsInVirtualDesktop);
+            if (selection is PhysicalRect selectionBounds)
+            {
+                visible = visible.Intersection(selectionBounds);
+            }
+
+            if (!visible.IsPositive)
+            {
+                return;
+            }
+
+            var text = new TextBlock
+            {
+                Text = content.Text,
+                FontFamily = new FontFamily(content.Style.FontFamily),
+                FontSize = content.Style.FontSize,
+                FontWeight = content.Style.Bold ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = new SolidColorBrush(ColorHelper.FromArgb(
+                    content.Style.Color.A,
+                    content.Style.Color.R,
+                    content.Style.Color.G,
+                    content.Style.Color.B)),
+                TextWrapping = TextWrapping.Wrap,
+                IsHitTestVisible = false,
+                Visibility = Visibility.Visible
+            };
+            SetCanvasRectangle(
+                text,
+                (visible.Left - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                    / _rasterizationScale,
+                (visible.Top - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                    / _rasterizationScale,
+                visible.Width / _rasterizationScale,
+                visible.Height / _rasterizationScale);
+            _textPreviews.Add(text);
+            _canvas.Children.Add(text);
+        }
+
+        private void ShowTextEditor(
+            TextDraftPresentation draft,
+            PhysicalRect? selection)
+        {
+            var displayBounds = _descriptor.PhysicalBoundsInVirtualDesktop;
+            if (!Contains(displayBounds, draft.AnchorInVirtualDesktop))
+            {
+                HideTextEditor();
+                return;
+            }
+
+            var visible = draft.BoundsInVirtualDesktop.Intersection(displayBounds);
+            if (selection is PhysicalRect selectionBounds)
+            {
+                visible = visible.Intersection(selectionBounds);
+            }
+
+            if (!visible.IsPositive)
+            {
+                HideTextEditor();
+                return;
+            }
+
+            _updatingTextEditor = true;
+            try
+            {
+                if (!string.Equals(_textEditor.Text, draft.Text, StringComparison.Ordinal))
+                {
+                    _textEditor.Text = draft.Text;
+                }
+
+                _textEditor.FontFamily = new FontFamily(draft.Style.FontFamily);
+                _textEditor.FontSize = draft.Style.FontSize;
+                _textEditor.FontWeight = draft.Style.Bold ? FontWeights.Bold : FontWeights.Normal;
+                _textEditor.Foreground = new SolidColorBrush(ColorHelper.FromArgb(
+                    draft.Style.Color.A,
+                    draft.Style.Color.R,
+                    draft.Style.Color.G,
+                    draft.Style.Color.B));
+                SetCanvasRectangle(
+                    _textEditorHost,
+                    (visible.Left - displayBounds.Left) / _rasterizationScale,
+                    (visible.Top - displayBounds.Top) / _rasterizationScale,
+                    visible.Width / _rasterizationScale,
+                    visible.Height / _rasterizationScale);
+                _textEditorHost.IsHitTestVisible = true;
+                _textEditorHost.Visibility = Visibility.Visible;
+            }
+            finally
+            {
+                _updatingTextEditor = false;
+            }
+
+            _ = _textEditor.Focus(FocusState.Programmatic);
+        }
+
+        private void HideTextEditor()
+        {
+            _textEditorHost.Visibility = Visibility.Collapsed;
+            _textEditorHost.IsHitTestVisible = false;
+        }
+
+        private void OnTextEditorTextChanged(object sender, TextChangedEventArgs args)
+        {
+            if (_disposed || _updatingTextEditor)
+            {
+                return;
+            }
+
+            _inputBoundary.UpdateTextDraftContent(_textEditor.Text);
+        }
+
+        private void OnTextCommitClicked(object sender, RoutedEventArgs args)
+        {
+            if (!_disposed)
+            {
+                _inputBoundary.CommitTextDraft();
+            }
+        }
+
+        private void OnTextCancelClicked(object sender, RoutedEventArgs args)
+        {
+            if (!_disposed)
+            {
+                _inputBoundary.CancelTextDraft();
+            }
+        }
+
+        private static void OnTextEditorPointerPressed(
+            object sender,
+            PointerRoutedEventArgs args) => args.Handled = true;
 
         private void AddAnnotationPreview(
             PhysicalRect geometry,
@@ -2311,6 +2687,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             _highlighterPreviews.Clear();
+            foreach (var preview in _textPreviews)
+            {
+                _canvas.Children.Remove(preview);
+            }
+
+            _textPreviews.Clear();
         }
 
         private static bool Contains(PhysicalRect bounds, PhysicalPoint point) =>
@@ -2408,6 +2790,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _canvas.KeyDown -= OnKeyDown;
             _canvas.Cursor = null;
             ClearAnnotationPreviews();
+            HideTextEditor();
+            _textEditor.TextChanged -= OnTextEditorTextChanged;
+            _textCommitButton.Click -= OnTextCommitClicked;
+            _textCancelButton.Click -= OnTextCancelClicked;
+            _textEditorHost.PointerPressed -= OnTextEditorPointerPressed;
             HideHandles();
             RemoveNativeInputBoundary();
             try
@@ -2429,6 +2816,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             try
             {
                 _image.Source = null;
+                _textEditorHost.Children.Clear();
                 _window.Content = null;
             }
             catch
@@ -2450,7 +2838,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point);
-            var capturesPointer = _inputBoundary.UsesHighlighterTool
+            var capturesPointer = _inputBoundary.UsesTextTool
+                ? _inputBoundary.PointerPressedText(pointer).Kind
+                    == TextDraftResultKind.DraftStarted
+                : _inputBoundary.UsesHighlighterTool
                 ? _inputBoundary.PointerPressedHighlighter(pointer).Kind
                     == HighlighterPointerResultKind.DraftStarted
                 : _inputBoundary.UsesArrowLineTool
@@ -2482,6 +2873,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point);
+            if (_inputBoundary.UsesTextTool)
+            {
+                args.Handled = true;
+                return;
+            }
+
             if (_inputBoundary.UsesHighlighterTool)
             {
                 _inputBoundary.PointerMovedHighlighter(pointer);
@@ -2513,6 +2910,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _descriptor.CoordinateVersion,
                 checked((int)args.Pointer.PointerId),
                 point);
+            if (_inputBoundary.UsesTextTool)
+            {
+                args.Handled = true;
+                return;
+            }
+
             if (_inputBoundary.UsesHighlighterTool)
             {
                 _inputBoundary.PointerReleasedHighlighter(pointer);

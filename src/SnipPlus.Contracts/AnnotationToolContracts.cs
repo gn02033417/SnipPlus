@@ -5,7 +5,8 @@ public enum EditingToolKind
     Selection,
     Rectangle,
     ArrowLine,
-    Highlighter
+    Highlighter,
+    Text
 }
 
 public readonly record struct ArgbColor(byte A, byte R, byte G, byte B)
@@ -272,6 +273,8 @@ public sealed record EditingToolSelectionResult(
     string Message)
 {
     public ArrowLineEndStyle ActiveArrowLineEndStyle { get; init; } = ArrowLineEndStyle.Arrow;
+
+    public TextAnnotationStyle ActiveTextStyle { get; init; } = TextAnnotationStyle.Default;
 }
 
 public sealed record RectanglePointerEvent(
@@ -404,6 +407,10 @@ public sealed record AnnotationPresentationSnapshot(
     public HighlighterAnnotationStyle ActiveHighlighterStyle { get; init; } = HighlighterAnnotationStyle.Default;
 
     public IReadOnlyList<PhysicalPoint>? DraftHighlighterPoints { get; init; }
+
+    public TextAnnotationStyle ActiveTextStyle { get; init; } = TextAnnotationStyle.Default;
+
+    public TextDraftPresentation? DraftText { get; init; }
 }
 
 public interface IEditingToolSelectionSink
@@ -443,6 +450,7 @@ public interface IEditingInputRouter :
     IAnnotationPointerInputSink,
     IArrowLinePointerInputSink,
     IHighlighterPointerInputSink,
+    ITextDraftInputSink,
     IEditingToolSelectionSink
 {
     EditingToolKind ActiveTool { get; }
@@ -454,4 +462,6 @@ public interface IEditingInputRouter :
     ArrowLineEndStyle ActiveArrowLineEndStyle { get; }
 
     HighlighterAnnotationStyle ActiveHighlighterStyle { get; }
+
+    TextAnnotationStyle ActiveTextStyle { get; }
 }

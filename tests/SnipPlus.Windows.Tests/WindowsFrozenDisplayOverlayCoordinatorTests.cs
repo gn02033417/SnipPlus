@@ -116,6 +116,59 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Contract")]
+    public void FunctionBarAndOverlayDeclareNativeTextEditingSurface()
+    {
+        var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("FunctionBarSurface", BindingFlags.NonPublic);
+        var overlaySurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("OverlaySurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(functionBarSurface);
+        Assert.IsNotNull(overlaySurface);
+        var toolButtons = functionBarSurface.GetField(
+            "_toolButtons",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.IsNotNull(toolButtons);
+        Assert.IsTrue(Enum.IsDefined(EditingToolKind.Text));
+
+        var editor = overlaySurface.GetField(
+            "_textEditor",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        var host = overlaySurface.GetField(
+            "_textEditorHost",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        var previews = overlaySurface.GetField(
+            "_textPreviews",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.AreEqual(typeof(Microsoft.UI.Xaml.Controls.TextBox), editor!.FieldType);
+        Assert.AreEqual(typeof(Microsoft.UI.Xaml.Controls.Grid), host!.FieldType);
+        Assert.AreEqual(typeof(List<Microsoft.UI.Xaml.Controls.TextBlock>), previews!.FieldType);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void TextPresentationUsesPhysicalVirtualDesktopContentWithoutTopLevelWindow()
+    {
+        var overlaySurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("OverlaySurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(overlaySurface);
+        Assert.IsNull(overlaySurface.GetField(
+            "_textEditorWindow",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNotNull(overlaySurface.GetMethod(
+            "ShowTextEditor",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNotNull(overlaySurface.GetMethod(
+            "AddTextPreview",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
     public void FunctionBarVisibilityPolicyKeepsPreparationLayoutParticipatingButNonInteractive()
     {
         var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)

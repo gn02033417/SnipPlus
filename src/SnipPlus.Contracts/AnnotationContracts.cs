@@ -102,7 +102,14 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
                 ]),
                 HighlighterAnnotationStyle.Default);
         }
-        else if (content is not null)
+        else if (toolKind == AnnotationToolKind.Text
+            && content is null)
+        {
+            throw new ArgumentException(
+                "Text annotation objects require Text content.",
+                nameof(content));
+        }
+        else if (toolKind != AnnotationToolKind.Text && content is not null)
         {
             throw new ArgumentException(
                 "Only supported annotation objects can carry annotation content.",
@@ -145,6 +152,22 @@ public sealed class AnnotationObject : IEquatable<AnnotationObject>
         {
             throw new ArgumentException(
                 "Highlighter content bounds must match annotation geometry.",
+                nameof(content));
+        }
+
+        if (toolKind == AnnotationToolKind.Text
+            && content is not TextAnnotationContent)
+        {
+            throw new ArgumentException(
+                "Text annotation objects require Text content.",
+                nameof(content));
+        }
+
+        if (toolKind == AnnotationToolKind.Text
+            && ((TextAnnotationContent)content!).BoundsInVirtualDesktop != geometry)
+        {
+            throw new ArgumentException(
+                "Text content bounds must match annotation geometry.",
                 nameof(content));
         }
 

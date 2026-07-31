@@ -17,6 +17,11 @@ public interface IHighlighterAnnotationStylePolicy
     HighlighterAnnotationStyle GetDefaultStyle();
 }
 
+public interface ITextAnnotationStylePolicy
+{
+    TextAnnotationStyle GetDefaultStyle();
+}
+
 public sealed class DefaultRectangleAnnotationStylePolicy : IRectangleAnnotationStylePolicy
 {
     public RectangleAnnotationStyle GetDefaultStyle() => RectangleAnnotationStyle.Default;
@@ -32,6 +37,11 @@ public sealed class DefaultHighlighterAnnotationStylePolicy : IHighlighterAnnota
     public HighlighterAnnotationStyle GetDefaultStyle() => HighlighterAnnotationStyle.Default;
 }
 
+public sealed class DefaultTextAnnotationStylePolicy : ITextAnnotationStylePolicy
+{
+    public TextAnnotationStyle GetDefaultStyle() => TextAnnotationStyle.Default;
+}
+
 public sealed class AnnotationEditingCoordinator
 {
     private readonly object _gate = new();
@@ -40,6 +50,8 @@ public sealed class AnnotationEditingCoordinator
     private readonly IRectangleAnnotationStylePolicy _stylePolicy;
     private readonly IArrowLineAnnotationStylePolicy _arrowLineStylePolicy;
     private readonly IHighlighterAnnotationStylePolicy _highlighterStylePolicy;
+    private readonly ITextAnnotationStylePolicy _textStylePolicy;
+    private readonly Func<Guid> _textDraftIdFactory;
     private Guid? _sessionId;
     private string _coordinateVersion = string.Empty;
     private EditingToolKind _activeTool = EditingToolKind.Selection;
@@ -48,19 +60,24 @@ public sealed class AnnotationEditingCoordinator
     private RectangleDraft? _draft;
     private ArrowLineDraft? _arrowLineDraft;
     private HighlighterDraft? _highlighterDraft;
+    private TextDraft? _textDraft;
 
     public AnnotationEditingCoordinator(
         AnnotationDocumentCoordinator documents,
         Func<AnnotationObjectId>? objectIdFactory = null,
         IRectangleAnnotationStylePolicy? stylePolicy = null,
         IArrowLineAnnotationStylePolicy? arrowLineStylePolicy = null,
-        IHighlighterAnnotationStylePolicy? highlighterStylePolicy = null)
+        IHighlighterAnnotationStylePolicy? highlighterStylePolicy = null,
+        ITextAnnotationStylePolicy? textStylePolicy = null,
+        Func<Guid>? textDraftIdFactory = null)
     {
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
         _objectIdFactory = objectIdFactory ?? AnnotationObjectId.New;
         _stylePolicy = stylePolicy ?? new DefaultRectangleAnnotationStylePolicy();
         _arrowLineStylePolicy = arrowLineStylePolicy ?? new DefaultArrowLineAnnotationStylePolicy();
         _highlighterStylePolicy = highlighterStylePolicy ?? new DefaultHighlighterAnnotationStylePolicy();
+        _textStylePolicy = textStylePolicy ?? new DefaultTextAnnotationStylePolicy();
+        _textDraftIdFactory = textDraftIdFactory ?? Guid.NewGuid;
     }
 
     public EditingToolKind ActiveTool
@@ -102,6 +119,9 @@ public sealed class AnnotationEditingCoordinator
     public HighlighterAnnotationStyle ActiveHighlighterStyle =>
         _highlighterStylePolicy.GetDefaultStyle();
 
+    public TextAnnotationStyle ActiveTextStyle =>
+        _textDraft?.Style ?? _textStylePolicy.GetDefaultStyle();
+
     public void BeginSession(SelectionVisualState selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
@@ -116,6 +136,7 @@ public sealed class AnnotationEditingCoordinator
             _draft = null;
             _arrowLineDraft = null;
             _highlighterDraft = null;
+            _textDraft = null;
         }
     }
 
@@ -130,6 +151,11 @@ public sealed class AnnotationEditingCoordinator
                     selection.CoordinateVersion,
                     StringComparison.Ordinal))
             {
+                if (_selectionRevision != selection.SelectionRevision)
+                {
+                    _textDraft = null;
+                }
+
                 _selectionRevision = selection.SelectionRevision;
             }
         }
@@ -198,6 +224,7 @@ public sealed class AnnotationEditingCoordinator
             _draft = null;
             _arrowLineDraft = null;
             _highlighterDraft = null;
+            _textDraft = null;
             return new EditingToolSelectionResult(
                 EditingToolSelectionResultKind.Selected,
                 _activeTool,
@@ -208,8 +235,317 @@ public sealed class AnnotationEditingCoordinator
                 null,
                 $"The {_activeTool} editing tool is active.")
             {
-                ActiveArrowLineEndStyle = _arrowLineEndStyle
+                ActiveArrowLineEndStyle = _arrowLineEndStyle,
+                ActiveTextStyle = _textStylePolicy.GetDefaultStyle()
             };
+        }
+    }
+
+    public TextDraftResult BeginTextDraft(
+        TextDraftPointerEvent input,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateTextPointer(input, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (_activeTool != EditingToolKind.Text)
+            {
+                return FailedText(input.SessionId, input.CoordinateVersion, input.SelectionRevision,
+                    "Text input was received while another editing tool is active.");
+            }
+
+            if (_textDraft is not null)
+            {
+                return TextResult(
+                    TextDraftResultKind.DraftMismatch,
+                    _textDraft.Request,
+                    _textDraft.Text,
+                    null,
+                    _documents.Current,
+                    null,
+                    "A Text draft is already active.");
+            }
+
+            var selectionBounds = selection.NormalizedPhysicalBounds!.Value;
+            if (!Contains(selectionBounds, input.GlobalPhysicalPoint))
+            {
+                return TextResult(
+                    TextDraftResultKind.IgnoredOutsideSelection,
+                    null,
+                    string.Empty,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Text creation starts only inside the current Selection.",
+                    input.SessionId,
+                    input.CoordinateVersion,
+                    input.SelectionRevision);
+            }
+
+            var draftId = input.DraftId == Guid.Empty
+                ? _textDraftIdFactory()
+                : input.DraftId;
+            if (draftId == Guid.Empty)
+            {
+                return FailedText(input.SessionId, input.CoordinateVersion, input.SelectionRevision,
+                    "The Text draft identifier factory returned an empty identifier.");
+            }
+
+            var request = new TextDraftRequest(
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision,
+                input.ExpectedAnnotationRevision,
+                draftId,
+                input.GlobalPhysicalPoint,
+                CreateTextBounds(input.GlobalPhysicalPoint, selectionBounds));
+            if (!request.BoundsInVirtualDesktop.IsPositive)
+            {
+                return TextResult(
+                    TextDraftResultKind.InvalidGeometry,
+                    request,
+                    string.Empty,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Text creation could not create a positive editor boundary.");
+            }
+
+            _textDraft = new TextDraft(
+                request,
+                string.Empty,
+                _textStylePolicy.GetDefaultStyle());
+            return TextResult(
+                TextDraftResultKind.DraftStarted,
+                request,
+                string.Empty,
+                null,
+                _documents.Current,
+                null,
+                "Text draft started.");
+        }
+    }
+
+    public TextDraftResult UpdateTextDraftContent(
+        TextDraftRequest request,
+        string text,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateTextRequest(request, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            _textDraft = _textDraft! with
+            {
+                Text = TextAnnotationContent.Normalize(text ?? string.Empty)
+            };
+            return TextResult(
+                TextDraftResultKind.DraftUpdated,
+                request,
+                _textDraft.Text,
+                null,
+                _documents.Current,
+                null,
+                "Text draft content updated.");
+        }
+    }
+
+    public TextDraftResult UpdateTextDraftStyle(
+        TextDraftRequest request,
+        TextAnnotationStyle? style,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateTextRequest(request, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (style is null)
+            {
+                return TextResult(
+                    TextDraftResultKind.InvalidStyle,
+                    request,
+                    _textDraft!.Text,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Text style is required.");
+            }
+
+            _textDraft = _textDraft! with { Style = style };
+            return TextResult(
+                TextDraftResultKind.DraftUpdated,
+                request,
+                _textDraft.Text,
+                null,
+                _documents.Current,
+                null,
+                "Text draft style updated.");
+        }
+    }
+
+    public TextDraftResult CommitTextDraft(
+        TextDraftRequest request,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateTextRequest(request, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (string.IsNullOrWhiteSpace(_textDraft!.Text))
+            {
+                return TextResult(
+                    TextDraftResultKind.EmptyText,
+                    request,
+                    _textDraft.Text,
+                    null,
+                    _documents.Current,
+                    null,
+                    "Text draft is empty and remains editable.");
+            }
+
+            var document = _documents.Current;
+            if (document is null)
+            {
+                return TextResult(
+                    TextDraftResultKind.Failed,
+                    request,
+                    _textDraft.Text,
+                    null,
+                    null,
+                    CreateFailure(request.SessionId, FailureCode.InvalidStateTransition,
+                        "The Annotation Document is unavailable for Text commit."),
+                    "The Text annotation could not be committed.");
+            }
+
+            var nextZOrder = document.Objects.Count == 0
+                ? 0
+                : document.Objects.Max(annotationObject => annotationObject.ZOrder);
+            if (nextZOrder == int.MaxValue)
+            {
+                return TextResult(
+                    TextDraftResultKind.RevisionOverflow,
+                    request,
+                    _textDraft.Text,
+                    null,
+                    document,
+                    CreateFailure(request.SessionId, FailureCode.AnnotationZOrderOverflow,
+                        "The next Text annotation Z-order would overflow."),
+                    "The Text annotation could not be committed because its Z-order would overflow.");
+            }
+
+            AnnotationObject annotationObject;
+            try
+            {
+                annotationObject = new AnnotationObject(
+                    _objectIdFactory(),
+                    request.SessionId,
+                    AnnotationToolKind.Text,
+                    request.BoundsInVirtualDesktop,
+                    document.Objects.Count == 0 ? 0 : nextZOrder + 1,
+                    new TextAnnotationContent(
+                        _textDraft.Text,
+                        request.AnchorInVirtualDesktop,
+                        request.BoundsInVirtualDesktop,
+                        _textDraft.Style));
+            }
+            catch (ArgumentException exception)
+            {
+                return TextResult(
+                    TextDraftResultKind.Failed,
+                    request,
+                    _textDraft.Text,
+                    null,
+                    document,
+                    CreateFailure(request.SessionId, FailureCode.InvalidStateTransition, exception.Message),
+                    "The Text annotation could not be created.");
+            }
+
+            var mutation = _documents.Add(new AddAnnotationObjectRequest(
+                request.SessionId,
+                request.ExpectedAnnotationRevision,
+                annotationObject));
+            if (mutation is AnnotationMutationResult.Succeeded succeeded)
+            {
+                _textDraft = null;
+                return TextResult(
+                    TextDraftResultKind.Committed,
+                    request,
+                    string.Empty,
+                    annotationObject,
+                    succeeded.Document,
+                    null,
+                    "Text annotation committed.");
+            }
+
+            var kind = mutation is AnnotationMutationResult.RevisionOverflow
+                ? TextDraftResultKind.RevisionOverflow
+                : mutation is AnnotationMutationResult.StaleAnnotationRevision
+                    ? TextDraftResultKind.StaleAnnotationRevision
+                    : TextDraftResultKind.Failed;
+            return TextResult(
+                kind,
+                request,
+                _textDraft.Text,
+                null,
+                mutation.CurrentDocument,
+                CreateFailure(request.SessionId,
+                    kind == TextDraftResultKind.StaleAnnotationRevision
+                        ? FailureCode.StaleAnnotationRevision
+                        : FailureCode.AnnotationZOrderOverflow,
+                    "The Text annotation could not be committed because the document changed."),
+                "The Text annotation could not be committed.");
+        }
+    }
+
+    public TextDraftResult CancelTextDraft(
+        TextDraftRequest request,
+        SelectionVisualState selection)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(selection);
+        lock (_gate)
+        {
+            var rejection = ValidateTextRequest(request, selection);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            var text = _textDraft!.Text;
+            _textDraft = null;
+            return TextResult(
+                TextDraftResultKind.Cancelled,
+                request,
+                text,
+                null,
+                _documents.Current,
+                null,
+                "Text draft cancelled.");
         }
     }
 
@@ -1142,7 +1478,16 @@ public sealed class AnnotationEditingCoordinator
                 ActiveArrowLineEndStyle = _arrowLineEndStyle,
                 DraftArrowLineSegment = _arrowLineDraft?.Segment,
                 ActiveHighlighterStyle = _highlighterStylePolicy.GetDefaultStyle(),
-                DraftHighlighterPoints = _highlighterDraft?.Points
+                DraftHighlighterPoints = _highlighterDraft?.Points,
+                ActiveTextStyle = _textStylePolicy.GetDefaultStyle(),
+                DraftText = _textDraft is null
+                    ? null
+                    : new TextDraftPresentation(
+                        _textDraft.Request.DraftId,
+                        _textDraft.Text,
+                        _textDraft.Request.AnchorInVirtualDesktop,
+                        _textDraft.Request.BoundsInVirtualDesktop,
+                        _textDraft.Style)
             };
         }
     }
@@ -1162,8 +1507,229 @@ public sealed class AnnotationEditingCoordinator
                 _arrowLineEndStyle = ArrowLineEndStyle.Arrow;
                 _arrowLineDraft = null;
                 _highlighterDraft = null;
+                _textDraft = null;
             }
         }
+    }
+
+    private TextDraftResult? ValidateTextPointer(
+        TextDraftPointerEvent input,
+        SelectionVisualState selection)
+    {
+        if (input.PointerId <= 0)
+        {
+            return FailedText(input.SessionId, input.CoordinateVersion, input.SelectionRevision,
+                "Text input must contain a positive pointer identifier.");
+        }
+
+        if (!IsCurrentSession(input.SessionId, input.CoordinateVersion))
+        {
+            return TextResult(
+                TextDraftResultKind.StaleSession,
+                null,
+                string.Empty,
+                null,
+                _documents.Current,
+                null,
+                "Text input belongs to a stale capture session.",
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision);
+        }
+
+        if (input.SelectionRevision != selection.SelectionRevision)
+        {
+            return TextResult(
+                TextDraftResultKind.StaleSelectionRevision,
+                null,
+                string.Empty,
+                null,
+                _documents.Current,
+                null,
+                "Text input belongs to a stale Selection revision.",
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision);
+        }
+
+        var currentRevision = _documents.Current?.Revision ?? AnnotationRevision.Initial;
+        if (input.ExpectedAnnotationRevision != currentRevision)
+        {
+            return TextResult(
+                TextDraftResultKind.StaleAnnotationRevision,
+                null,
+                string.Empty,
+                null,
+                _documents.Current,
+                null,
+                "Text input belongs to a stale Annotation revision.",
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision);
+        }
+
+        if (selection.Status != SelectionStatus.Locked
+            || selection.InteractionMode != SelectionInteractionMode.Locked
+            || selection.NormalizedPhysicalBounds is not PhysicalRect bounds
+            || !bounds.IsPositive)
+        {
+            return TextResult(
+                TextDraftResultKind.InvalidGeometry,
+                null,
+                string.Empty,
+                null,
+                _documents.Current,
+                null,
+                "Text creation requires a valid locked Selection.",
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision);
+        }
+
+        return null;
+    }
+
+    private TextDraftResult? ValidateTextRequest(
+        TextDraftRequest request,
+        SelectionVisualState selection)
+    {
+        if (!IsCurrentSession(request.SessionId, request.CoordinateVersion))
+        {
+            return TextResult(
+                TextDraftResultKind.StaleSession,
+                request,
+                _textDraft?.Text ?? string.Empty,
+                null,
+                _documents.Current,
+                null,
+                "Text draft request belongs to a stale capture session.");
+        }
+
+        if (request.SelectionRevision != selection.SelectionRevision)
+        {
+            return TextResult(
+                TextDraftResultKind.StaleSelectionRevision,
+                request,
+                _textDraft?.Text ?? string.Empty,
+                null,
+                _documents.Current,
+                null,
+                "Text draft request belongs to a stale Selection revision.");
+        }
+
+        if (_textDraft is null)
+        {
+            return TextResult(
+                TextDraftResultKind.NoActiveDraft,
+                request,
+                string.Empty,
+                null,
+                _documents.Current,
+                null,
+                "No Text draft is active.");
+        }
+
+        var currentRevision = _documents.Current?.Revision ?? AnnotationRevision.Initial;
+        if (request.ExpectedAnnotationRevision != currentRevision)
+        {
+            return TextResult(
+                TextDraftResultKind.StaleAnnotationRevision,
+                request,
+                _textDraft?.Text ?? string.Empty,
+                null,
+                _documents.Current,
+                null,
+                "Text draft request belongs to a stale Annotation revision.");
+        }
+
+        if (_activeTool != EditingToolKind.Text
+            || request.DraftId == Guid.Empty
+            || request.DraftId != _textDraft.Request.DraftId
+            || request.AnchorInVirtualDesktop != _textDraft.Request.AnchorInVirtualDesktop
+            || request.BoundsInVirtualDesktop != _textDraft.Request.BoundsInVirtualDesktop)
+        {
+            return TextResult(
+                TextDraftResultKind.DraftMismatch,
+                request,
+                _textDraft.Text,
+                null,
+                _documents.Current,
+                null,
+                "The Text draft request does not match the active draft.");
+        }
+
+        if (selection.Status != SelectionStatus.Locked
+            || selection.InteractionMode != SelectionInteractionMode.Locked
+            || selection.NormalizedPhysicalBounds is not PhysicalRect bounds
+            || !bounds.IsPositive
+            || !bounds.Contains(request.BoundsInVirtualDesktop)
+            || !Contains(bounds, request.AnchorInVirtualDesktop))
+        {
+            return TextResult(
+                TextDraftResultKind.InvalidGeometry,
+                request,
+                _textDraft.Text,
+                null,
+                _documents.Current,
+                null,
+                "The Text draft boundary is outside the current Selection.");
+        }
+
+        return null;
+    }
+
+    private TextDraftResult FailedText(
+        Guid sessionId,
+        string coordinateVersion,
+        int selectionRevision,
+        string message) => TextResult(
+        TextDraftResultKind.Failed,
+        null,
+        _textDraft?.Text ?? string.Empty,
+        null,
+        _documents.Current,
+        CreateFailure(sessionId, FailureCode.InvalidStateTransition, message),
+        message,
+        sessionId,
+        coordinateVersion,
+        selectionRevision);
+
+    private TextDraftResult TextResult(
+        TextDraftResultKind kind,
+        TextDraftRequest? request,
+        string text,
+        AnnotationObject? committedObject,
+        AnnotationDocument? document,
+        Failure? failure,
+        string message,
+        Guid? sessionId = null,
+        string? coordinateVersion = null,
+        int? selectionRevision = null) => new(
+        kind,
+        _activeTool,
+        request?.SessionId ?? sessionId ?? _sessionId ?? Guid.Empty,
+        request?.CoordinateVersion ?? coordinateVersion ?? _coordinateVersion,
+        request?.SelectionRevision ?? selectionRevision ?? _selectionRevision,
+        document?.Revision ?? _documents.Current?.Revision ?? AnnotationRevision.Initial,
+        request,
+        text,
+        _textDraft?.Style ?? _textStylePolicy.GetDefaultStyle(),
+        committedObject,
+        document,
+        failure,
+        message);
+
+    private static PhysicalRect CreateTextBounds(
+        PhysicalPoint anchor,
+        PhysicalRect selection)
+    {
+        var right = Math.Min((long)selection.Right, (long)anchor.X + 320);
+        var bottom = Math.Min((long)selection.Bottom, (long)anchor.Y + 96);
+        return new PhysicalRect(
+            anchor.X,
+            anchor.Y,
+            checked((int)right),
+            checked((int)bottom));
     }
 
     private HighlighterPointerResult? ValidateHighlighter(
@@ -1544,4 +2110,9 @@ public sealed class AnnotationEditingCoordinator
     private sealed record HighlighterDraft(
         int PointerId,
         IReadOnlyList<PhysicalPoint> Points);
+
+    private sealed record TextDraft(
+        TextDraftRequest Request,
+        string Text,
+        TextAnnotationStyle Style);
 }
