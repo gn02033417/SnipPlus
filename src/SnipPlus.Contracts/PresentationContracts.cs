@@ -72,7 +72,8 @@ public enum SelectionInputResultKind
     Resizing,
     Reselecting,
     AdjustmentCommitted,
-    AdjustmentRolledBack
+    AdjustmentRolledBack,
+    AnnotationObjectEditing
 }
 
 public sealed record SelectionInputResult(

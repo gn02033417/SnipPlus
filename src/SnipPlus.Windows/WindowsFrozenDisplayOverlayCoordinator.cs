@@ -7,6 +7,7 @@ using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
@@ -679,10 +680,18 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly IReadOnlyDictionary<ArrowLineEndStyle, RadioButton> _arrowLineModeButtons;
         private readonly IReadOnlyDictionary<PrivacyRegionMode, RadioButton> _privacyModeButtons;
         private readonly NumberBox _nextNumberBox = CreateNextNumberBox();
+        private readonly ComboBox _colorBox = CreateColorBox();
+        private readonly NumberBox _thicknessBox = CreateStyleNumberBox("Thickness", 1, 64);
+        private readonly NumberBox _fontSizeBox = CreateStyleNumberBox("Font size", 8, 144);
+        private readonly NumberBox _markerSizeBox = CreateStyleNumberBox("Marker size", 8, 256);
+        private readonly ToggleButton _boldToggle = new() { Content = "Bold" };
+        private readonly Button _deleteObjectButton = CreateButton("Delete selected");
+        private readonly Button _editTextButton = CreateButton("Edit text");
         private readonly CancelCommandGate _cancelCommandGate = new();
         private readonly CancelCommandGate _completeCommandGate = new();
         private FunctionBarPresentationRequest _request;
         private bool _updatingNextNumber;
+        private bool _updatingStyleControls;
         private bool _disposed;
 
         public FunctionBarSurface(
@@ -733,6 +742,14 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click += OnLineModeClicked;
             _privacyModeButtons[PrivacyRegionMode.Mosaic].Click += OnMosaicModeClicked;
             _privacyModeButtons[PrivacyRegionMode.Blur].Click += OnBlurModeClicked;
+            _colorBox.SelectionChanged += OnColorChanged;
+            _thicknessBox.ValueChanged += OnThicknessChanged;
+            _fontSizeBox.ValueChanged += OnFontSizeChanged;
+            _markerSizeBox.ValueChanged += OnMarkerSizeChanged;
+            _boldToggle.Checked += OnBoldChanged;
+            _boldToggle.Unchecked += OnBoldChanged;
+            _deleteObjectButton.Click += OnDeleteObjectClicked;
+            _editTextButton.Click += OnEditTextClicked;
             _root.PointerPressed += OnPointerPressed;
             _panel.Children.Add(_feedbackText);
             foreach (var toolButton in _toolButtons.Values)
@@ -741,6 +758,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             _panel.Children.Add(_nextNumberBox);
+            _panel.Children.Add(_colorBox);
+            _panel.Children.Add(_thicknessBox);
+            _panel.Children.Add(_fontSizeBox);
+            _panel.Children.Add(_markerSizeBox);
+            _panel.Children.Add(_boldToggle);
+            _panel.Children.Add(_deleteObjectButton);
+            _panel.Children.Add(_editTextButton);
 
             foreach (var modeButton in _arrowLineModeButtons.Values)
             {
@@ -797,17 +821,31 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
             foreach (var pair in _arrowLineModeButtons)
             {
-                pair.Value.IsChecked = pair.Key == request.ActiveArrowLineEndStyle;
-                pair.Value.IsEnabled = request.ToolSelectionSink is not null
+                var selectedArrow = request.SelectedObject?.OriginalObject?.Content
+                    is ArrowLineAnnotationContent arrowContent
+                    ? arrowContent.Style.EndStyle
+                    : request.ActiveArrowLineEndStyle;
+                pair.Value.IsChecked = pair.Key == selectedArrow;
+                pair.Value.IsEnabled = request.AnnotationObjectEditingSink is not null
+                    && request.SelectedObject?.OriginalObject?.ToolKind == AnnotationToolKind.ArrowLine
+                    || request.ToolSelectionSink is not null
                     && request.ActiveTool == EditingToolKind.ArrowLine;
             }
 
             foreach (var pair in _privacyModeButtons)
             {
-                pair.Value.IsChecked = request.ActivePrivacyRegionMode == pair.Key;
-                pair.Value.IsEnabled = request.PrivacyRegionModeSelectionSink is not null
+                var selectedPrivacy = request.SelectedObject?.OriginalObject?.Content
+                    is PrivacyRegionAnnotationContent privacy
+                    ? privacy.Mode
+                    : request.ActivePrivacyRegionMode;
+                pair.Value.IsChecked = selectedPrivacy == pair.Key;
+                pair.Value.IsEnabled = request.AnnotationObjectEditingSink is not null
+                    && request.SelectedObject?.OriginalObject?.ToolKind == AnnotationToolKind.PrivacyRegion
+                    || request.PrivacyRegionModeSelectionSink is not null
                     && request.ActiveTool == EditingToolKind.PrivacyRegion;
             }
+
+            UpdateStyleControls(request);
 
             _updatingNextNumber = true;
             try
@@ -901,6 +939,14 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click -= OnLineModeClicked;
             _privacyModeButtons[PrivacyRegionMode.Mosaic].Click -= OnMosaicModeClicked;
             _privacyModeButtons[PrivacyRegionMode.Blur].Click -= OnBlurModeClicked;
+            _colorBox.SelectionChanged -= OnColorChanged;
+            _thicknessBox.ValueChanged -= OnThicknessChanged;
+            _fontSizeBox.ValueChanged -= OnFontSizeChanged;
+            _markerSizeBox.ValueChanged -= OnMarkerSizeChanged;
+            _boldToggle.Checked -= OnBoldChanged;
+            _boldToggle.Unchecked -= OnBoldChanged;
+            _deleteObjectButton.Click -= OnDeleteObjectClicked;
+            _editTextButton.Click -= OnEditTextClicked;
             _root.PointerPressed -= OnPointerPressed;
             _owner.RemoveFunctionBar(this);
             _root.Opacity = 0;
@@ -1036,6 +1082,42 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 numberBox,
                 "Next numbered marker number");
             return numberBox;
+        }
+
+        private static ComboBox CreateColorBox()
+        {
+            var box = new ComboBox
+            {
+                Header = "Color",
+                Width = 120,
+                Margin = new Thickness(4, 0, 4, 0),
+                IsTabStop = true
+            };
+            box.Items.Add(new ComboBoxItem { Content = "Red", Tag = ArgbColor.Red });
+            box.Items.Add(new ComboBoxItem { Content = "Yellow", Tag = new ArgbColor(255, 255, 235, 59) });
+            box.Items.Add(new ComboBoxItem { Content = "Blue", Tag = new ArgbColor(255, 60, 140, 255) });
+            box.Items.Add(new ComboBoxItem { Content = "Red 50%", Tag = new ArgbColor(128, 220, 60, 60) });
+            box.Items.Add(new ComboBoxItem { Content = "Yellow 50%", Tag = new ArgbColor(128, 255, 235, 59) });
+            box.Items.Add(new ComboBoxItem { Content = "Blue 50%", Tag = new ArgbColor(128, 60, 140, 255) });
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, "Annotation color");
+            return box;
+        }
+
+        private static NumberBox CreateStyleNumberBox(string header, double minimum, double maximum)
+        {
+            var box = new NumberBox
+            {
+                Header = header,
+                Minimum = minimum,
+                Maximum = maximum,
+                SmallChange = 1,
+                Width = 112,
+                Margin = new Thickness(4, 0, 4, 0),
+                Visibility = Visibility.Collapsed,
+                IsTabStop = true
+            };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, $"Annotation {header}");
+            return box;
         }
 
         private static FunctionBarButtonVisualStyle GetButtonVisualStyle() =>
@@ -1176,17 +1258,284 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
         }
 
+        private void UpdateStyleControls(FunctionBarPresentationRequest request)
+        {
+            var selected = request.SelectedObject?.OriginalObject;
+            var selectedContent = selected?.Content;
+            var sink = request.AnnotationObjectEditingSink;
+            var objectSelected = selected is not null
+                && request.SelectedObject?.HasSelection == true
+                && sink is not null;
+            var creationDefaults = !objectSelected && request.ActiveTool != EditingToolKind.Selection
+                && sink is not null;
+            var styleControlsActive = objectSelected || creationDefaults;
+            _colorBox.Visibility = styleControlsActive ? Visibility.Visible : Visibility.Collapsed;
+            _deleteObjectButton.Visibility = objectSelected ? Visibility.Visible : Visibility.Collapsed;
+            _editTextButton.Visibility = selected?.ToolKind == AnnotationToolKind.Text && objectSelected
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            var selectedPaint = selected?.ToolKind is AnnotationToolKind.Rectangle
+                or AnnotationToolKind.ArrowLine
+                or AnnotationToolKind.HighlighterStroke;
+            var creationPaint = creationDefaults && request.ActiveTool is EditingToolKind.Rectangle
+                    or EditingToolKind.ArrowLine
+                    or EditingToolKind.Highlighter;
+            _thicknessBox.Visibility = selectedPaint || creationPaint
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            var textStyleActive = selected?.ToolKind == AnnotationToolKind.Text
+                || (creationDefaults && request.ActiveTool == EditingToolKind.Text);
+            _fontSizeBox.Visibility = textStyleActive
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            _boldToggle.Visibility = textStyleActive
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            var markerStyleActive = selected?.ToolKind == AnnotationToolKind.NumberedMarker
+                || (creationDefaults && request.ActiveTool == EditingToolKind.NumberedMarker);
+            _markerSizeBox.Visibility = markerStyleActive
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            _colorBox.IsEnabled = styleControlsActive;
+            _deleteObjectButton.IsEnabled = objectSelected;
+            _editTextButton.IsEnabled = objectSelected && selected?.ToolKind == AnnotationToolKind.Text;
+            _thicknessBox.IsEnabled = styleControlsActive;
+            _fontSizeBox.IsEnabled = styleControlsActive;
+            _boldToggle.IsEnabled = styleControlsActive;
+            _markerSizeBox.IsEnabled = styleControlsActive;
+
+            _updatingStyleControls = true;
+            try
+            {
+                if (selectedContent is RectangleAnnotationContent rectangle)
+                {
+                    SelectColor(rectangle.Style.StrokeColor);
+                    _thicknessBox.Value = rectangle.Style.StrokeThickness;
+                }
+                else if (selectedContent is ArrowLineAnnotationContent arrow)
+                {
+                    SelectColor(arrow.Style.StrokeColor);
+                    _thicknessBox.Value = arrow.Style.StrokeThickness;
+                    SetModeButtonState(_arrowLineModeButtons, arrow.Style.EndStyle);
+                }
+                else if (selectedContent is HighlighterStrokeContent highlighter)
+                {
+                    SelectColor(highlighter.Style.StrokeColor);
+                    _thicknessBox.Value = highlighter.Style.StrokeThickness;
+                }
+                else if (selectedContent is TextAnnotationContent text)
+                {
+                    SelectColor(text.Style.Color);
+                    _fontSizeBox.Value = text.Style.FontSize;
+                    _boldToggle.IsChecked = text.Style.Bold;
+                }
+                else if (selectedContent is NumberedMarkerAnnotationContent marker)
+                {
+                    SelectColor(marker.Style.Color);
+                    _markerSizeBox.Value = marker.Style.Size;
+                }
+                else if (selectedContent is PrivacyRegionAnnotationContent privacy)
+                {
+                    SetModeButtonState(_privacyModeButtons, privacy.Mode);
+                }
+                else if (request.ActiveTool == EditingToolKind.Rectangle)
+                {
+                    SelectColor(request.ActiveRectangleStyle.StrokeColor);
+                    _thicknessBox.Value = request.ActiveRectangleStyle.StrokeThickness;
+                }
+                else if (request.ActiveTool == EditingToolKind.ArrowLine)
+                {
+                    SelectColor(request.ActiveArrowLineStyle.StrokeColor);
+                    _thicknessBox.Value = request.ActiveArrowLineStyle.StrokeThickness;
+                }
+                else if (request.ActiveTool == EditingToolKind.Highlighter)
+                {
+                    SelectColor(request.ActiveHighlighterStyle.StrokeColor);
+                    _thicknessBox.Value = request.ActiveHighlighterStyle.StrokeThickness;
+                }
+                else if (request.ActiveTool == EditingToolKind.Text)
+                {
+                    SelectColor(request.ActiveTextStyle.Color);
+                    _fontSizeBox.Value = request.ActiveTextStyle.FontSize;
+                    _boldToggle.IsChecked = request.ActiveTextStyle.Bold;
+                }
+                else if (request.ActiveTool == EditingToolKind.NumberedMarker)
+                {
+                    SelectColor(request.ActiveNumberedMarkerStyle.Color);
+                    _markerSizeBox.Value = request.ActiveNumberedMarkerStyle.Size;
+                }
+            }
+            finally
+            {
+                _updatingStyleControls = false;
+            }
+        }
+
+        private void SelectColor(ArgbColor color)
+        {
+            for (var index = 0; index < _colorBox.Items.Count; index++)
+            {
+                if (_colorBox.Items[index] is ComboBoxItem item
+                    && item.Tag is ArgbColor candidate
+                    && candidate == color)
+                {
+                    _colorBox.SelectedIndex = index;
+                    return;
+                }
+            }
+
+            _colorBox.SelectedIndex = -1;
+        }
+
+        private static void SetModeButtonState<T>(
+            IReadOnlyDictionary<T, RadioButton> buttons,
+            T value)
+            where T : struct, Enum
+        {
+            foreach (var pair in buttons)
+            {
+                pair.Value.IsChecked = EqualityComparer<T>.Default.Equals(pair.Key, value);
+            }
+        }
+
+        private void ApplySelectedStyle(AnnotationObjectStyleChange change)
+        {
+            if (_disposed || _updatingStyleControls
+                || _request.AnnotationObjectEditingSink is not IAnnotationObjectEditingSink sink
+                )
+            {
+                return;
+            }
+
+            var objectId = _request.SelectedObject?.SelectedObjectId;
+            var result = sink.ChangeStyle(new AnnotationObjectStyleChangeRequest(
+                _request.SessionId,
+                _request.CoordinateVersion,
+                _request.Selection.SelectionRevision,
+                _request.AnnotationRevision,
+                objectId,
+                change));
+            if (result.Kind is not AnnotationObjectEditResultKind.Restyled)
+            {
+                Update(_request);
+            }
+        }
+
+        private void OnColorChanged(object sender, SelectionChangedEventArgs args)
+        {
+            if (_colorBox.SelectedItem is ComboBoxItem { Tag: ArgbColor color })
+            {
+                ApplySelectedStyle(new AnnotationObjectStyleChange(Color: color));
+            }
+        }
+
+        private void OnThicknessChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+        {
+            if (IsWholeNumber(args.NewValue, 1, 64))
+            {
+                ApplySelectedStyle(new AnnotationObjectStyleChange(Thickness: (int)args.NewValue));
+            }
+        }
+
+        private void OnFontSizeChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+        {
+            if (double.IsFinite(args.NewValue)
+                && args.NewValue >= TextAnnotationStyle.MinFontSize
+                && args.NewValue <= TextAnnotationStyle.MaxFontSize)
+            {
+                ApplySelectedStyle(new AnnotationObjectStyleChange(FontSize: args.NewValue));
+            }
+        }
+
+        private void OnMarkerSizeChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+        {
+            if (IsWholeNumber(args.NewValue, NumberedMarkerAnnotationStyle.MinSize,
+                NumberedMarkerAnnotationStyle.MaxSize))
+            {
+                ApplySelectedStyle(new AnnotationObjectStyleChange(MarkerSize: (int)args.NewValue));
+            }
+        }
+
+        private void OnBoldChanged(object sender, RoutedEventArgs args) =>
+            ApplySelectedStyle(new AnnotationObjectStyleChange(Bold: _boldToggle.IsChecked == true));
+
+        private void OnDeleteObjectClicked(object sender, RoutedEventArgs args)
+        {
+            if (_disposed
+                || _request.AnnotationObjectEditingSink is not IAnnotationObjectEditingSink sink
+                || _request.SelectedObject?.SelectedObjectId is not AnnotationObjectId objectId)
+            {
+                return;
+            }
+
+            sink.Delete(new AnnotationObjectDeleteRequest(
+                _request.SessionId,
+                _request.CoordinateVersion,
+                _request.Selection.SelectionRevision,
+                _request.AnnotationRevision,
+                objectId));
+        }
+
+        private void OnEditTextClicked(object sender, RoutedEventArgs args)
+        {
+            if (_disposed
+                || _request.AnnotationObjectEditingSink is not IAnnotationObjectEditingSink sink
+                || _request.SelectedObject?.SelectedObjectId is not AnnotationObjectId objectId)
+            {
+                return;
+            }
+
+            sink.BeginTextEdit(new AnnotationObjectSelectionRequest(
+                _request.SessionId,
+                _request.CoordinateVersion,
+                _request.Selection.SelectionRevision,
+                _request.AnnotationRevision,
+                objectId));
+        }
+
+        private static bool IsWholeNumber(double value, double minimum, double maximum) =>
+            double.IsFinite(value)
+            && value >= minimum
+            && value <= maximum
+            && value == Math.Truncate(value);
+
         private void OnArrowModeClicked(object sender, RoutedEventArgs args) =>
-            SelectTool(EditingToolKind.ArrowLine, ArrowLineEndStyle.Arrow);
+            SelectArrowLineMode(ArrowLineEndStyle.Arrow);
 
         private void OnLineModeClicked(object sender, RoutedEventArgs args) =>
-            SelectTool(EditingToolKind.ArrowLine, ArrowLineEndStyle.None);
+            SelectArrowLineMode(ArrowLineEndStyle.None);
 
         private void OnMosaicModeClicked(object sender, RoutedEventArgs args) =>
-            SelectPrivacyRegionMode(PrivacyRegionMode.Mosaic);
+            SelectPrivacyMode(PrivacyRegionMode.Mosaic);
 
         private void OnBlurModeClicked(object sender, RoutedEventArgs args) =>
-            SelectPrivacyRegionMode(PrivacyRegionMode.Blur);
+            SelectPrivacyMode(PrivacyRegionMode.Blur);
+
+        private void SelectArrowLineMode(ArrowLineEndStyle mode)
+        {
+            if (_request.SelectedObject?.SelectedObjectId is AnnotationObjectId objectId
+                && _request.AnnotationObjectEditingSink is IAnnotationObjectEditingSink sink
+                && _request.SelectedObject.OriginalObject?.ToolKind == AnnotationToolKind.ArrowLine)
+            {
+                ApplySelectedStyle(new AnnotationObjectStyleChange(ArrowLineEndStyle: mode));
+                return;
+            }
+
+            SelectTool(EditingToolKind.ArrowLine, mode);
+        }
+
+        private void SelectPrivacyMode(PrivacyRegionMode mode)
+        {
+            if (_request.SelectedObject?.SelectedObjectId is AnnotationObjectId objectId
+                && _request.AnnotationObjectEditingSink is IAnnotationObjectEditingSink sink
+                && _request.SelectedObject.OriginalObject?.ToolKind == AnnotationToolKind.PrivacyRegion)
+            {
+                ApplySelectedStyle(new AnnotationObjectStyleChange(PrivacyMode: mode));
+                return;
+            }
+
+            SelectPrivacyRegionMode(mode);
+        }
 
         private void SelectTool(
             EditingToolKind tool,
@@ -1276,6 +1625,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private HighlighterPointerResult _lastHighlighterResult;
         private PrivacyRegionPointerResult _lastPrivacyRegionResult;
         private NumberedMarkerPointerResult _lastNumberedMarkerResult;
+        private AnnotationObjectEditResult? _lastObjectResult;
         private TextDraftResult _lastTextResult;
         private TextDraftRequest? _textRequest;
         private int? _activePointerId;
@@ -1289,6 +1639,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private AnnotationRevision? _privacyAnnotationRevision;
         private int? _numberedMarkerSelectionRevision;
         private AnnotationRevision? _numberedMarkerAnnotationRevision;
+        private int? _objectSelectionRevision;
+        private AnnotationRevision? _objectAnnotationRevision;
+        private int? _objectPointerId;
         private bool _releaseConsumed;
 
         public SessionInputBoundary(
@@ -1417,6 +1770,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public bool UsesNumberedMarkerTool =>
             _editingRouter?.ActiveTool == EditingToolKind.NumberedMarker;
+
+        public bool UsesObjectEditing =>
+            _editingRouter?.IsObjectEditingEnabled == true;
+
+        public IEditingInputRouter? EditingRouter => _editingRouter;
 
         public TextDraftResult PointerPressedText(SelectionPointerEvent input)
         {
@@ -1570,6 +1928,126 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
             return result;
         }
+
+        public AnnotationObjectEditResult PointerPressedObject(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null)
+            {
+                return _lastObjectResult ?? new AnnotationObjectEditResult(
+                    AnnotationObjectEditResultKind.StaleSession,
+                    AnnotationObjectSelectionState.Empty(
+                        input.SessionId,
+                        input.CoordinateVersion,
+                        0,
+                        AnnotationRevision.Initial),
+                    null,
+                    null,
+                    null,
+                    "Annotation object input is unavailable.");
+            }
+
+            lock (_gate)
+            {
+                if (_activePointerId is not null)
+                {
+                    return (_lastObjectResult ?? ObjectResultFallback()) with
+                    {
+                        Kind = AnnotationObjectEditResultKind.PointerMismatch,
+                        Message = "Another pointer interaction is already active."
+                    };
+                }
+            }
+
+            var result = _editingRouter.PointerPressed(new AnnotationObjectPointerEvent(
+                input.SessionId,
+                input.CoordinateVersion,
+                _editingRouter.CurrentSelectionRevision,
+                _editingRouter.CurrentAnnotationRevision,
+                input.PointerId,
+                input.GlobalPhysicalPoint));
+            lock (_gate)
+            {
+                _lastObjectResult = result;
+                if (result.Kind == AnnotationObjectEditResultKind.EditStarted)
+                {
+                    _activePointerId = input.PointerId;
+                    _objectPointerId = input.PointerId;
+                    _objectSelectionRevision = _editingRouter.CurrentSelectionRevision;
+                    _objectAnnotationRevision = _editingRouter.CurrentAnnotationRevision;
+                    _releaseConsumed = false;
+                }
+            }
+
+            return result;
+        }
+
+        public AnnotationObjectEditResult PointerMovedObject(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null || _objectPointerId is not int pointerId)
+            {
+                return _lastObjectResult ?? ObjectResultFallback();
+            }
+
+            var result = _editingRouter.PointerMoved(new AnnotationObjectPointerEvent(
+                input.SessionId,
+                input.CoordinateVersion,
+                _objectSelectionRevision ?? _editingRouter.CurrentSelectionRevision,
+                _objectAnnotationRevision ?? _editingRouter.CurrentAnnotationRevision,
+                pointerId,
+                input.GlobalPhysicalPoint));
+            lock (_gate)
+            {
+                _lastObjectResult = result;
+            }
+
+            return result;
+        }
+
+        public AnnotationObjectEditResult PointerReleasedObject(SelectionPointerEvent input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            if (_editingRouter is null || _objectPointerId is not int pointerId)
+            {
+                return _lastObjectResult ?? ObjectResultFallback();
+            }
+
+            lock (_gate)
+            {
+                if (_releaseConsumed)
+                {
+                    return _lastObjectResult ?? ObjectResultFallback();
+                }
+
+                _releaseConsumed = true;
+            }
+
+            var result = _editingRouter.PointerReleased(new AnnotationObjectPointerEvent(
+                input.SessionId,
+                input.CoordinateVersion,
+                _objectSelectionRevision ?? _editingRouter.CurrentSelectionRevision,
+                _objectAnnotationRevision ?? _editingRouter.CurrentAnnotationRevision,
+                pointerId,
+                input.GlobalPhysicalPoint));
+            lock (_gate)
+            {
+                _lastObjectResult = result;
+                _objectPointerId = null;
+                _objectSelectionRevision = null;
+                _objectAnnotationRevision = null;
+                _activePointerId = null;
+            }
+
+            return result;
+        }
+
+        public AnnotationObjectEditResult PointerReleasedObjectFromNative(PhysicalPoint point) =>
+            PointerReleasedObject(new SelectionPointerEvent(
+                _sessionId,
+                _coordinateVersion,
+                _objectPointerId ?? 0,
+                point));
 
         public SelectionInputResult PointerPressed(SelectionPointerEvent input)
         {
@@ -2102,6 +2580,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public SelectionInputResult Escape(Guid sessionId, string coordinateVersion)
         {
+            if (_editingRouter is not null && _editingRouter.IsObjectEditingEnabled)
+            {
+                _lastObjectResult = _editingRouter.CancelEdit(sessionId, coordinateVersion);
+            }
+
             var result = _inner.Escape(sessionId, coordinateVersion);
             lock (_gate)
             {
@@ -2116,6 +2599,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _highlighterAnnotationRevision = null;
                 _privacySelectionRevision = null;
                 _privacyAnnotationRevision = null;
+                _objectSelectionRevision = null;
+                _objectAnnotationRevision = null;
+                _objectPointerId = null;
                 _lastRectangleResult = _editingRouter is null
                     ? _lastRectangleResult
                     : _lastRectangleResult with
@@ -2267,6 +2753,23 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
         }
 
+        private AnnotationObjectEditResult ObjectResultFallback()
+        {
+            var editingRouter = _editingRouter;
+            return new AnnotationObjectEditResult(
+                AnnotationObjectEditResultKind.NoActiveEdit,
+                editingRouter?.SelectedObject
+                    ?? AnnotationObjectSelectionState.Empty(
+                        _sessionId,
+                        _coordinateVersion,
+                        editingRouter?.CurrentSelectionRevision ?? 0,
+                        editingRouter?.CurrentAnnotationRevision ?? AnnotationRevision.Initial),
+                null,
+                null,
+                null,
+                "No annotation object edit is active.");
+        }
+
         private static bool IsActiveInteraction(SelectionInteractionMode mode) => mode is
             SelectionInteractionMode.InitialDragging
             or SelectionInteractionMode.Moving
@@ -2316,6 +2819,29 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             StrokeThickness = 2,
             Visibility = Visibility.Collapsed
         };
+        private readonly Rectangle _objectSelectionBorder = new()
+        {
+            Fill = new SolidColorBrush(ColorHelper.FromArgb(0, 0, 0, 0)),
+            Stroke = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 255, 255)),
+            StrokeThickness = 1,
+            StrokeDashArray = new DoubleCollection { 3, 2 },
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false
+        };
+        private readonly IReadOnlyDictionary<AnnotationObjectEditHandleKind, Rectangle> _objectHandles =
+            new Dictionary<AnnotationObjectEditHandleKind, Rectangle>
+            {
+                [AnnotationObjectEditHandleKind.StartEndpoint] = CreateHandle(),
+                [AnnotationObjectEditHandleKind.EndEndpoint] = CreateHandle(),
+                [AnnotationObjectEditHandleKind.LeftEdge] = CreateHandle(),
+                [AnnotationObjectEditHandleKind.TopEdge] = CreateHandle(),
+                [AnnotationObjectEditHandleKind.RightEdge] = CreateHandle(),
+                [AnnotationObjectEditHandleKind.BottomEdge] = CreateHandle(),
+                [AnnotationObjectEditHandleKind.TopLeftCorner] = CreateHandle(),
+                [AnnotationObjectEditHandleKind.TopRightCorner] = CreateHandle(),
+                [AnnotationObjectEditHandleKind.BottomLeftCorner] = CreateHandle(),
+                [AnnotationObjectEditHandleKind.BottomRightCorner] = CreateHandle()
+            };
         private readonly List<Rectangle> _annotationPreviews = new();
         private readonly List<Line> _arrowLinePreviews = new();
         private readonly List<FrameworkElement> _highlighterPreviews = new();
@@ -2365,6 +2891,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private bool _nativeInputBoundaryInstalled;
         private double _rasterizationScale = 1;
         private bool _updatingTextEditor;
+        private TextDraftPresentation? _selectedTextEdit;
         private bool _disposed;
 
         public string DisplayId => _descriptor.DisplayId;
@@ -2419,7 +2946,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _canvas.Children.Add(_maskRight);
             _canvas.Children.Add(_maskBottom);
             _canvas.Children.Add(_selectionBorder);
+            _canvas.Children.Add(_objectSelectionBorder);
             foreach (var handle in _handles.Values)
+            {
+                _canvas.Children.Add(handle);
+            }
+
+            foreach (var handle in _objectHandles.Values)
             {
                 _canvas.Children.Add(handle);
             }
@@ -2665,7 +3198,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
             ClearAnnotationPreviews();
             var selection = snapshot.SelectionPhysicalBounds;
-            foreach (var annotationObject in snapshot.Document.Objects)
+            var renderObjects = snapshot.Document.Objects.ToList();
+            if (snapshot.SelectedObject?.OriginalObject is AnnotationObject original
+                && snapshot.SelectedObject.PreviewObject is AnnotationObject preview
+                && preview.ObjectId == original.ObjectId)
+            {
+                var index = renderObjects.FindIndex(value => value.ObjectId == original.ObjectId);
+                if (index >= 0)
+                {
+                    renderObjects[index] = preview;
+                }
+            }
+
+            foreach (var annotationObject in renderObjects)
             {
                 if (annotationObject.ToolKind == AnnotationToolKind.PrivacyRegion
                     && annotationObject.Content is PrivacyRegionAnnotationContent privacyContent)
@@ -2674,7 +3219,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 }
             }
 
-            foreach (var annotationObject in snapshot.Document.Objects)
+            foreach (var annotationObject in renderObjects)
             {
                 if (annotationObject.ToolKind == AnnotationToolKind.Rectangle
                     && annotationObject.Content is RectangleAnnotationContent content)
@@ -2749,12 +3294,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     selection);
             }
 
-            if (snapshot.DraftText is TextDraftPresentation draftText)
+            if (snapshot.SelectedTextEdit is TextDraftPresentation selectedTextEdit)
             {
-                ShowTextEditor(draftText, selection);
+                _selectedTextEdit = selectedTextEdit;
+                ShowTextEditor(selectedTextEdit, selection, existingEdit: true);
+            }
+            else if (snapshot.DraftText is TextDraftPresentation draftText)
+            {
+                _selectedTextEdit = null;
+                ShowTextEditor(draftText, selection, existingEdit: false);
             }
             else
             {
+                _selectedTextEdit = null;
                 HideTextEditor();
             }
 
@@ -2767,6 +3319,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     isDraft: true);
             }
 
+            ApplyObjectAdornment(snapshot);
+
             _canvas.Cursor = snapshot.ActiveTool is EditingToolKind.Rectangle
                 or EditingToolKind.ArrowLine
                 or EditingToolKind.Highlighter
@@ -2774,6 +3328,93 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 or EditingToolKind.NumberedMarker
                 ? InputSystemCursor.Create(InputSystemCursorShape.Cross)
                 : InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+        }
+
+        private void ApplyObjectAdornment(AnnotationPresentationSnapshot snapshot)
+        {
+            HideObjectHandles();
+            var state = snapshot.SelectedObject;
+            var selected = state?.PreviewObject ?? state?.OriginalObject;
+            if (selected is null
+                || snapshot.SelectionPhysicalBounds is not PhysicalRect selection
+                || !selected.Geometry.Intersects(selection)
+                || !selected.Geometry.Intersects(_descriptor.PhysicalBoundsInVirtualDesktop))
+            {
+                _objectSelectionBorder.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var visible = selected.Geometry
+                .Intersection(selection)
+                .Intersection(_descriptor.PhysicalBoundsInVirtualDesktop);
+            if (!visible.IsPositive)
+            {
+                _objectSelectionBorder.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            SetCanvasRectangle(
+                _objectSelectionBorder,
+                (visible.Left - _descriptor.PhysicalBoundsInVirtualDesktop.Left) / _rasterizationScale,
+                (visible.Top - _descriptor.PhysicalBoundsInVirtualDesktop.Top) / _rasterizationScale,
+                visible.Width / _rasterizationScale,
+                visible.Height / _rasterizationScale);
+            _objectSelectionBorder.Visibility = Visibility.Visible;
+
+            var handles = selected.ToolKind == AnnotationToolKind.ArrowLine
+                && selected.Content is ArrowLineAnnotationContent arrow
+                ? new Dictionary<AnnotationObjectEditHandleKind, PhysicalPoint>
+                {
+                    [AnnotationObjectEditHandleKind.StartEndpoint] = arrow.Segment.Start,
+                    [AnnotationObjectEditHandleKind.EndEndpoint] = arrow.Segment.End
+                }
+                    : selected.ToolKind is AnnotationToolKind.NumberedMarker
+                        or AnnotationToolKind.Text
+                    ? new Dictionary<AnnotationObjectEditHandleKind, PhysicalPoint>()
+                    : GetRectangleHandles(selected.Geometry);
+            foreach (var pair in handles)
+            {
+                if (!_objectHandles.TryGetValue(pair.Key, out var handle)
+                    || !IsPointOnDisplay(pair.Value))
+                {
+                    continue;
+                }
+
+                var size = HandleVisualSizePixels / _rasterizationScale;
+                var left = (pair.Value.X - _descriptor.PhysicalBoundsInVirtualDesktop.Left)
+                    / _rasterizationScale - size / 2;
+                var top = (pair.Value.Y - _descriptor.PhysicalBoundsInVirtualDesktop.Top)
+                    / _rasterizationScale - size / 2;
+                SetCanvasRectangle(handle, left, top, size, size);
+                handle.Visibility = Visibility.Visible;
+            }
+        }
+
+        private static Dictionary<AnnotationObjectEditHandleKind, PhysicalPoint> GetRectangleHandles(
+            PhysicalRect bounds)
+        {
+            var middleX = checked((int)(((long)bounds.Left + bounds.Right) / 2));
+            var middleY = checked((int)(((long)bounds.Top + bounds.Bottom) / 2));
+            return new()
+            {
+                [AnnotationObjectEditHandleKind.LeftEdge] = new(bounds.Left, middleY),
+                [AnnotationObjectEditHandleKind.TopEdge] = new(middleX, bounds.Top),
+                [AnnotationObjectEditHandleKind.RightEdge] = new(bounds.Right, middleY),
+                [AnnotationObjectEditHandleKind.BottomEdge] = new(middleX, bounds.Bottom),
+                [AnnotationObjectEditHandleKind.TopLeftCorner] = new(bounds.Left, bounds.Top),
+                [AnnotationObjectEditHandleKind.TopRightCorner] = new(bounds.Right, bounds.Top),
+                [AnnotationObjectEditHandleKind.BottomLeftCorner] = new(bounds.Left, bounds.Bottom),
+                [AnnotationObjectEditHandleKind.BottomRightCorner] = new(bounds.Right, bounds.Bottom)
+            };
+        }
+
+        private void HideObjectHandles()
+        {
+            _objectSelectionBorder.Visibility = Visibility.Collapsed;
+            foreach (var handle in _objectHandles.Values)
+            {
+                handle.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void AddNumberedMarkerPreview(
@@ -2965,11 +3606,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         private void ShowTextEditor(
             TextDraftPresentation draft,
-            PhysicalRect? selection)
+            PhysicalRect? selection,
+            bool existingEdit)
         {
             var displayBounds = _descriptor.PhysicalBoundsInVirtualDesktop;
             if (!Contains(displayBounds, draft.AnchorInVirtualDesktop))
             {
+                if (existingEdit)
+                {
+                    _selectedTextEdit = null;
+                }
                 HideTextEditor();
                 return;
             }
@@ -2982,6 +3628,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
             if (!visible.IsPositive)
             {
+                if (existingEdit)
+                {
+                    _selectedTextEdit = null;
+                }
                 HideTextEditor();
                 return;
             }
@@ -3032,14 +3682,48 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
-            _inputBoundary.UpdateTextDraftContent(_textEditor.Text);
+            if (_selectedTextEdit is TextDraftPresentation selectedTextEdit
+                && _inputBoundary.EditingRouter is IEditingInputRouter editingRouter
+                && editingRouter.SelectedObject.SelectedObjectId is AnnotationObjectId objectId
+                && editingRouter.SelectedObject.TextEditDraftId is Guid draftId)
+            {
+                editingRouter.UpdateTextEdit(new AnnotationObjectTextEditRequest(
+                    _descriptor.SessionId,
+                    _descriptor.CoordinateVersion,
+                    editingRouter.CurrentSelectionRevision,
+                    editingRouter.CurrentAnnotationRevision,
+                    objectId,
+                    draftId,
+                    _textEditor.Text));
+            }
+            else
+            {
+                _inputBoundary.UpdateTextDraftContent(_textEditor.Text);
+            }
         }
 
         private void OnTextCommitClicked(object sender, RoutedEventArgs args)
         {
             if (!_disposed)
             {
-                _inputBoundary.CommitTextDraft();
+                if (_selectedTextEdit is not null
+                    && _inputBoundary.EditingRouter is IEditingInputRouter editingRouter
+                    && editingRouter.SelectedObject.SelectedObjectId is AnnotationObjectId objectId
+                    && editingRouter.SelectedObject.TextEditDraftId is Guid draftId)
+                {
+                    editingRouter.CommitTextEdit(new AnnotationObjectTextEditRequest(
+                        _descriptor.SessionId,
+                        _descriptor.CoordinateVersion,
+                        editingRouter.CurrentSelectionRevision,
+                        editingRouter.CurrentAnnotationRevision,
+                        objectId,
+                        draftId,
+                        _textEditor.Text));
+                }
+                else
+                {
+                    _inputBoundary.CommitTextDraft();
+                }
             }
         }
 
@@ -3047,7 +3731,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         {
             if (!_disposed)
             {
-                _inputBoundary.CancelTextDraft();
+                if (_selectedTextEdit is not null)
+                {
+                    _inputBoundary.EditingRouter?.CancelEdit(
+                        _descriptor.SessionId,
+                        _descriptor.CoordinateVersion);
+                }
+                else
+                {
+                    _inputBoundary.CancelTextDraft();
+                }
             }
         }
 
@@ -3423,6 +4116,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _textCancelButton.Click -= OnTextCancelClicked;
             _textEditorHost.PointerPressed -= OnTextEditorPointerPressed;
             HideHandles();
+            HideObjectHandles();
             RemoveNativeInputBoundary();
             try
             {
@@ -3483,6 +4177,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 : _inputBoundary.UsesRectangleTool
                 ? _inputBoundary.PointerPressedRectangle(pointer).Kind
                     == RectanglePointerResultKind.DraftStarted
+                : _inputBoundary.UsesObjectEditing
+                ? _inputBoundary.PointerPressedObject(pointer).Kind
+                    is AnnotationObjectEditResultKind.EditStarted
+                    or AnnotationObjectEditResultKind.Selected
                 : _inputBoundary.PointerPressed(pointer).Kind is SelectionInputResultKind.Dragging
                     or SelectionInputResultKind.Moving
                     or SelectionInputResultKind.Resizing
@@ -3532,6 +4230,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             {
                 _inputBoundary.PointerMovedRectangle(pointer);
             }
+            else if (_inputBoundary.UsesObjectEditing)
+            {
+                _inputBoundary.PointerMovedObject(pointer);
+            }
             else
             {
                 _inputBoundary.PointerMoved(pointer);
@@ -3576,6 +4278,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             else if (_inputBoundary.UsesRectangleTool)
             {
                 _inputBoundary.PointerReleasedRectangle(pointer);
+            }
+            else if (_inputBoundary.UsesObjectEditing)
+            {
+                _inputBoundary.PointerReleasedObject(pointer);
             }
             else
             {
@@ -3712,6 +4418,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 && probeY >= bounds.Top
                 && probeY < bounds.Bottom;
         }
+
+        private bool IsPointOnDisplay(PhysicalPoint point) =>
+            point.X >= _descriptor.PhysicalBoundsInVirtualDesktop.Left
+            && point.X < _descriptor.PhysicalBoundsInVirtualDesktop.Right
+            && point.Y >= _descriptor.PhysicalBoundsInVirtualDesktop.Top
+            && point.Y < _descriptor.PhysicalBoundsInVirtualDesktop.Bottom;
 
         private static bool TryGetHandleCenter(
             PhysicalRect selection,
@@ -3855,6 +4567,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     else if (_inputBoundary.UsesRectangleTool)
                     {
                         _inputBoundary.PointerReleasedRectangleFromNative(point);
+                    }
+                    else if (_inputBoundary.UsesObjectEditing)
+                    {
+                        _inputBoundary.PointerReleasedObjectFromNative(point);
                     }
                     else
                     {

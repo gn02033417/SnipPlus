@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added — Stage 7H Pointer-driven Annotation Object Editing (2026-08-05)
+
+- Added platform-neutral immutable object-editing contracts for deterministic topmost selection, pointer move, applicable resize, text-edit drafts, style changes and delete across Rectangle、Arrow／Line、Highlighter、Text、Privacy and Numbered Marker objects. `AnnotationDocumentCoordinator` remains the sole document／revision authority; preview edits retain an immutable original snapshot and commit one replacement or removal revision on release.
+- Added Core-owned stale Session／Selection／Annotation revision、object identity、pointer、draft and invalid geometry／style outcomes. Existing Text content is edited through a draft and committed once; Arrow／Line end mode and Privacy Mosaic／Blur mode use the same style boundary.
+- Added Function Bar color／thickness／font／bold／marker-size／mode controls, selected-object delete／text-edit commands and existing per-display overlay selection adornments／preview. No second document authority、top-level editor window or new capture window was introduced.
+- Added deterministic object-editing coverage for preview-versus-commit revision behavior、topmost hit testing、move／resize identity、stale release、style／delete／text-edit lifecycle and Selection revision cleanup. The full filtered non-interactive suite passed `216/216` with `0` failures／`0` skips; Release x64 build passed with `0` warnings／`0` errors; the new focused coordinator tests passed `6/6`.
+- Limited C# formatting verification and `git diff --check` passed. A current-source Development MSIX was generated, but signing could not use the available password-protected development PFX (`APPX0105`／`APPX0107`); installing the resulting unsigned package returned `0x800B0100`. Automated packaged runtime verification is therefore `blocked`／`Pending`; no SnipPlus GUI、external GUI fixture、real desktop screenshot or Clipboard payload was used.
+
 ### Added — Stage 7G Pointer-driven Numbered Marker Creation (2026-08-01)
 
 - Added platform-neutral immutable `NumberedMarkerAnnotationContent`／`NumberedMarkerAnnotationStyle` contracts with positive marker numbers, Core-owned centralized default size／color policy and deterministic physical-pixel bounds. No WinUI、Win2D or Windows-specific type crosses the Contracts boundary.

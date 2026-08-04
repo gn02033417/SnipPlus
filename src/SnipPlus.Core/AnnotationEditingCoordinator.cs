@@ -97,6 +97,11 @@ public sealed class AnnotationEditingCoordinator
     private PrivacyRegionDraft? _privacyRegionDraft;
     private NumberedMarkerDraft? _numberedMarkerDraft;
     private int _nextNumber = 1;
+    private RectangleAnnotationStyle _rectangleStyle = RectangleAnnotationStyle.Default;
+    private ArrowLineAnnotationStyle _arrowLineStyle = ArrowLineAnnotationStyle.Default;
+    private HighlighterAnnotationStyle _highlighterStyle = HighlighterAnnotationStyle.Default;
+    private TextAnnotationStyle _textStyle = TextAnnotationStyle.Default;
+    private NumberedMarkerAnnotationStyle _numberedMarkerStyle = NumberedMarkerAnnotationStyle.Default;
 
     public AnnotationEditingCoordinator(
         AnnotationDocumentCoordinator documents,
@@ -161,10 +166,10 @@ public sealed class AnnotationEditingCoordinator
     }
 
     public HighlighterAnnotationStyle ActiveHighlighterStyle =>
-        _highlighterStylePolicy.GetDefaultStyle();
+        _highlighterStyle;
 
     public TextAnnotationStyle ActiveTextStyle =>
-        _textDraft?.Style ?? _textStylePolicy.GetDefaultStyle();
+        _textDraft?.Style ?? _textStyle;
 
     public PrivacyRegionMode ActivePrivacyRegionMode
     {
@@ -213,6 +218,97 @@ public sealed class AnnotationEditingCoordinator
             _privacyRegionDraft = null;
             _numberedMarkerDraft = null;
             _nextNumber = 1;
+            _rectangleStyle = _stylePolicy.GetDefaultStyle();
+            _arrowLineStyle = _arrowLineStylePolicy.GetDefaultStyle();
+            _highlighterStyle = _highlighterStylePolicy.GetDefaultStyle();
+            _textStyle = _textStylePolicy.GetDefaultStyle();
+            _numberedMarkerStyle = _numberedMarkerStylePolicy.GetDefaultStyle();
+        }
+    }
+
+    public RectangleAnnotationStyle ActiveRectangleStyle => _rectangleStyle;
+
+    public ArrowLineAnnotationStyle ActiveArrowLineStyle => _arrowLineStyle;
+
+    public AnnotationObjectEditResult ChangeDefaultStyle(
+        AnnotationObjectStyleChangeRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        lock (_gate)
+        {
+            var currentRevision = _documents.Current?.Revision ?? AnnotationRevision.Initial;
+            if (_sessionId != request.SessionId
+                || !string.Equals(_coordinateVersion, request.CoordinateVersion, StringComparison.Ordinal))
+            {
+                return DefaultStyleResult(request, AnnotationObjectEditResultKind.StaleSession,
+                    "The default style request belongs to a stale capture session.");
+            }
+
+            if (_selectionRevision != request.SelectionRevision)
+            {
+                return DefaultStyleResult(request, AnnotationObjectEditResultKind.StaleSelectionRevision,
+                    "The default style request belongs to a stale Selection revision.");
+            }
+
+            if (currentRevision != request.ExpectedAnnotationRevision)
+            {
+                return DefaultStyleResult(request, AnnotationObjectEditResultKind.StaleAnnotationRevision,
+                    "The default style request belongs to a stale Annotation revision.");
+            }
+
+            try
+            {
+                var change = request.Change;
+                switch (_activeTool)
+                {
+                    case EditingToolKind.Rectangle:
+                        _rectangleStyle = new RectangleAnnotationStyle(
+                            change.Color ?? _rectangleStyle.StrokeColor,
+                            change.Thickness ?? _rectangleStyle.StrokeThickness);
+                        break;
+                    case EditingToolKind.ArrowLine:
+                        _arrowLineStyle = new ArrowLineAnnotationStyle(
+                            change.Color ?? _arrowLineStyle.StrokeColor,
+                            change.Thickness ?? _arrowLineStyle.StrokeThickness,
+                            change.ArrowLineEndStyle ?? _arrowLineStyle.EndStyle);
+                        _arrowLineEndStyle = _arrowLineStyle.EndStyle;
+                        break;
+                    case EditingToolKind.Highlighter:
+                        _highlighterStyle = new HighlighterAnnotationStyle(
+                            change.Color ?? _highlighterStyle.StrokeColor,
+                            change.Thickness ?? _highlighterStyle.StrokeThickness);
+                        break;
+                    case EditingToolKind.Text:
+                        _textStyle = new TextAnnotationStyle(
+                            _textStyle.FontFamily,
+                            change.FontSize ?? _textStyle.FontSize,
+                            change.Color ?? _textStyle.Color,
+                            change.Bold ?? _textStyle.Bold);
+                        break;
+                    case EditingToolKind.NumberedMarker:
+                        _numberedMarkerStyle = new NumberedMarkerAnnotationStyle(
+                            change.Color ?? _numberedMarkerStyle.Color,
+                            change.MarkerSize ?? _numberedMarkerStyle.Size);
+                        break;
+                    case EditingToolKind.PrivacyRegion:
+                        if (change.PrivacyMode is PrivacyRegionMode mode)
+                        {
+                            _privacyRegionMode = mode;
+                        }
+                        break;
+                    default:
+                        return DefaultStyleResult(request, AnnotationObjectEditResultKind.UnsupportedOperation,
+                            "The Selection tool has no creation style defaults.");
+                }
+            }
+            catch (ArgumentException exception)
+            {
+                return DefaultStyleResult(request, AnnotationObjectEditResultKind.InvalidStyle,
+                    exception.Message);
+            }
+
+            return DefaultStyleResult(request, AnnotationObjectEditResultKind.Restyled,
+                "The active creation style default was updated.");
         }
     }
 
@@ -350,7 +446,7 @@ public sealed class AnnotationEditingCoordinator
                 $"The {_activeTool} editing tool is active.")
             {
                 ActiveArrowLineEndStyle = _arrowLineEndStyle,
-                ActiveTextStyle = _textStylePolicy.GetDefaultStyle(),
+                ActiveTextStyle = _textStyle,
                 ActivePrivacyRegionMode = _privacyRegionMode,
                 ActivePrivacyRegionEffectParameters = _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode),
                 ActiveNumberedMarkerStyle = GetActiveNumberedMarkerStyle(),
@@ -926,7 +1022,7 @@ public sealed class AnnotationEditingCoordinator
             _textDraft = new TextDraft(
                 request,
                 string.Empty,
-                _textStylePolicy.GetDefaultStyle());
+                _textStyle);
             return TextResult(
                 TextDraftResultKind.DraftStarted,
                 request,
@@ -1373,7 +1469,7 @@ public sealed class AnnotationEditingCoordinator
                     AnnotationToolKind.Rectangle,
                     bounds,
                     document.Objects.Count == 0 ? 0 : zOrder + 1,
-                    new RectangleAnnotationContent(_stylePolicy.GetDefaultStyle()));
+                    new RectangleAnnotationContent(_rectangleStyle));
             }
             catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
             {
@@ -2035,7 +2131,7 @@ public sealed class AnnotationEditingCoordinator
             AnnotationObject annotationObject;
             try
             {
-                var defaultStyle = _arrowLineStylePolicy.GetDefaultStyle();
+                var defaultStyle = _arrowLineStyle;
                 annotationObject = new AnnotationObject(
                     _objectIdFactory(),
                     input.SessionId,
@@ -2351,7 +2447,7 @@ public sealed class AnnotationEditingCoordinator
                     document.Objects.Count == 0 ? 0 : zOrder + 1,
                     new HighlighterStrokeContent(
                         path,
-                        _highlighterStylePolicy.GetDefaultStyle()));
+                        _highlighterStyle));
             }
             catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
             {
@@ -2451,9 +2547,9 @@ public sealed class AnnotationEditingCoordinator
             {
                 ActiveArrowLineEndStyle = _arrowLineEndStyle,
                 DraftArrowLineSegment = _arrowLineDraft?.Segment,
-                ActiveHighlighterStyle = _highlighterStylePolicy.GetDefaultStyle(),
+                ActiveHighlighterStyle = _highlighterStyle,
                 DraftHighlighterPoints = _highlighterDraft?.Points,
-                ActiveTextStyle = _textStylePolicy.GetDefaultStyle(),
+                ActiveTextStyle = _textStyle,
                 ActivePrivacyRegionMode = _privacyRegionMode,
                 ActivePrivacyRegionEffectParameters = _privacyRegionEffectPolicy.GetParameters(_privacyRegionMode),
                 DraftPrivacyRegionMode = _privacyRegionDraft?.Mode,
@@ -2705,7 +2801,7 @@ public sealed class AnnotationEditingCoordinator
         document?.Revision ?? _documents.Current?.Revision ?? AnnotationRevision.Initial,
         request,
         text,
-        _textDraft?.Style ?? _textStylePolicy.GetDefaultStyle(),
+        _textDraft?.Style ?? _textStyle,
         committedObject,
         document,
         failure,
@@ -3212,7 +3308,7 @@ public sealed class AnnotationEditingCoordinator
         failure = null;
         try
         {
-            style = _numberedMarkerStylePolicy.GetDefaultStyle();
+            style = _numberedMarkerStyle;
             if (style is null)
             {
                 throw new InvalidOperationException("The Numbered Marker style policy returned no style.");
@@ -3242,7 +3338,7 @@ public sealed class AnnotationEditingCoordinator
         kind,
         _activeTool,
         _nextNumber,
-        _numberedMarkerStylePolicy.GetDefaultStyle(),
+        _numberedMarkerStyle,
         input.SessionId,
         input.CoordinateVersion,
         input.SelectionRevision,
@@ -3267,7 +3363,7 @@ public sealed class AnnotationEditingCoordinator
         kind,
         _activeTool,
         _nextNumber,
-        _numberedMarkerStylePolicy.GetDefaultStyle(),
+        _numberedMarkerStyle,
         request.SessionId,
         request.CoordinateVersion,
         request.SelectionRevision,
@@ -3279,7 +3375,7 @@ public sealed class AnnotationEditingCoordinator
     {
         try
         {
-            return _numberedMarkerStylePolicy.GetDefaultStyle();
+            return _numberedMarkerStyle;
         }
         catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException or InvalidOperationException)
         {
@@ -3391,7 +3487,7 @@ public sealed class AnnotationEditingCoordinator
         string message) => new(
         kind,
         _activeTool,
-        _highlighterStylePolicy.GetDefaultStyle(),
+        _highlighterStyle,
         input.SessionId,
         input.CoordinateVersion,
         input.SelectionRevision,
@@ -3428,6 +3524,23 @@ public sealed class AnnotationEditingCoordinator
         && point.X < bounds.Right
         && point.Y >= bounds.Top
         && point.Y < bounds.Bottom;
+
+    private AnnotationObjectEditResult DefaultStyleResult(
+        AnnotationObjectStyleChangeRequest request,
+        AnnotationObjectEditResultKind kind,
+        string message) => new(
+        kind,
+        AnnotationObjectSelectionState.Empty(
+            request.SessionId,
+            request.CoordinateVersion,
+            request.SelectionRevision,
+            _documents.Current?.Revision ?? AnnotationRevision.Initial),
+        _documents.Current,
+        null,
+        kind is AnnotationObjectEditResultKind.InvalidStyle
+            ? CreateFailure(request.SessionId, FailureCode.InvalidStateTransition, message)
+            : null,
+        message);
 
     private static PhysicalRect Normalize(PhysicalPoint first, PhysicalPoint second) => new(
         Math.Min(first.X, second.X),

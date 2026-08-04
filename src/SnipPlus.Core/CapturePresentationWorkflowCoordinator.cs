@@ -38,6 +38,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private readonly ICompleteExecutionTraceSink _trace;
     private readonly AnnotationDocumentCoordinator _annotationDocuments;
     private readonly AnnotationEditingCoordinator _annotationEditing;
+    private readonly AnnotationObjectEditCoordinator _annotationObjectEditing;
     private CaptureSessionContext? _activeSession;
     private InitialSelectionCoordinator? _selectionCoordinator;
     private CancellationTokenSource? _sessionCancellation;
@@ -72,6 +73,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
         _trace = traceSink ?? NoOpCompleteExecutionTraceSink.Instance;
         _annotationDocuments = annotationDocuments ?? new AnnotationDocumentCoordinator();
         _annotationEditing = new AnnotationEditingCoordinator(_annotationDocuments);
+        _annotationObjectEditing = new AnnotationObjectEditCoordinator(
+            _annotationDocuments,
+            _annotationEditing.ChangeDefaultStyle);
     }
 
     public WorkflowState CurrentState => _stateAuthority.CurrentState;
@@ -111,6 +115,12 @@ public sealed class CapturePresentationWorkflowCoordinator :
     public ArrowLineEndStyle ActiveArrowLineEndStyle =>
         _annotationEditing.ActiveArrowLineEndStyle;
 
+    public RectangleAnnotationStyle ActiveRectangleStyle =>
+        _annotationEditing.ActiveRectangleStyle;
+
+    public ArrowLineAnnotationStyle ActiveArrowLineStyle =>
+        _annotationEditing.ActiveArrowLineStyle;
+
     public HighlighterAnnotationStyle ActiveHighlighterStyle =>
         _annotationEditing.ActiveHighlighterStyle;
 
@@ -129,6 +139,20 @@ public sealed class CapturePresentationWorkflowCoordinator :
     public int ActiveNumberedMarkerNextNumber =>
         _annotationEditing.ActiveNumberedMarkerNextNumber;
 
+    public AnnotationObjectSelectionState SelectedObject =>
+        _annotationObjectEditing.State;
+
+    public bool IsObjectEditingEnabled
+    {
+        get
+        {
+            var selection = CurrentSelection;
+            return CurrentState == WorkflowState.Editing
+                && selection?.Status == SelectionStatus.Locked
+                && selection.InteractionMode == SelectionInteractionMode.Locked;
+        }
+    }
+
     public AnnotationMutationResult AddAnnotationObject(AddAnnotationObjectRequest request) =>
         _annotationDocuments.Add(request);
 
@@ -137,6 +161,76 @@ public sealed class CapturePresentationWorkflowCoordinator :
 
     public AnnotationMutationResult RemoveAnnotationObject(RemoveAnnotationObjectRequest request) =>
         _annotationDocuments.Remove(request);
+
+    public AnnotationObjectEditResult PointerPressed(AnnotationObjectPointerEvent input)
+    {
+        var result = _annotationObjectEditing.PointerPressed(input);
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public AnnotationObjectEditResult PointerMoved(AnnotationObjectPointerEvent input)
+    {
+        var result = _annotationObjectEditing.PointerMoved(input);
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public AnnotationObjectEditResult PointerReleased(AnnotationObjectPointerEvent input)
+    {
+        var result = _annotationObjectEditing.PointerReleased(input);
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public AnnotationObjectEditResult SelectObject(AnnotationObjectSelectionRequest request)
+    {
+        var result = _annotationObjectEditing.SelectObject(request);
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public AnnotationObjectEditResult ChangeStyle(AnnotationObjectStyleChangeRequest request)
+    {
+        var result = _annotationObjectEditing.ChangeStyle(request);
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public AnnotationObjectEditResult Delete(AnnotationObjectDeleteRequest request)
+    {
+        var result = _annotationObjectEditing.Delete(request);
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public AnnotationObjectEditResult BeginTextEdit(AnnotationObjectSelectionRequest request)
+    {
+        var result = _annotationObjectEditing.BeginTextEdit(request);
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public AnnotationObjectEditResult UpdateTextEdit(AnnotationObjectTextEditRequest request)
+    {
+        var result = _annotationObjectEditing.UpdateTextEdit(request);
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public AnnotationObjectEditResult CommitTextEdit(AnnotationObjectTextEditRequest request)
+    {
+        var result = _annotationObjectEditing.CommitTextEdit(request);
+        ApplyAnnotationPresentation();
+        return result;
+    }
+
+    public AnnotationObjectEditResult CancelEdit(Guid sessionId, string coordinateVersion)
+    {
+        var result = _annotationObjectEditing.CancelEdit(sessionId, coordinateVersion);
+        ApplyAnnotationPresentation();
+        return result;
+    }
 
     public async ValueTask<CapturePresentationOutcome> StartAsync(
         CaptureRequest request,
@@ -324,14 +418,33 @@ public sealed class CapturePresentationWorkflowCoordinator :
         }
     }
 
-    public SelectionInputResult PointerPressed(SelectionPointerEvent input) =>
-        ForwardSelectionInput(input, static (selection, value) => selection.PointerPressed(value));
+    public SelectionInputResult PointerPressed(SelectionPointerEvent input)
+    {
+        if (IsObjectEditingInput(input))
+        {
+            return ForwardObjectPointer(input, _annotationObjectEditing.PointerPressed);
+        }
 
-    public SelectionInputResult PointerMoved(SelectionPointerEvent input) =>
-        ForwardSelectionInput(input, static (selection, value) => selection.PointerMoved(value));
+        return ForwardSelectionInput(input, static (selection, value) => selection.PointerPressed(value));
+    }
+
+    public SelectionInputResult PointerMoved(SelectionPointerEvent input)
+    {
+        if (IsObjectEditingInput(input))
+        {
+            return ForwardObjectPointer(input, _annotationObjectEditing.PointerMoved);
+        }
+
+        return ForwardSelectionInput(input, static (selection, value) => selection.PointerMoved(value));
+    }
 
     public SelectionInputResult PointerReleased(SelectionPointerEvent input)
     {
+        if (IsObjectEditingInput(input))
+        {
+            return ForwardObjectPointer(input, _annotationObjectEditing.PointerReleased);
+        }
+
         var result = ForwardSelectionInput(
             input,
             static (selection, value) => selection.PointerReleased(value));
@@ -985,6 +1098,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         {
             _annotationDocuments.ClearSession(session.SessionId);
             _annotationEditing.ClearSession(session.SessionId);
+            _annotationObjectEditing.ClearSession(session.SessionId);
             _functionBarPresentation?.Close(session.SessionId);
             await _overlayCoordinator
                 .CloseAsync(session.SessionId, CancellationToken.None)
@@ -1027,6 +1141,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         {
             _annotationDocuments.ClearSession(session.SessionId);
             _annotationEditing.ClearSession(session.SessionId);
+            _annotationObjectEditing.ClearSession(session.SessionId);
             _functionBarPresentation?.Close(session.SessionId);
             Observe(_overlayCoordinator.CloseAsync(session.SessionId, CancellationToken.None));
             _freezingCoordinator.ReleaseSession(session);
@@ -1211,9 +1326,83 @@ public sealed class CapturePresentationWorkflowCoordinator :
         var selection = CurrentSelection;
         if (selection is not null)
         {
-            _overlayCoordinator.ApplyAnnotation(
-                _annotationEditing.CreatePresentationSnapshot(selection));
+            _overlayCoordinator.ApplyAnnotation(CreateAnnotationPresentation(selection));
+            if (_functionBarPresentation is not null
+                && _stateAuthority.CurrentState == WorkflowState.Editing
+                && selection.Status == SelectionStatus.Locked)
+            {
+                _functionBarPresentation.Reposition(CreateFunctionBarRequest(selection));
+            }
         }
+    }
+
+    private AnnotationPresentationSnapshot CreateAnnotationPresentation(
+        SelectionVisualState selection)
+    {
+        var objectState = _annotationObjectEditing.State;
+        var snapshot = _annotationEditing.CreatePresentationSnapshot(selection) with
+        {
+            SelectedObject = objectState
+        };
+        var textObject = objectState.PreviewObject ?? objectState.OriginalObject;
+        if (objectState.Operation == AnnotationObjectEditOperationKind.TextEdit
+            && objectState.TextEditDraftId is Guid draftId
+            && textObject?.Content is TextAnnotationContent text)
+        {
+            snapshot = snapshot with
+            {
+                SelectedTextEdit = new TextDraftPresentation(
+                    draftId,
+                    text.Text,
+                    text.AnchorInVirtualDesktop,
+                    text.BoundsInVirtualDesktop,
+                    text.Style)
+            };
+        }
+
+        return snapshot;
+    }
+
+    private bool IsObjectEditingInput(SelectionPointerEvent input)
+    {
+        lock (_gate)
+        {
+            var selection = _selectionCoordinator?.State;
+            return _inputEnabled
+                && _stateAuthority.CurrentState == WorkflowState.Editing
+                && _annotationEditing.ActiveTool == EditingToolKind.Selection
+                && selection?.Status == SelectionStatus.Locked
+                && selection.InteractionMode == SelectionInteractionMode.Locked
+                && _annotationObjectEditing.CanHandlePointer(input.GlobalPhysicalPoint);
+        }
+    }
+
+    private SelectionInputResult ForwardObjectPointer(
+        SelectionPointerEvent input,
+        Func<AnnotationObjectPointerEvent, AnnotationObjectEditResult> handler)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var selection = CurrentSelection;
+        if (selection is null)
+        {
+            return new SelectionInputResult(
+                SelectionInputResultKind.StaleSession,
+                SelectionVisualState.Initial(input.SessionId, input.CoordinateVersion),
+                "Annotation object input was ignored because the capture session is not active.");
+        }
+
+        var result = handler(new AnnotationObjectPointerEvent(
+            input.SessionId,
+            input.CoordinateVersion,
+            selection.SelectionRevision,
+            CurrentAnnotationRevision,
+            input.PointerId,
+            input.GlobalPhysicalPoint));
+        ApplyAnnotationPresentation();
+        return new SelectionInputResult(
+            SelectionInputResultKind.AnnotationObjectEditing,
+            selection,
+            result.Message);
     }
 
     private void ApplyTextPresentation()
@@ -1250,9 +1439,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private void OnSelectionStateChanged(SelectionVisualState state)
     {
         _annotationEditing.UpdateSelection(state);
+        _annotationObjectEditing.UpdateSelection(state);
         _overlayCoordinator.ApplySelection(state);
-        _overlayCoordinator.ApplyAnnotation(
-            _annotationEditing.CreatePresentationSnapshot(state));
+        _overlayCoordinator.ApplyAnnotation(CreateAnnotationPresentation(state));
 
         if (_functionBarPresentation is null
             || _stateAuthority.CurrentState != WorkflowState.Editing)
@@ -1347,8 +1536,8 @@ public sealed class CapturePresentationWorkflowCoordinator :
 
         _annotationDocuments.BeginSession(selection.SessionId);
         _annotationEditing.BeginSession(selection);
-        _overlayCoordinator.ApplyAnnotation(
-            _annotationEditing.CreatePresentationSnapshot(selection));
+        _annotationObjectEditing.BeginSession(selection);
+        _overlayCoordinator.ApplyAnnotation(CreateAnnotationPresentation(selection));
 
         var shown = _functionBarPresentation.Show(
             selection.SessionId,
@@ -1371,12 +1560,19 @@ public sealed class CapturePresentationWorkflowCoordinator :
         {
             ActiveTool = _annotationEditing.ActiveTool,
             AnnotationRevision = _annotationEditing.CurrentAnnotationRevision,
+            ActiveRectangleStyle = _annotationEditing.ActiveRectangleStyle,
+            ActiveArrowLineStyle = _annotationEditing.ActiveArrowLineStyle,
+            ActiveHighlighterStyle = _annotationEditing.ActiveHighlighterStyle,
+            ActiveTextStyle = _annotationEditing.ActiveTextStyle,
+            ActiveNumberedMarkerStyle = _annotationEditing.ActiveNumberedMarkerStyle,
             ActiveArrowLineEndStyle = _annotationEditing.ActiveArrowLineEndStyle,
             ToolSelectionSink = this,
             ActivePrivacyRegionMode = _annotationEditing.ActivePrivacyRegionMode,
             PrivacyRegionModeSelectionSink = this,
             ActiveNumberedMarkerNextNumber = _annotationEditing.ActiveNumberedMarkerNextNumber,
-            NextNumberSelectionSink = this
+            NextNumberSelectionSink = this,
+            SelectedObject = _annotationObjectEditing.State,
+            AnnotationObjectEditingSink = this
         };
 
     private async ValueTask CompleteAsync(
@@ -1788,8 +1984,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 }
             }
 
-            _overlayCoordinator.ApplyAnnotation(
-                _annotationEditing.CreatePresentationSnapshot(selection));
+            _overlayCoordinator.ApplyAnnotation(CreateAnnotationPresentation(selection));
         }
     }
 
@@ -1823,6 +2018,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         {
             _annotationDocuments.ClearSession(session.SessionId);
             _annotationEditing.ClearSession(session.SessionId);
+            _annotationObjectEditing.ClearSession(session.SessionId);
             _freezingCoordinator.ReleaseSession(session);
             session.Dispose();
             selection?.Dispose();
@@ -1933,6 +2129,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         {
             _annotationDocuments.ClearSession(session.SessionId);
             _annotationEditing.ClearSession(session.SessionId);
+            _annotationObjectEditing.ClearSession(session.SessionId);
             try
             {
                 await _overlayCoordinator
@@ -1967,6 +2164,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
             .ConfigureAwait(true);
         _annotationDocuments.ClearSession(session.SessionId);
         _annotationEditing.ClearSession(session.SessionId);
+        _annotationObjectEditing.ClearSession(session.SessionId);
         _freezingCoordinator.ReleaseSession(session);
         session.Cancel();
         MoveToResidentReady(WorkflowState.Cancelled, origin);

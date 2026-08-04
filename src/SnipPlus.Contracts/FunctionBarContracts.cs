@@ -132,6 +132,25 @@ public sealed record FunctionBarPresentationRequest(
     FunctionBarCommandAvailability Availability,
     IFunctionBarCommandSink CommandSink)
 {
+    public AnnotationObjectSelectionState? SelectedObject { get; init; }
+
+    public IAnnotationObjectEditingSink? AnnotationObjectEditingSink { get; init; }
+
+    public RectangleAnnotationStyle ActiveRectangleStyle { get; init; }
+        = RectangleAnnotationStyle.Default;
+
+    public ArrowLineAnnotationStyle ActiveArrowLineStyle { get; init; }
+        = ArrowLineAnnotationStyle.Default;
+
+    public HighlighterAnnotationStyle ActiveHighlighterStyle { get; init; }
+        = HighlighterAnnotationStyle.Default;
+
+    public TextAnnotationStyle ActiveTextStyle { get; init; }
+        = TextAnnotationStyle.Default;
+
+    public NumberedMarkerAnnotationStyle ActiveNumberedMarkerStyle { get; init; }
+        = NumberedMarkerAnnotationStyle.Default;
+
     public EditingToolKind ActiveTool { get; init; } = EditingToolKind.Selection;
 
     public AnnotationRevision AnnotationRevision { get; init; } = AnnotationRevision.Initial;

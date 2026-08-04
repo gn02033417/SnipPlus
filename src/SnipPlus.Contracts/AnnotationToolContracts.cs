@@ -485,6 +485,10 @@ public sealed record AnnotationPresentationSnapshot(
     PhysicalRect? DraftPhysicalBounds,
     AnnotationDocument Document)
 {
+    public AnnotationObjectSelectionState? SelectedObject { get; init; }
+
+    public TextDraftPresentation? SelectedTextEdit { get; init; }
+
     public ArrowLineEndStyle ActiveArrowLineEndStyle { get; init; } = ArrowLineEndStyle.Arrow;
 
     public PhysicalLineSegment? DraftArrowLineSegment { get; init; }
@@ -586,7 +590,8 @@ public interface IEditingInputRouter :
     INumberedMarkerPointerInputSink,
     INextNumberSelectionSink,
     ITextDraftInputSink,
-    IEditingToolSelectionSink
+    IEditingToolSelectionSink,
+    IAnnotationObjectEditingSink
 {
     EditingToolKind ActiveTool { get; }
 
@@ -607,4 +612,8 @@ public interface IEditingInputRouter :
     NumberedMarkerAnnotationStyle ActiveNumberedMarkerStyle { get; }
 
     int ActiveNumberedMarkerNextNumber { get; }
+
+    AnnotationObjectSelectionState SelectedObject { get; }
+
+    bool IsObjectEditingEnabled { get; }
 }
