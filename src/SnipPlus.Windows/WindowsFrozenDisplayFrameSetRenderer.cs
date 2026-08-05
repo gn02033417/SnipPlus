@@ -22,6 +22,14 @@ public sealed class WindowsFrozenDisplayFrameSetRenderer : IFrozenDisplayFrameSe
                     "The frozen display frame set has already been disposed."));
             }
 
+            if (frameSet.Frames.Values.Any(frame => frame.IsDisposed))
+            {
+                return ValueTask.FromResult<FrozenDisplayFrameSetRenderOutcome>(Failed(
+                    frameSet.SessionId,
+                    FailureCode.InvalidResultLifetime,
+                    "A frozen display frame has already been disposed."));
+            }
+
             if (!selectionPhysicalBounds.IsPositive
                 || selectionPhysicalBounds.Width64 > SupportedCapacityPolicy.MaxSelectionWidth
                 || selectionPhysicalBounds.Height64 > SupportedCapacityPolicy.MaxSelectionHeight
@@ -34,92 +42,34 @@ public sealed class WindowsFrozenDisplayFrameSetRenderer : IFrozenDisplayFrameSe
                     "The Selection bounds are empty or exceed the supported canonical image size."));
             }
 
-            var width = checked((int)selectionPhysicalBounds.Width64);
-            var height = checked((int)selectionPhysicalBounds.Height64);
-            var destinationStride = checked(width * 4);
-            var destination = new byte[checked(destinationStride * height)];
-            var copiedAnyPixels = false;
-            DateTimeOffset capturedAt = DateTimeOffset.UtcNow;
-
-            foreach (var frame in frameSet.Frames.Values)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (frame.IsDisposed)
-                {
-                    return ValueTask.FromResult<FrozenDisplayFrameSetRenderOutcome>(Failed(
-                        frameSet.SessionId,
-                        FailureCode.InvalidResultLifetime,
-                        "A frozen display frame has already been disposed."));
-                }
-
-                var frameBounds = frame.PhysicalBoundsInVirtualDesktop;
-                var intersection = frameBounds.Intersection(selectionPhysicalBounds);
-                if (!intersection.IsPositive)
-                {
-                    continue;
-                }
-
-                if (frame.PixelSize.Width != frameBounds.Width64
-                    || frame.PixelSize.Height != frameBounds.Height64
-                    || frame.FrozenFrame.ImageResult is not SoftwareBitmapImageResult imageResult)
-                {
-                    return ValueTask.FromResult<FrozenDisplayFrameSetRenderOutcome>(Failed(
-                        frameSet.SessionId,
-                        FailureCode.InvalidResultLifetime,
-                        "A frozen display frame is not a canonical SoftwareBitmap with matching physical dimensions."));
-                }
-
-                using var lease = imageResult.AcquireBitmapLease();
-                var source = SoftwareBitmapBuffer.Read(lease.Bitmap);
-                var sourceStride = checked(frame.PixelSize.Width * 4);
-                var sourceX = checked(intersection.Left - frameBounds.Left);
-                var sourceY = checked(intersection.Top - frameBounds.Top);
-                var destinationX = checked(intersection.Left - selectionPhysicalBounds.Left);
-                var destinationY = checked(intersection.Top - selectionPhysicalBounds.Top);
-                var rowBytes = checked(intersection.Width * 4);
-
-                for (var row = 0; row < intersection.Height; row++)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var sourceOffset = checked((sourceY + row) * sourceStride + sourceX * 4);
-                    var destinationOffset = checked((destinationY + row) * destinationStride + destinationX * 4);
-                    Buffer.BlockCopy(source, sourceOffset, destination, destinationOffset, rowBytes);
-                }
-
-                copiedAnyPixels = true;
-                capturedAt = imageResult.Metadata.CapturedAt;
-            }
-
-            if (!copiedAnyPixels)
-            {
-                return ValueTask.FromResult<FrozenDisplayFrameSetRenderOutcome>(Failed(
-                    frameSet.SessionId,
-                    FailureCode.InvalidSelection,
-                    "The Selection does not intersect a frozen display."));
-            }
+            var composition = WindowsFrozenDisplayCompositor.Compose(
+                frameSet,
+                selectionPhysicalBounds,
+                frameSet.Frames.Keys.OrderBy(key => key, StringComparer.Ordinal),
+                cancellationToken);
 
             var metadata = new ImageResultMetadata
             {
                 ResultId = Guid.NewGuid(),
                 SessionId = frameSet.SessionId,
-                PixelWidth = width,
-                PixelHeight = height,
+                PixelWidth = composition.PixelWidth,
+                PixelHeight = composition.PixelHeight,
                 PixelFormat = ImagePixelFormat.Bgra8,
                 AlphaMode = ImageAlphaMode.Premultiplied,
                 ColorSpace = ImageColorSpace.SrgbSdr,
                 DpiX = 96,
                 DpiY = 96,
-                RowStride = destinationStride,
+                RowStride = composition.RowStride,
                 SourceKind = SourceKind.Monitor,
                 SourcePhysicalBounds = selectionPhysicalBounds,
                 CropPhysicalBounds = selectionPhysicalBounds,
-                CapturedAt = capturedAt,
+                CapturedAt = composition.CapturedAt,
                 CursorIncluded = false
             };
 
             return ValueTask.FromResult<FrozenDisplayFrameSetRenderOutcome>(
                 new FrozenDisplayFrameSetRenderOutcome.Succeeded(
-                    SoftwareBitmapFactory.CreateFromPremultipliedBgra(destination, metadata)));
+                    SoftwareBitmapFactory.CreateFromPremultipliedBgra(composition.Pixels, metadata)));
         }
         catch (OperationCanceledException)
         {

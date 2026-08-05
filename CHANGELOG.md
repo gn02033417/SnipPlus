@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Added — Stage 7J Annotation-aware Render Compositor Foundation (2026-08-05)
+
+- Added a platform-neutral annotation-aware render request／typed outcome boundary and immutable canonical result ownership. The request carries Session、CoordinateVersion、SelectionRevision、AnnotationRevision、Selection physical bounds、Virtual Desktop snapshot、capacity outcome、the same frozen display frame set and committed Annotation Document.
+- Added a Windows canonical BGRA8／premultiplied／sRGB SDR compositor that reuses the existing frozen-display intersection and transparent-gap composition. It projects the selection-sized output directly from exact physical Virtual Desktop coordinates, clips each committed object to the current Selection／display intersections and preserves physical non-display gaps as transparent pixels.
+- Added deterministic rendering for committed Rectangle、Arrow／Line、semi-transparent Highlighter、Microsoft JhengHei Text、Mosaic／Blur Privacy Region and Numbered Marker objects. Privacy effects are applied before vector objects; vector order is deterministic by Z-order then ObjectId. Selection mask、handles、Function Bar、Crosshair and draft objects are excluded.
+- Added Contracts／Windows deterministic coverage for empty-document pixel equivalence with the base compositor, all six committed tool kinds, negative／gap／selection clipping, stale／invalid typed outcomes, missing frame rejection and canonical boundary ownership. Existing Stage 6C and Stage 7I history tests remain in the full suite.
+- Locked restore succeeded; Release x64 solution build passed with `0` warnings／`0` errors; filtered non-interactive tests passed `235/235` with `0` failures／`0` skips; limited C# formatting verification and `git diff --check` passed.
+- This slice does not integrate Complete／Clipboard／Save／PNG or workflow state transitions. No packaged MSIX／GUI runtime verification was run; annotation-aware final output runtime remains `Pending`. No external GUI fixture、real desktop screenshot or Clipboard payload was used.
+
 ### Added — Stage 7I Function Bar Annotation-only Undo／Redo (2026-08-05)
 
 - Added platform-neutral immutable Annotation history contracts for Add／Remove／Replace／NextNumber-only changes and atomic Numbered Marker creation. History entries retain exact Session／CoordinateVersion／Selection context, ObjectId／Z-order／content／style／geometry and before／after NextNumber values.
