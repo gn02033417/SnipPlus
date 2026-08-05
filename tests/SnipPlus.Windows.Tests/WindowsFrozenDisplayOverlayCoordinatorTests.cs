@@ -252,6 +252,34 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Contract")]
+    public void FunctionBarDeclaresSeparateUndoRedoDispatchGatesAndRevisionAwareCommands()
+    {
+        var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("FunctionBarSurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(functionBarSurface);
+        Assert.IsNotNull(functionBarSurface.GetField(
+            "_undoCommandGate",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNotNull(functionBarSurface.GetField(
+            "_redoCommandGate",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNotNull(functionBarSurface.GetMethod(
+            "OnUndoClicked",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNotNull(functionBarSurface.GetMethod(
+            "OnRedoClicked",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+
+        var requestType = typeof(FunctionBarCommandRequest);
+        Assert.AreEqual(
+            typeof(AnnotationRevision),
+            requestType.GetProperty(nameof(FunctionBarCommandRequest.AnnotationRevision))!.PropertyType);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
     public void AnnotationPreviewIsOwnedByEachOverlayAndUsesPresentationSnapshot()
     {
         var overlaySurface = typeof(WindowsFrozenDisplayOverlayCoordinator)

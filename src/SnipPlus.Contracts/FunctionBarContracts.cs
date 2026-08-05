@@ -52,6 +52,7 @@ public sealed record FunctionBarCommandRequest(
     Guid SessionId,
     string CoordinateVersion,
     int SelectionRevision,
+    AnnotationRevision AnnotationRevision,
     FunctionBarCommand Command);
 
 public enum FunctionBarCommandResultKind
@@ -62,7 +63,13 @@ public enum FunctionBarCommandResultKind
     Cancelled,
     StaleSession,
     StaleSelectionRevision,
+    StaleAnnotationRevision,
     InvalidWorkflowState,
+    ActiveDraft,
+    ObjectConflict,
+    RevisionOverflow,
+    NothingToUndo,
+    NothingToRedo,
     AnnotationOutputNotSupported,
     Failed
 }
@@ -73,7 +80,14 @@ public sealed record FunctionBarCommandResult(
     WorkflowState CurrentState,
     int CurrentSelectionRevision,
     Failure? Failure,
-    string Message);
+    string Message)
+{
+    public AnnotationRevision CurrentAnnotationRevision { get; init; } = AnnotationRevision.Initial;
+
+    public bool CanUndo { get; init; }
+
+    public bool CanRedo { get; init; }
+}
 
 public enum FunctionBarPlacementSide
 {

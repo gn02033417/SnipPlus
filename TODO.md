@@ -56,7 +56,7 @@ Work in order. Do not begin a later item while an earlier prerequisite is unreso
 - [x] Implement pointer-driven rectangular Mosaic／Blur draft／commit／deterministic frozen-frame preview with per-object mode; object editing、annotation-aware final render and packaged runtime acceptance remain incomplete, so FR-021 is still `Partial`.
 - [x] Implement pointer-driven Numbered Marker creation／draft preview／commit, preserved gaps and configurable next number; object editing、deletion、color／size controls、Undo／Redo、annotation-aware final render and packaged runtime acceptance remain incomplete, so FR-022 is still `Partial`.
 - [x] Implement pointer object selection、move、resize、style changes and delete; Stage 7H static／deterministic evidence is complete, while packaged runtime acceptance and annotation-aware final render remain incomplete.
-- [ ] Implement function-bar Annotation-only Undo／Redo.
+- [x] Implement function-bar Annotation-only Undo／Redo; Stage 7I Contracts／Core／Workflow／Windows deterministic evidence is complete, while packaged runtime and later annotation-aware final rendering remain incomplete.
 - [ ] Anchor annotations to Frozen Virtual Desktop coordinates and clip output to current Selection.
 - [ ] Implement final render with capacity revalidation.
 - [ ] Place Clipboard publication only behind explicit Complete or successful Save.

@@ -689,6 +689,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly Button _editTextButton = CreateButton("Edit text");
         private readonly CancelCommandGate _cancelCommandGate = new();
         private readonly CancelCommandGate _completeCommandGate = new();
+        private readonly CancelCommandGate _undoCommandGate = new();
+        private readonly CancelCommandGate _redoCommandGate = new();
         private FunctionBarPresentationRequest _request;
         private bool _updatingNextNumber;
         private bool _updatingStyleControls;
@@ -730,6 +732,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             };
             _buttons[FunctionBarCommand.Complete].Click += OnCompleteClicked;
             _buttons[FunctionBarCommand.Cancel].Click += OnCancelClicked;
+            _buttons[FunctionBarCommand.Undo].Click += OnUndoClicked;
+            _buttons[FunctionBarCommand.Redo].Click += OnRedoClicked;
             _toolButtons[EditingToolKind.Selection].Click += OnSelectionToolClicked;
             _toolButtons[EditingToolKind.Rectangle].Click += OnRectangleToolClicked;
             _toolButtons[EditingToolKind.ArrowLine].Click += OnArrowLineToolClicked;
@@ -927,6 +931,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _disposed = true;
             _buttons[FunctionBarCommand.Complete].Click -= OnCompleteClicked;
             _buttons[FunctionBarCommand.Cancel].Click -= OnCancelClicked;
+            _buttons[FunctionBarCommand.Undo].Click -= OnUndoClicked;
+            _buttons[FunctionBarCommand.Redo].Click -= OnRedoClicked;
             _toolButtons[EditingToolKind.Selection].Click -= OnSelectionToolClicked;
             _toolButtons[EditingToolKind.Rectangle].Click -= OnRectangleToolClicked;
             _toolButtons[EditingToolKind.ArrowLine].Click -= OnArrowLineToolClicked;
@@ -1137,6 +1143,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _request.SessionId,
                 _request.CoordinateVersion,
                 _request.Selection.SelectionRevision,
+                _request.AnnotationRevision,
                 FunctionBarCommand.Cancel);
             _buttons[FunctionBarCommand.Cancel].IsEnabled = false;
 
@@ -1166,6 +1173,53 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         }
 
+        private void OnUndoClicked(object sender, RoutedEventArgs args) =>
+            DispatchHistoryCommand(FunctionBarCommand.Undo, _undoCommandGate);
+
+        private void OnRedoClicked(object sender, RoutedEventArgs args) =>
+            DispatchHistoryCommand(FunctionBarCommand.Redo, _redoCommandGate);
+
+        private void DispatchHistoryCommand(
+            FunctionBarCommand command,
+            CancelCommandGate gate)
+        {
+            if (!gate.TryBegin())
+            {
+                return;
+            }
+
+            var request = new FunctionBarCommandRequest(
+                _request.SessionId,
+                _request.CoordinateVersion,
+                _request.Selection.SelectionRevision,
+                _request.AnnotationRevision,
+                command);
+            _buttons[command].IsEnabled = false;
+            var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+            if (dispatcherQueue is null
+                || !dispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_disposed)
+                    {
+                        return;
+                    }
+
+                    var result = _request.CommandSink.Execute(request);
+                    gate.Reset();
+                    if (!_disposed && result.Kind != FunctionBarCommandResultKind.Accepted)
+                    {
+                        Update(_request);
+                    }
+                }))
+            {
+                gate.Reset();
+                if (!_disposed)
+                {
+                    Update(_request);
+                }
+            }
+        }
+
         private void OnCompleteClicked(object sender, RoutedEventArgs args)
         {
             if (!_completeCommandGate.TryBegin())
@@ -1177,6 +1231,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _request.SessionId,
                 _request.CoordinateVersion,
                 _request.Selection.SelectionRevision,
+                _request.AnnotationRevision,
                 FunctionBarCommand.Complete);
             _buttons[FunctionBarCommand.Complete].IsEnabled = false;
 

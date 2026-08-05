@@ -84,6 +84,7 @@ public sealed class AnnotationEditingCoordinator
     private readonly INumberedMarkerAnnotationStylePolicy _numberedMarkerStylePolicy;
     private readonly Func<Guid> _textDraftIdFactory;
     private readonly Func<Guid> _privacyDraftIdFactory;
+    private readonly AnnotationHistoryCoordinator? _history;
     private Guid? _sessionId;
     private string _coordinateVersion = string.Empty;
     private EditingToolKind _activeTool = EditingToolKind.Selection;
@@ -113,7 +114,8 @@ public sealed class AnnotationEditingCoordinator
         Func<Guid>? textDraftIdFactory = null,
         IPrivacyRegionEffectPolicy? privacyRegionEffectPolicy = null,
         Func<Guid>? privacyDraftIdFactory = null,
-        INumberedMarkerAnnotationStylePolicy? numberedMarkerStylePolicy = null)
+        INumberedMarkerAnnotationStylePolicy? numberedMarkerStylePolicy = null,
+        AnnotationHistoryCoordinator? history = null)
     {
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
         _objectIdFactory = objectIdFactory ?? AnnotationObjectId.New;
@@ -126,6 +128,7 @@ public sealed class AnnotationEditingCoordinator
             ?? new DefaultNumberedMarkerAnnotationStylePolicy();
         _textDraftIdFactory = textDraftIdFactory ?? Guid.NewGuid;
         _privacyDraftIdFactory = privacyDraftIdFactory ?? Guid.NewGuid;
+        _history = history;
         _privacyRegionMode = _privacyRegionEffectPolicy.GetDefaultMode();
     }
 
@@ -199,6 +202,32 @@ public sealed class AnnotationEditingCoordinator
         }
     }
 
+    public bool HasActiveDraft
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _draft is not null
+                    || _arrowLineDraft is not null
+                    || _highlighterDraft is not null
+                    || _textDraft is not null
+                    || _privacyRegionDraft is not null
+                    || _numberedMarkerDraft is not null;
+            }
+        }
+    }
+
+    public void ApplyHistoryNextNumber(int nextNumber)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(nextNumber);
+
+        lock (_gate)
+        {
+            _nextNumber = nextNumber;
+        }
+    }
+
     public void BeginSession(SelectionVisualState selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
@@ -223,6 +252,11 @@ public sealed class AnnotationEditingCoordinator
             _highlighterStyle = _highlighterStylePolicy.GetDefaultStyle();
             _textStyle = _textStylePolicy.GetDefaultStyle();
             _numberedMarkerStyle = _numberedMarkerStylePolicy.GetDefaultStyle();
+            _history?.BeginSession(
+                selection.SessionId,
+                selection.CoordinateVersion,
+                selection.SelectionRevision,
+                _nextNumber);
         }
     }
 
@@ -331,6 +365,10 @@ public sealed class AnnotationEditingCoordinator
                 }
 
                 _selectionRevision = selection.SelectionRevision;
+                _history?.UpdateSelection(
+                    selection.SessionId,
+                    selection.CoordinateVersion,
+                    selection.SelectionRevision);
             }
         }
     }
@@ -590,7 +628,15 @@ public sealed class AnnotationEditingCoordinator
                     "The next marker number is unchanged.");
             }
 
+            var previousNextNumber = _nextNumber;
             _nextNumber = request.Number;
+            _history?.RecordNextNumber(
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                _documents.Current!,
+                previousNextNumber,
+                _nextNumber);
             return NextNumberResult(
                 SetNextNumberResultKind.Succeeded,
                 request,
@@ -898,11 +944,22 @@ public sealed class AnnotationEditingCoordinator
                     "The Numbered Marker annotation could not be committed.");
             }
 
+            var previousNextNumber = _nextNumber;
             _numberedMarkerDraft = null;
             if (_nextNumber == draft.Number)
             {
                 _nextNumber = checked(draft.Number + 1);
             }
+
+            _history?.RecordNumberedMarkerCreation(
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision,
+                document,
+                succeeded.Document,
+                annotationObject,
+                previousNextNumber,
+                _nextNumber);
 
             return NumberedMarkerResult(
                 NumberedMarkerPointerResultKind.Committed,
@@ -1193,6 +1250,13 @@ public sealed class AnnotationEditingCoordinator
             if (mutation is AnnotationMutationResult.Succeeded succeeded)
             {
                 _textDraft = null;
+                _history?.RecordAdd(
+                    request.SessionId,
+                    request.CoordinateVersion,
+                    request.SelectionRevision,
+                    document,
+                    succeeded.Document,
+                    annotationObject);
                 return TextResult(
                     TextDraftResultKind.Committed,
                     request,
@@ -1495,6 +1559,13 @@ public sealed class AnnotationEditingCoordinator
                 annotationObject));
             if (mutation is AnnotationMutationResult.Succeeded succeeded)
             {
+                _history?.RecordAdd(
+                    input.SessionId,
+                    input.CoordinateVersion,
+                    input.SelectionRevision,
+                    document,
+                    succeeded.Document,
+                    annotationObject);
                 return Result(
                     RectanglePointerResultKind.Committed,
                     input,
@@ -1858,6 +1929,13 @@ public sealed class AnnotationEditingCoordinator
                 annotationObject));
             if (mutation is AnnotationMutationResult.Succeeded succeeded)
             {
+                _history?.RecordAdd(
+                    input.SessionId,
+                    input.CoordinateVersion,
+                    input.SelectionRevision,
+                    document,
+                    succeeded.Document,
+                    annotationObject);
                 return PrivacyRegionResult(
                     PrivacyRegionPointerResultKind.Committed,
                     input,
@@ -2167,6 +2245,13 @@ public sealed class AnnotationEditingCoordinator
                 annotationObject));
             if (mutation is AnnotationMutationResult.Succeeded succeeded)
             {
+                _history?.RecordAdd(
+                    input.SessionId,
+                    input.CoordinateVersion,
+                    input.SelectionRevision,
+                    document,
+                    succeeded.Document,
+                    annotationObject);
                 return ArrowLineResult(
                     ArrowLinePointerResultKind.Committed,
                     input,
@@ -2473,6 +2558,13 @@ public sealed class AnnotationEditingCoordinator
                 annotationObject));
             if (mutation is AnnotationMutationResult.Succeeded succeeded)
             {
+                _history?.RecordAdd(
+                    input.SessionId,
+                    input.CoordinateVersion,
+                    input.SelectionRevision,
+                    document,
+                    succeeded.Document,
+                    annotationObject);
                 return HighlighterResult(
                     HighlighterPointerResultKind.Committed,
                     input,
@@ -2581,6 +2673,7 @@ public sealed class AnnotationEditingCoordinator
         lock (_gate)
         {
             _documents.ClearSession(sessionId);
+            _history?.ClearSession(sessionId);
             if (_sessionId == sessionId)
             {
                 _draft = null;

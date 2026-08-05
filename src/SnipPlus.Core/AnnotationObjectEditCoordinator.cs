@@ -11,6 +11,7 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
     private readonly object _gate = new();
     private readonly AnnotationDocumentCoordinator _documents;
     private readonly Func<AnnotationObjectStyleChangeRequest, AnnotationObjectEditResult>? _defaultStyleChange;
+    private readonly AnnotationHistoryCoordinator? _history;
     private Guid? _sessionId;
     private string _coordinateVersion = string.Empty;
     private int _selectionRevision;
@@ -24,10 +25,23 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
 
     public AnnotationObjectEditCoordinator(
         AnnotationDocumentCoordinator documents,
-        Func<AnnotationObjectStyleChangeRequest, AnnotationObjectEditResult>? defaultStyleChange = null)
+        Func<AnnotationObjectStyleChangeRequest, AnnotationObjectEditResult>? defaultStyleChange = null,
+        AnnotationHistoryCoordinator? history = null)
     {
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
         _defaultStyleChange = defaultStyleChange;
+        _history = history;
+    }
+
+    public bool HasActiveEdit
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _state.HasActiveEdit;
+            }
+        }
     }
 
     public AnnotationObjectSelectionState State
@@ -260,6 +274,7 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
                     "The annotation object remains selected.", original);
             }
 
+            var beforeDocument = _documents.Current!;
             var mutation = _documents.Replace(new ReplaceAnnotationObjectRequest(
                 input.SessionId,
                 input.ExpectedAnnotationRevision,
@@ -271,6 +286,14 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
 
             Select(succeeded.Document.Objects.Single(value => value.ObjectId == preview.ObjectId));
             _state = _state with { AnnotationRevision = succeeded.Document.Revision };
+            _history?.RecordReplace(
+                input.SessionId,
+                input.CoordinateVersion,
+                input.SelectionRevision,
+                beforeDocument,
+                succeeded.Document,
+                original,
+                preview);
             return Result(AnnotationObjectEditResultKind.EditCommitted,
                 "The annotation edit was committed.", preview, succeeded.Document);
         }
@@ -324,6 +347,7 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
                     "The style change would move the annotation outside the current Selection.");
             }
 
+            var beforeDocument = _documents.Current!;
             var mutation = _documents.Replace(new ReplaceAnnotationObjectRequest(
                 request.SessionId,
                 request.ExpectedAnnotationRevision,
@@ -336,6 +360,14 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
             var resultObject = succeeded.Document.Objects.Single(value => value.ObjectId == objectId);
             Select(resultObject);
             _state = _state with { AnnotationRevision = succeeded.Document.Revision };
+            _history?.RecordReplace(
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                beforeDocument,
+                succeeded.Document,
+                current,
+                styled);
             return Result(AnnotationObjectEditResultKind.Restyled,
                 "The annotation style was changed.", resultObject, succeeded.Document);
         }
@@ -360,6 +392,7 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
                     "The selected annotation object was not found.");
             }
 
+            var beforeDocument = _documents.Current!;
             var mutation = _documents.Remove(new RemoveAnnotationObjectRequest(
                 request.SessionId,
                 request.ExpectedAnnotationRevision,
@@ -374,6 +407,13 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
                 request.CoordinateVersion,
                 request.SelectionRevision,
                 succeeded.Document.Revision);
+            _history?.RecordRemove(
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                beforeDocument,
+                succeeded.Document,
+                current);
             return Result(AnnotationObjectEditResultKind.Deleted,
                 "The annotation object was deleted.", current, succeeded.Document);
         }
@@ -467,6 +507,45 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
         }
     }
 
+    public void ReconcileAfterHistory(AnnotationHistoryResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        lock (_gate)
+        {
+            if (result.Kind != AnnotationHistoryResultKind.Succeeded
+                || result.Document is null
+                || result.AffectedObjectId is not AnnotationObjectId objectId)
+            {
+                return;
+            }
+
+            var affected = result.Document.Objects
+                .FirstOrDefault(value => value.ObjectId == objectId);
+            var select = result.EntryKind switch
+            {
+                AnnotationHistoryEntryKind.Add or AnnotationHistoryEntryKind.NumberedMarkerCreation =>
+                    result.Command == AnnotationHistoryCommand.Redo,
+                AnnotationHistoryEntryKind.Remove =>
+                    result.Command == AnnotationHistoryCommand.Undo,
+                AnnotationHistoryEntryKind.Replace => true,
+                _ => false
+            };
+
+            if (select && affected is AnnotationObject annotationObject)
+            {
+                Select(annotationObject);
+            }
+            else if (!select)
+            {
+                _state = AnnotationObjectSelectionState.Empty(
+                    result.SessionId,
+                    result.CoordinateVersion,
+                    result.SelectionRevision,
+                    result.CurrentAnnotationRevision);
+            }
+        }
+    }
+
     private AnnotationObjectEditResult UpdateText(
         AnnotationObjectTextEditRequest request,
         bool commit)
@@ -516,6 +595,7 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
                     "Text edit preview updated.", preview);
             }
 
+            var beforeDocument = _documents.Current!;
             var mutation = _documents.Replace(new ReplaceAnnotationObjectRequest(
                 request.SessionId,
                 request.ExpectedAnnotationRevision,
@@ -529,6 +609,14 @@ public sealed class AnnotationObjectEditCoordinator : IAnnotationObjectEditingSi
             var committed = succeeded.Document.Objects.Single(value => value.ObjectId == preview.ObjectId);
             Select(committed);
             _state = _state with { AnnotationRevision = succeeded.Document.Revision };
+            _history?.RecordReplace(
+                request.SessionId,
+                request.CoordinateVersion,
+                request.SelectionRevision,
+                beforeDocument,
+                succeeded.Document,
+                original,
+                preview);
             return Result(AnnotationObjectEditResultKind.TextEditCommitted,
                 "The text annotation was committed.", committed, succeeded.Document);
         }

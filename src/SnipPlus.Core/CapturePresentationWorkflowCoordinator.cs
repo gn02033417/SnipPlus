@@ -37,6 +37,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private readonly Action<string>? _feedback;
     private readonly ICompleteExecutionTraceSink _trace;
     private readonly AnnotationDocumentCoordinator _annotationDocuments;
+    private readonly AnnotationHistoryCoordinator _annotationHistory;
     private readonly AnnotationEditingCoordinator _annotationEditing;
     private readonly AnnotationObjectEditCoordinator _annotationObjectEditing;
     private CaptureSessionContext? _activeSession;
@@ -72,10 +73,14 @@ public sealed class CapturePresentationWorkflowCoordinator :
         _feedback = feedback;
         _trace = traceSink ?? NoOpCompleteExecutionTraceSink.Instance;
         _annotationDocuments = annotationDocuments ?? new AnnotationDocumentCoordinator();
-        _annotationEditing = new AnnotationEditingCoordinator(_annotationDocuments);
+        _annotationHistory = new AnnotationHistoryCoordinator(_annotationDocuments);
+        _annotationEditing = new AnnotationEditingCoordinator(
+            _annotationDocuments,
+            history: _annotationHistory);
         _annotationObjectEditing = new AnnotationObjectEditCoordinator(
             _annotationDocuments,
-            _annotationEditing.ChangeDefaultStyle);
+            _annotationEditing.ChangeDefaultStyle,
+            _annotationHistory);
     }
 
     public WorkflowState CurrentState => _stateAuthority.CurrentState;
@@ -103,6 +108,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
     }
 
     public AnnotationDocument? CurrentAnnotationDocument => _annotationDocuments.Current;
+
+    public AnnotationHistoryState CurrentAnnotationHistory =>
+        _annotationHistory.CurrentState;
 
     public EditingToolKind ActiveTool => _annotationEditing.ActiveTool;
 
@@ -153,14 +161,29 @@ public sealed class CapturePresentationWorkflowCoordinator :
         }
     }
 
-    public AnnotationMutationResult AddAnnotationObject(AddAnnotationObjectRequest request) =>
-        _annotationDocuments.Add(request);
+    public AnnotationMutationResult AddAnnotationObject(AddAnnotationObjectRequest request)
+    {
+        var before = _annotationDocuments.Current;
+        var result = _annotationDocuments.Add(request);
+        RecordDirectMutation(request, before, result);
+        return result;
+    }
 
-    public AnnotationMutationResult ReplaceAnnotationObject(ReplaceAnnotationObjectRequest request) =>
-        _annotationDocuments.Replace(request);
+    public AnnotationMutationResult ReplaceAnnotationObject(ReplaceAnnotationObjectRequest request)
+    {
+        var before = _annotationDocuments.Current;
+        var result = _annotationDocuments.Replace(request);
+        RecordDirectMutation(request, before, result);
+        return result;
+    }
 
-    public AnnotationMutationResult RemoveAnnotationObject(RemoveAnnotationObjectRequest request) =>
-        _annotationDocuments.Remove(request);
+    public AnnotationMutationResult RemoveAnnotationObject(RemoveAnnotationObjectRequest request)
+    {
+        var before = _annotationDocuments.Current;
+        var result = _annotationDocuments.Remove(request);
+        RecordDirectMutation(request, before, result);
+        return result;
+    }
 
     public AnnotationObjectEditResult PointerPressed(AnnotationObjectPointerEvent input)
     {
@@ -876,6 +899,22 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 "The Function Bar command belongs to a stale Selection revision.");
         }
 
+        if (CurrentAnnotationRevision != request.AnnotationRevision)
+        {
+            return new FunctionBarCommandResult(
+                request.Command,
+                FunctionBarCommandResultKind.StaleAnnotationRevision,
+                _stateAuthority.CurrentState,
+                currentSelection.SelectionRevision,
+                null,
+                "The Function Bar command belongs to a stale Annotation revision.")
+            {
+                CurrentAnnotationRevision = CurrentAnnotationRevision,
+                CanUndo = _annotationHistory.CurrentState.CanUndo,
+                CanRedo = _annotationHistory.CurrentState.CanRedo
+            };
+        }
+
         lock (_gate)
         {
             if (_completeInProgress)
@@ -901,7 +940,8 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 "The Function Bar command is not valid in the current workflow state.");
         }
 
-        if (!FunctionBarCommandAvailability.Stage6C.IsEnabled(request.Command))
+        var availability = CreateFunctionBarAvailability();
+        if (!availability.IsEnabled(request.Command))
         {
             return new FunctionBarCommandResult(
                 request.Command,
@@ -909,7 +949,12 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 _stateAuthority.CurrentState,
                 currentSelection.SelectionRevision,
                 null,
-                "The Function Bar command is disabled in this slice.");
+                "The Function Bar command is disabled in this slice.")
+            {
+                CurrentAnnotationRevision = CurrentAnnotationRevision,
+                CanUndo = availability.CanUndo,
+                CanRedo = availability.CanRedo
+            };
         }
 
         if (request.Command == FunctionBarCommand.Cancel)
@@ -936,6 +981,29 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 currentSelection.SelectionRevision,
                 null,
                 "The capture session cancellation was accepted.");
+        }
+
+        if (request.Command is FunctionBarCommand.Undo or FunctionBarCommand.Redo)
+        {
+            var historyResult = _annotationHistory.Execute(
+                new AnnotationHistoryRequest(
+                    request.SessionId,
+                    request.CoordinateVersion,
+                    request.SelectionRevision,
+                    request.AnnotationRevision,
+                    request.Command == FunctionBarCommand.Undo
+                        ? AnnotationHistoryCommand.Undo
+                        : AnnotationHistoryCommand.Redo),
+                _stateAuthority.CurrentState,
+                _annotationEditing.HasActiveDraft || _annotationObjectEditing.HasActiveEdit);
+            if (historyResult.Kind == AnnotationHistoryResultKind.Succeeded)
+            {
+                _annotationEditing.ApplyHistoryNextNumber(historyResult.CurrentNextNumber);
+                _annotationObjectEditing.ReconcileAfterHistory(historyResult);
+                ApplyAnnotationPresentation();
+            }
+
+            return ToFunctionBarCommandResult(historyResult);
         }
 
         var annotationDocument = _annotationDocuments.Current;
@@ -1555,7 +1623,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         selection.SessionId,
         selection.CoordinateVersion,
         selection,
-        availability ?? FunctionBarCommandAvailability.Stage6C,
+        availability ?? CreateFunctionBarAvailability(),
         this)
         {
             ActiveTool = _annotationEditing.ActiveTool,
@@ -1574,6 +1642,108 @@ public sealed class CapturePresentationWorkflowCoordinator :
             SelectedObject = _annotationObjectEditing.State,
             AnnotationObjectEditingSink = this
         };
+
+    private FunctionBarCommandAvailability CreateFunctionBarAvailability()
+    {
+        if (_stateAuthority.CurrentState != WorkflowState.Editing)
+        {
+            return FunctionBarCommandAvailability.Stage6C;
+        }
+
+        var history = _annotationHistory.CurrentState;
+        var historyEnabled = !_annotationEditing.HasActiveDraft
+            && !_annotationObjectEditing.HasActiveEdit;
+        return FunctionBarCommandAvailability.Stage6C with
+        {
+            CanUndo = historyEnabled && history.CanUndo,
+            CanRedo = historyEnabled && history.CanRedo
+        };
+    }
+
+    private FunctionBarCommandResult ToFunctionBarCommandResult(
+        AnnotationHistoryResult result) => new(
+        result.Command == AnnotationHistoryCommand.Undo
+            ? FunctionBarCommand.Undo
+            : FunctionBarCommand.Redo,
+        result.Kind switch
+        {
+            AnnotationHistoryResultKind.Succeeded => FunctionBarCommandResultKind.Accepted,
+            AnnotationHistoryResultKind.StaleSession => FunctionBarCommandResultKind.StaleSession,
+            AnnotationHistoryResultKind.StaleSelectionRevision => FunctionBarCommandResultKind.StaleSelectionRevision,
+            AnnotationHistoryResultKind.StaleAnnotationRevision => FunctionBarCommandResultKind.StaleAnnotationRevision,
+            AnnotationHistoryResultKind.InvalidWorkflowState => FunctionBarCommandResultKind.InvalidWorkflowState,
+            AnnotationHistoryResultKind.ActiveDraft => FunctionBarCommandResultKind.ActiveDraft,
+            AnnotationHistoryResultKind.ObjectConflict => FunctionBarCommandResultKind.ObjectConflict,
+            AnnotationHistoryResultKind.RevisionOverflow => FunctionBarCommandResultKind.RevisionOverflow,
+            AnnotationHistoryResultKind.NothingToUndo => FunctionBarCommandResultKind.NothingToUndo,
+            AnnotationHistoryResultKind.NothingToRedo => FunctionBarCommandResultKind.NothingToRedo,
+            AnnotationHistoryResultKind.Disabled => FunctionBarCommandResultKind.Disabled,
+            _ => FunctionBarCommandResultKind.Failed
+        },
+        _stateAuthority.CurrentState,
+        result.SelectionRevision,
+        result.Failure,
+        result.Message)
+        {
+            CurrentAnnotationRevision = result.CurrentAnnotationRevision,
+            CanUndo = result.CanUndo,
+            CanRedo = result.CanRedo
+        };
+
+    private void RecordDirectMutation(
+        AnnotationMutationRequest request,
+        AnnotationDocument? before,
+        AnnotationMutationResult result)
+    {
+        if (before is null
+            || result is not AnnotationMutationResult.Succeeded succeeded
+            || CurrentSelection is not SelectionVisualState selection)
+        {
+            return;
+        }
+
+        switch (request)
+        {
+            case AddAnnotationObjectRequest add when add.AnnotationObject is AnnotationObject added:
+                _annotationHistory.RecordAdd(
+                    request.SessionId,
+                    selection.CoordinateVersion,
+                    selection.SelectionRevision,
+                    before,
+                    succeeded.Document,
+                    added);
+                break;
+            case ReplaceAnnotationObjectRequest replace when replace.AnnotationObject is AnnotationObject replaced:
+                var original = before.Objects.FirstOrDefault(value => value.ObjectId == replaced.ObjectId);
+                if (original is not null)
+                {
+                    _annotationHistory.RecordReplace(
+                        request.SessionId,
+                        selection.CoordinateVersion,
+                        selection.SelectionRevision,
+                        before,
+                        succeeded.Document,
+                        original,
+                        replaced);
+                }
+
+                break;
+            case RemoveAnnotationObjectRequest remove:
+                var removed = before.Objects.FirstOrDefault(value => value.ObjectId == remove.ObjectId);
+                if (removed is not null)
+                {
+                    _annotationHistory.RecordRemove(
+                        request.SessionId,
+                        selection.CoordinateVersion,
+                        selection.SelectionRevision,
+                        before,
+                        succeeded.Document,
+                        removed);
+                }
+
+                break;
+        }
+    }
 
     private async ValueTask CompleteAsync(
         CaptureSessionContext session,
@@ -1967,7 +2137,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
             && selection.IsGeometryValid)
         {
             var repositioned = _functionBarPresentation.Reposition(
-                CreateFunctionBarRequest(selection, FunctionBarCommandAvailability.Stage6C));
+                CreateFunctionBarRequest(selection));
             if (repositioned.Kind == FunctionBarPresentationResultKind.Ready)
             {
                 var shown = _functionBarPresentation.Show(

@@ -199,6 +199,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
                 result.Session.SessionId,
                 result.Session.VirtualDesktopSnapshot.CoordinateVersion,
                 locked.State.SelectionRevision,
+                workflow.CurrentAnnotationRevision,
                 command));
             Assert.AreEqual(FunctionBarCommandResultKind.Disabled, disabled.Kind);
         }
@@ -207,6 +208,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             result.Session.SessionId,
             result.Session.VirtualDesktopSnapshot.CoordinateVersion,
             locked.State.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
             FunctionBarCommand.Complete));
         Assert.AreEqual(FunctionBarCommandResultKind.Accepted, complete.Kind);
         await WaitForStateAsync(authority, WorkflowState.ResidentReady);
@@ -263,6 +265,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             ready.Session.SessionId,
             ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
             workflow.CurrentSelection!.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
             FunctionBarCommand.Complete));
 
         Assert.AreEqual(FunctionBarCommandResultKind.AnnotationOutputNotSupported, accepted.Kind);
@@ -282,6 +285,82 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.AreEqual(FunctionBarCommandAvailability.Stage6C, functionBar.LastRequest!.Availability);
         Assert.IsFalse(trace.Entries.Any(entry => entry.CompleteStage == CompleteExecutionStage.Rendering));
         await workflow.CancelCurrentAsync("test");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public async Task UndoRedoAreEditingOnlyAndEmptyDocumentCanCompleteAfterUndo()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer();
+        var clipboard = new FakeClipboardDelivery();
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard);
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        LockSelection(overlay.InputSink!, ready.Session);
+        var annotationObject = new AnnotationObject(
+            AnnotationObjectId.New(),
+            ready.Session.SessionId,
+            AnnotationToolKind.Rectangle,
+            new PhysicalRect(4, 4, 12, 12),
+            0);
+        _ = workflow.AddAnnotationObject(new AddAnnotationObjectRequest(
+            ready.Session.SessionId,
+            workflow.CurrentAnnotationDocument!.Revision,
+            annotationObject));
+
+        var undo = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            workflow.CurrentSelection!.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Undo));
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, undo.Kind);
+        Assert.IsEmpty(workflow.CurrentAnnotationDocument!.Objects);
+        Assert.IsTrue(functionBar.LastRequest!.Availability.CanRedo);
+        Assert.AreEqual(0, renderer.Calls);
+        Assert.AreEqual(0, clipboard.Calls);
+
+        var redo = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            workflow.CurrentSelection.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Redo));
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, redo.Kind);
+        Assert.AreEqual(annotationObject, workflow.CurrentAnnotationDocument!.Objects.Single());
+
+        var undoAgain = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            workflow.CurrentSelection.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Undo));
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, undoAgain.Kind);
+        var complete = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            workflow.CurrentSelection.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Complete));
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, complete.Kind);
+        await WaitForStateAsync(authority, WorkflowState.ResidentReady);
+        Assert.AreEqual(1, renderer.Calls);
+        Assert.AreEqual(1, clipboard.Calls);
     }
 
     [TestMethod]
@@ -324,6 +403,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             ready.Session.SessionId,
             ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
             workflow.CurrentSelection!.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
             FunctionBarCommand.Complete));
 
         Assert.AreEqual(FunctionBarCommandResultKind.Accepted, accepted.Kind);
@@ -363,6 +443,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             ready.Session.SessionId,
             ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
             workflow.CurrentSelection!.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
             FunctionBarCommand.Complete);
 
         var first = workflow.Execute(command);
@@ -418,6 +499,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             ready.Session.SessionId,
             ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
             workflow.CurrentSelection!.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
             FunctionBarCommand.Complete));
 
         Assert.AreEqual(FunctionBarCommandResultKind.Accepted, accepted.Kind);

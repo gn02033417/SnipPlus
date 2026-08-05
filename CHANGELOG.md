@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added — Stage 7I Function Bar Annotation-only Undo／Redo (2026-08-05)
+
+- Added platform-neutral immutable Annotation history contracts for Add／Remove／Replace／NextNumber-only changes and atomic Numbered Marker creation. History entries retain exact Session／CoordinateVersion／Selection context, ObjectId／Z-order／content／style／geometry and before／after NextNumber values.
+- Added Core-owned capture-session history coordination with independent Undo／Redo stacks, stale Session／Selection／Annotation revision validation, exact document replay through `AnnotationDocumentCoordinator`, conflict／overflow typed outcomes, redo invalidation after forward mutation, active-draft blocking and idempotent session cleanup. Selection movement／resize／reselection, tool selection, style defaults and presentation drafts do not create history entries.
+- Integrated history recording at the successful annotation mutation boundary for all existing pointer-created tools and object editing, including Text edits, style changes and deletion. Undo／Redo reconciles selected-object state without changing workflow state or invoking render／Clipboard／file output; empty-document Complete remains available after Undo removes the last annotation.
+- Added deterministic Contracts／Core／Workflow／Windows coverage for immutable entry shape, exact Add／Replace／Remove replay, marker NextNumber atomicity, revision semantics, redo invalidation, stale／active-draft／conflict safety, session cleanup, revision-aware Function Bar dispatch and separate Undo／Redo command gates. Locked restore succeeded; Release x64 build passed with `0` warnings／`0` errors; filtered non-interactive tests passed `227/227` with `0` failures／`0` skips; limited C# formatting verification and `git diff --check` passed.
+- No packaged MSIX／GUI runtime verification was completed for this slice; Function Bar Undo／Redo packaged behavior remains `Pending`. No external GUI fixture, real desktop screenshot or Clipboard payload was used.
+
 ### Added — Stage 7H Pointer-driven Annotation Object Editing (2026-08-05)
 
 - Added platform-neutral immutable object-editing contracts for deterministic topmost selection, pointer move, applicable resize, text-edit drafts, style changes and delete across Rectangle、Arrow／Line、Highlighter、Text、Privacy and Numbered Marker objects. `AnnotationDocumentCoordinator` remains the sole document／revision authority; preview edits retain an immutable original snapshot and commit one replacement or removal revision on release.
