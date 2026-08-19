@@ -7,7 +7,9 @@ public sealed class WindowsFrozenDisplayFrameSetRenderer : IFrozenDisplayFrameSe
     public ValueTask<FrozenDisplayFrameSetRenderOutcome> RenderAsync(
         FrozenDisplayFrameSet frameSet,
         PhysicalRect selectionPhysicalBounds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int selectionRevision = 0,
+        AnnotationRevision annotationRevision = default)
     {
         ArgumentNullException.ThrowIfNull(frameSet);
 
@@ -52,6 +54,8 @@ public sealed class WindowsFrozenDisplayFrameSetRenderer : IFrozenDisplayFrameSe
             {
                 ResultId = Guid.NewGuid(),
                 SessionId = frameSet.SessionId,
+                SelectionRevision = selectionRevision,
+                AnnotationRevision = annotationRevision,
                 PixelWidth = composition.PixelWidth,
                 PixelHeight = composition.PixelHeight,
                 PixelFormat = ImagePixelFormat.Bgra8,

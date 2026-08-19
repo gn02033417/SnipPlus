@@ -69,5 +69,7 @@ public interface IFrozenDisplayFrameSetRenderer
     ValueTask<FrozenDisplayFrameSetRenderOutcome> RenderAsync(
         FrozenDisplayFrameSet frameSet,
         PhysicalRect selectionPhysicalBounds,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        int selectionRevision = 0,
+        AnnotationRevision annotationRevision = default);
 }

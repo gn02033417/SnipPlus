@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SnipPlus.Contracts;
 
 namespace SnipPlus.Contracts.Tests;
@@ -54,6 +54,8 @@ public sealed class ContractInvariantTests
         {
             ResultId = Guid.NewGuid(),
             SessionId = Guid.NewGuid(),
+            SelectionRevision = 0,
+            AnnotationRevision = AnnotationRevision.Initial,
             PixelWidth = 4,
             PixelHeight = 3,
             PixelFormat = ImagePixelFormat.Bgra8,

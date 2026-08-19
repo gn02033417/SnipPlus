@@ -12,12 +12,16 @@ internal sealed class TestImageResult : IImageResult
         int pixelWidth = 2,
         int pixelHeight = 2,
         PhysicalRect? sourceBounds = null,
-        PhysicalRect? cropBounds = null)
+        PhysicalRect? cropBounds = null,
+        int selectionRevision = 0,
+        AnnotationRevision? annotationRevision = null)
     {
         Metadata = new ImageResultMetadata
         {
             ResultId = resultId ?? Guid.NewGuid(),
             SessionId = sessionId ?? Guid.NewGuid(),
+            SelectionRevision = selectionRevision,
+            AnnotationRevision = annotationRevision ?? AnnotationRevision.Initial,
             PixelWidth = pixelWidth,
             PixelHeight = pixelHeight,
             PixelFormat = ImagePixelFormat.Bgra8,

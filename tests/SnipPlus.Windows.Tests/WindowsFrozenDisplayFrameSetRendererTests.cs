@@ -125,6 +125,8 @@ public sealed class WindowsFrozenDisplayFrameSetRendererTests
         {
             ResultId = Guid.NewGuid(),
             SessionId = session.SessionId,
+            SelectionRevision = 0,
+            AnnotationRevision = AnnotationRevision.Initial,
             PixelWidth = bounds.Width,
             PixelHeight = bounds.Height,
             PixelFormat = ImagePixelFormat.Bgra8,

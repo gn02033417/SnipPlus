@@ -639,7 +639,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         Assert.IsTrue(trace.Entries.Any(entry => entry.CompleteStage == CompleteExecutionStage.TransitioningToDelivering));
         var clipboardFailure = trace.Entries.Last(entry => entry.CompleteStage == CompleteExecutionStage.ClipboardFailed);
         Assert.AreEqual(FailureCode.ClipboardBusy, clipboardFailure.FailureCode);
-        Assert.AreEqual(nameof(IClipboardDeliveryService), clipboardFailure.Component);
+        Assert.AreEqual(nameof(IOutputCommitmentCoordinator), clipboardFailure.Component);
         await workflow.CancelCurrentAsync("test");
     }
 
@@ -960,7 +960,9 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             new HiddenSourceExclusion(),
             functionBarPresentation: functionBar,
             finalRenderer: finalRenderer,
-            clipboardDelivery: clipboardDelivery,
+            outputCommitment: clipboardDelivery is null
+                ? null
+                : new OutputCommitmentCoordinator(clipboardDelivery),
             traceSink: traceSink,
             annotationAwareRenderer: annotationAwareRenderer,
             capacityPolicy: capacityPolicy);
@@ -1109,7 +1111,9 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         public ValueTask<FrozenDisplayFrameSetRenderOutcome> RenderAsync(
             FrozenDisplayFrameSet frameSet,
             PhysicalRect selectionPhysicalBounds,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            int selectionRevision = 0,
+            AnnotationRevision annotationRevision = default)
         {
             Calls++;
             if (Outcome is not null)
@@ -1122,7 +1126,9 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
                 pixelWidth: selectionPhysicalBounds.Width,
                 pixelHeight: selectionPhysicalBounds.Height,
                 sourceBounds: selectionPhysicalBounds,
-                cropBounds: selectionPhysicalBounds);
+                cropBounds: selectionPhysicalBounds,
+                selectionRevision: selectionRevision,
+                annotationRevision: annotationRevision);
             return ValueTask.FromResult<FrozenDisplayFrameSetRenderOutcome>(
                 new FrozenDisplayFrameSetRenderOutcome.Succeeded(LastImageResult));
         }
@@ -1156,7 +1162,9 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
                 request.SelectionPhysicalBounds.Width,
                 request.SelectionPhysicalBounds.Height,
                 request.SelectionPhysicalBounds,
-                request.SelectionPhysicalBounds);
+                request.SelectionPhysicalBounds,
+                request.SelectionRevision,
+                request.AnnotationRevision);
             var result = new AnnotationAwareRenderResult(
                 resultId,
                 request.SessionId,
@@ -1215,7 +1223,9 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         public async ValueTask<FrozenDisplayFrameSetRenderOutcome> RenderAsync(
             FrozenDisplayFrameSet frameSet,
             PhysicalRect selectionPhysicalBounds,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            int selectionRevision = 0,
+            AnnotationRevision annotationRevision = default)
         {
             Started.TrySetResult(true);
             await Release.Task.WaitAsync(cancellationToken);
@@ -1225,7 +1235,9 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
                     pixelWidth: selectionPhysicalBounds.Width,
                     pixelHeight: selectionPhysicalBounds.Height,
                     sourceBounds: selectionPhysicalBounds,
-                    cropBounds: selectionPhysicalBounds));
+                    cropBounds: selectionPhysicalBounds,
+                    selectionRevision: selectionRevision,
+                    annotationRevision: annotationRevision));
         }
     }
 

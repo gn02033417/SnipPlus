@@ -1,4 +1,4 @@
-using Microsoft.Graphics.Canvas;
+﻿using Microsoft.Graphics.Canvas;
 using SnipPlus.Contracts;
 using Windows.Foundation;
 
@@ -77,6 +77,8 @@ public sealed class Win2DRenderingAdapter : IRenderingAdapter
             {
                 ResultId = Guid.NewGuid(),
                 SessionId = Guid.Empty,
+                SelectionRevision = 0,
+                AnnotationRevision = AnnotationRevision.Initial,
                 PixelWidth = intent.PixelWidth,
                 PixelHeight = intent.PixelHeight,
                 PixelFormat = ImagePixelFormat.Bgra8,

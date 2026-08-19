@@ -188,6 +188,8 @@ public sealed class SoftwareBitmapTests
     {
         ResultId = Guid.NewGuid(),
         SessionId = Guid.NewGuid(),
+        SelectionRevision = 0,
+        AnnotationRevision = AnnotationRevision.Initial,
         PixelWidth = width,
         PixelHeight = height,
         PixelFormat = ImagePixelFormat.Bgra8,

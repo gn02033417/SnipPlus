@@ -60,6 +60,8 @@ public static class FrozenPrivacyEffectRenderer
         {
             ResultId = Guid.NewGuid(),
             SessionId = source.Metadata.SessionId,
+            SelectionRevision = source.Metadata.SelectionRevision,
+            AnnotationRevision = source.Metadata.AnnotationRevision,
             PixelWidth = width,
             PixelHeight = height,
             PixelFormat = ImagePixelFormat.Bgra8,

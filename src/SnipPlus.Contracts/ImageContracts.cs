@@ -1,4 +1,4 @@
-namespace SnipPlus.Contracts;
+﻿namespace SnipPlus.Contracts;
 
 public enum ImagePixelFormat
 {
@@ -19,6 +19,8 @@ public sealed record ImageResultMetadata
 {
     public required Guid ResultId { get; init; }
     public required Guid SessionId { get; init; }
+    public required int SelectionRevision { get; init; }
+    public required AnnotationRevision AnnotationRevision { get; init; }
     public required int PixelWidth { get; init; }
     public required int PixelHeight { get; init; }
     public required ImagePixelFormat PixelFormat { get; init; }

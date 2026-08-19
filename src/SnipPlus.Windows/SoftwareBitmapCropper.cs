@@ -1,4 +1,4 @@
-using SnipPlus.Contracts;
+﻿using SnipPlus.Contracts;
 
 namespace SnipPlus.Windows;
 
@@ -39,6 +39,8 @@ public static class SoftwareBitmapCropper
         {
             ResultId = resultId,
             SessionId = source.Metadata.SessionId,
+            SelectionRevision = source.Metadata.SelectionRevision,
+            AnnotationRevision = source.Metadata.AnnotationRevision,
             PixelWidth = cropWidth,
             PixelHeight = cropHeight,
             PixelFormat = ImagePixelFormat.Bgra8,

@@ -304,6 +304,8 @@ public sealed class WindowsGraphicsCaptureAdapter :
             {
                 ResultId = Guid.NewGuid(),
                 SessionId = prepared.Session.SessionId,
+                SelectionRevision = 0,
+                AnnotationRevision = AnnotationRevision.Initial,
                 PixelWidth = pixelWidth,
                 PixelHeight = pixelHeight,
                 PixelFormat = ImagePixelFormat.Bgra8,
@@ -451,6 +453,8 @@ public sealed class WindowsGraphicsCaptureAdapter :
             {
                 ResultId = Guid.NewGuid(),
                 SessionId = fullFrameIntent.SessionId,
+                SelectionRevision = 0,
+                AnnotationRevision = AnnotationRevision.Initial,
                 PixelWidth = pixelWidth,
                 PixelHeight = pixelHeight,
                 PixelFormat = ImagePixelFormat.Bgra8,

@@ -1,4 +1,4 @@
-using SnipPlus.Contracts;
+﻿using SnipPlus.Contracts;
 using SnipPlus.Windows;
 
 namespace SnipPlus.App;
@@ -35,6 +35,8 @@ internal sealed class SyntheticCaptureService : ICaptureService
             {
                 ResultId = Guid.NewGuid(),
                 SessionId = fullFrameIntent.SessionId,
+                SelectionRevision = 0,
+                AnnotationRevision = AnnotationRevision.Initial,
                 PixelWidth = width,
                 PixelHeight = height,
                 PixelFormat = ImagePixelFormat.Bgra8,

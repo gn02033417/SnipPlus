@@ -381,6 +381,8 @@ public sealed class CapacityAndSessionContractTests
             {
                 ResultId = Guid.NewGuid(),
                 SessionId = sessionId,
+                SelectionRevision = 0,
+                AnnotationRevision = AnnotationRevision.Initial,
                 PixelWidth = pixelWidth,
                 PixelHeight = pixelHeight,
                 PixelFormat = ImagePixelFormat.Bgra8,

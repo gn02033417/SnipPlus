@@ -334,6 +334,8 @@ public sealed class WinRtClipboardDeliveryAdapterTests
             {
                 ResultId = Guid.NewGuid(),
                 SessionId = Guid.NewGuid(),
+                SelectionRevision = 0,
+                AnnotationRevision = AnnotationRevision.Initial,
                 PixelWidth = 1,
                 PixelHeight = 1,
                 PixelFormat = ImagePixelFormat.Bgra8,

@@ -1,4 +1,4 @@
-using SnipPlus.Contracts;
+﻿using SnipPlus.Contracts;
 
 namespace SnipPlus.Core;
 
@@ -119,7 +119,7 @@ public sealed class CaptureWorkflowCoordinator
         CaptureIntent intent,
         FrozenCaptureFrame frozenFrame,
         ICaptureService captureService,
-        IClipboardDeliveryService? clipboardService,
+        IOutputCommitmentCoordinator? outputCommitment,
         CancellationToken cancellationToken,
         Func<IImageResult, CancellationToken, ValueTask>? onResultReady = null)
     {
@@ -174,7 +174,7 @@ public sealed class CaptureWorkflowCoordinator
             CaptureOutcome.Succeeded succeeded => await HandleSuccessAsync(
                 intent,
                 succeeded.ImageResult,
-                clipboardService,
+                outputCommitment,
                 onResultReady,
                 cancellationToken),
             _ => FailAndCleanup(Failure.Create(
@@ -190,7 +190,7 @@ public sealed class CaptureWorkflowCoordinator
     public async ValueTask<WorkflowRunResult> RunAsync(
         CaptureIntent intent,
         ICaptureService captureService,
-        IClipboardDeliveryService? clipboardService,
+        IOutputCommitmentCoordinator? outputCommitment,
         CancellationToken cancellationToken,
         Func<IImageResult, CancellationToken, ValueTask>? onResultReady = null)
     {
@@ -201,7 +201,7 @@ public sealed class CaptureWorkflowCoordinator
                 intent,
                 succeeded.FrozenFrame,
                 captureService,
-                clipboardService,
+                outputCommitment,
                 cancellationToken,
                 onResultReady),
             CaptureFrameOutcome.Cancelled cancelled => new WorkflowRunResult(
@@ -223,7 +223,7 @@ public sealed class CaptureWorkflowCoordinator
     private async ValueTask<WorkflowRunResult> HandleSuccessAsync(
         CaptureIntent intent,
         IImageResult imageResult,
-        IClipboardDeliveryService? clipboardService,
+        IOutputCommitmentCoordinator? outputCommitment,
         Func<IImageResult, CancellationToken, ValueTask>? onResultReady,
         CancellationToken cancellationToken)
     {
@@ -233,7 +233,7 @@ public sealed class CaptureWorkflowCoordinator
             return TerminalFailure(transitionFailure!);
         }
 
-        if (clipboardService is null)
+        if (outputCommitment is null)
         {
             return CompleteAndCleanup(imageResult, intent.RequestId);
         }
@@ -270,43 +270,46 @@ public sealed class CaptureWorkflowCoordinator
         }
 
         ClipboardDeliveryResult deliveryResult;
-        var request = new ClipboardDeliveryRequest
+        var request = new OutputCommitmentRequest
         {
-            DeliveryId = Guid.NewGuid(),
-            SessionId = intent.SessionId,
-            ResultId = imageResult.Metadata.ResultId,
+            Authorization = OutputCommitmentAuthorization.CreateComplete(
+                intent.SessionId,
+                intent.CoordinateVersion,
+                imageResult.Metadata.SelectionRevision,
+                imageResult.Metadata.AnnotationRevision,
+                imageResult.Metadata.ResultId),
             ImageResult = imageResult,
-            HistoryAllowed = false,
-            RoamingAllowed = false,
-            MaximumAttempts = 5,
-            RetryBudget = TimeSpan.FromSeconds(1),
+            WorkflowState = WorkflowState.Delivering,
+            SelectionWidth = imageResult.Metadata.PixelWidth,
+            SelectionHeight = imageResult.Metadata.PixelHeight,
+            DisplayCount = 1,
             Cancellation = cancellationToken
         };
 
         try
         {
-            deliveryResult = await clipboardService.DeliverAsync(request, cancellationToken);
+            deliveryResult = await outputCommitment.PublishAsync(request, cancellationToken);
         }
         catch (OperationCanceledException)
         {
             deliveryResult = new ClipboardDeliveryResult.Cancelled(
-                request.DeliveryId,
-                request.SessionId,
-                request.ResultId,
+                Guid.NewGuid(),
+                request.Authorization.SessionId,
+                request.Authorization.ResultId,
                 "CancellationToken");
         }
         catch (Exception exception)
         {
             deliveryResult = new ClipboardDeliveryResult.TerminalFailure(
-                request.DeliveryId,
-                request.SessionId,
-                request.ResultId,
+                Guid.NewGuid(),
+                request.Authorization.SessionId,
+                request.Authorization.ResultId,
                 Failure.Create(
                     FailureCode.UnexpectedFailure,
                     FailureCategory.Unexpected,
                     FailureRecoverability.TerminalForSession,
                     "CaptureWorkflowCoordinator.Clipboard",
-                    request.DeliveryId,
+                    request.Authorization.SessionId,
                     exception.GetType().Name));
         }
 

@@ -134,6 +134,8 @@ public sealed class AnnotationRenderContractsTests
             {
                 ResultId = Guid.NewGuid(),
                 SessionId = sessionId,
+                SelectionRevision = 0,
+                AnnotationRevision = AnnotationRevision.Initial,
                 PixelWidth = width,
                 PixelHeight = height,
                 PixelFormat = ImagePixelFormat.Bgra8,

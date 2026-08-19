@@ -34,7 +34,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private readonly IFunctionBarPresentationCoordinator? _functionBarPresentation;
     private readonly IFrozenDisplayFrameSetRenderer? _finalRenderer;
     private readonly IAnnotationAwareRenderAdapter? _annotationAwareRenderer;
-    private readonly IClipboardDeliveryService? _clipboardDelivery;
+    private readonly IOutputCommitmentCoordinator? _outputCommitment;
     private readonly Action<string>? _feedback;
     private readonly ICompleteExecutionTraceSink _trace;
     private readonly AnnotationDocumentCoordinator _annotationDocuments;
@@ -57,7 +57,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         ICaptureAccessPreflight? captureAccessPreflight = null,
         IFunctionBarPresentationCoordinator? functionBarPresentation = null,
         IFrozenDisplayFrameSetRenderer? finalRenderer = null,
-        IClipboardDeliveryService? clipboardDelivery = null,
+        IOutputCommitmentCoordinator? outputCommitment = null,
         Action<string>? feedback = null,
         ICompleteExecutionTraceSink? traceSink = null,
         AnnotationDocumentCoordinator? annotationDocuments = null,
@@ -74,7 +74,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         _functionBarPresentation = functionBarPresentation;
         _finalRenderer = finalRenderer;
         _annotationAwareRenderer = annotationAwareRenderer;
-        _clipboardDelivery = clipboardDelivery;
+        _outputCommitment = outputCommitment;
         _feedback = feedback;
         _trace = traceSink ?? NoOpCompleteExecutionTraceSink.Instance;
         _annotationDocuments = annotationDocuments ?? new AnnotationDocumentCoordinator();
@@ -1018,7 +1018,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
 
         if ((!hasAnnotations && _finalRenderer is null)
             || (hasAnnotations && _annotationAwareRenderer is null)
-            || _clipboardDelivery is null
+            || _outputCommitment is null
             || currentSelection.Status != SelectionStatus.Locked
             || currentSelection.InteractionMode != SelectionInteractionMode.Locked
             || !currentSelection.IsGeometryValid
@@ -1896,7 +1896,12 @@ public sealed class CapturePresentationWorkflowCoordinator :
                             if (succeeded.Result.SessionId != session.SessionId
                                 || succeeded.Result.SelectionRevision != selection.SelectionRevision
                                 || succeeded.Result.AnnotationRevision != annotationDocument.Revision
-                                || !IsCanonicalResult(annotatedImage, session.SessionId, bounds)
+                                || !IsCanonicalResult(
+                                    annotatedImage,
+                                    session.SessionId,
+                                    bounds,
+                                    selection.SelectionRevision,
+                                    annotationDocument.Revision)
                                 || annotatedImage.Metadata.ResultId != succeeded.Result.ResultId)
                             {
                                 ReturnRenderFailure(
@@ -1926,7 +1931,12 @@ public sealed class CapturePresentationWorkflowCoordinator :
             else
             {
                 var rendered = await _finalRenderer!
-                    .RenderAsync(frameSet, bounds, session.Cancellation)
+                    .RenderAsync(
+                        frameSet,
+                        bounds,
+                        session.Cancellation,
+                        selection.SelectionRevision,
+                        annotationDocument.Revision)
                     .ConfigureAwait(true);
                 switch (rendered)
                 {
@@ -1991,7 +2001,12 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 selection,
                 result: result,
                 component: nameof(CapturePresentationWorkflowCoordinator));
-            if (!IsCanonicalResult(result, session.SessionId, bounds))
+            if (!IsCanonicalResult(
+                    result,
+                    session.SessionId,
+                    bounds,
+                    selection.SelectionRevision,
+                    annotationDocument.Revision))
             {
                 var failure = CreateFailure(
                     session.SessionId,
@@ -2035,18 +2050,18 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 return;
             }
 
-            var delivery = await _clipboardDelivery!
-                .DeliverAsync(
-                    new ClipboardDeliveryRequest
+            var delivery = await _outputCommitment!
+                .PublishAsync(
+                    new OutputCommitmentRequest
                     {
-                        DeliveryId = Guid.NewGuid(),
-                        SessionId = session.SessionId,
-                        ResultId = result.Metadata.ResultId,
+                        Authorization = OutputCommitmentAuthorization.CreateComplete(
+                            session.SessionId,
+                            session.VirtualDesktopSnapshot.CoordinateVersion,
+                            selection.SelectionRevision,
+                            annotationDocument.Revision,
+                            result.Metadata.ResultId),
                         ImageResult = result,
-                        HistoryAllowed = false,
-                        RoamingAllowed = false,
-                        MaximumAttempts = 5,
-                        RetryBudget = TimeSpan.FromSeconds(1),
+                        WorkflowState = WorkflowState.Delivering,
                         SelectionWidth = bounds.Width,
                         SelectionHeight = bounds.Height,
                         DisplayCount = frameSet.Frames.Count,
@@ -2087,7 +2102,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
                         selection,
                         result: result,
                         clipboardAttempt: delivered.Attempts,
-                        component: nameof(IClipboardDeliveryService));
+                        component: nameof(IOutputCommitmentCoordinator));
                     TraceStage(
                         CompleteExecutionStage.Completed,
                         session,
@@ -2108,7 +2123,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
                         selection,
                         cancelledFailure,
                         result,
-                        nameof(IClipboardDeliveryService));
+                        nameof(IOutputCommitmentCoordinator));
                     ReturnToEditing(session, cancelledFailure);
                     return;
                 case ClipboardDeliveryResult.RetryableFailure retryable:
@@ -2118,7 +2133,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
                         selection,
                         retryable.Failure,
                         result,
-                        nameof(IClipboardDeliveryService),
+                        nameof(IOutputCommitmentCoordinator),
                         retryable.AttemptsUsed);
                     ReturnToEditing(session, retryable.Failure);
                     return;
@@ -2129,7 +2144,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
                         selection,
                         terminal.Failure,
                         result,
-                        nameof(IClipboardDeliveryService));
+                        nameof(IOutputCommitmentCoordinator));
                     ReturnToEditing(session, terminal.Failure);
                     return;
                 default:
@@ -2143,7 +2158,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
                         selection,
                         unknownDeliveryFailure,
                         result,
-                        nameof(IClipboardDeliveryService));
+                        nameof(IOutputCommitmentCoordinator));
                     ReturnToEditing(session, unknownDeliveryFailure);
                     return;
             }
@@ -2285,11 +2300,15 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private static bool IsCanonicalResult(
         IImageResult? result,
         Guid sessionId,
-        PhysicalRect bounds) =>
+        PhysicalRect bounds,
+        int selectionRevision,
+        AnnotationRevision annotationRevision) =>
         result is not null
         && !result.IsDisposed
         && result.Metadata.ResultId != Guid.Empty
         && result.Metadata.SessionId == sessionId
+        && result.Metadata.SelectionRevision == selectionRevision
+        && result.Metadata.AnnotationRevision == annotationRevision
         && result.Metadata.CropPhysicalBounds == bounds
         && result.Metadata.SourcePhysicalBounds == bounds
         && result.Metadata.PixelWidth == bounds.Width

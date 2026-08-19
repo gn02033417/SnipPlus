@@ -61,6 +61,8 @@ public sealed class WindowsAnnotationAwareRenderCompositor : IAnnotationAwareRen
             {
                 ResultId = Guid.NewGuid(),
                 SessionId = request.SessionId,
+                SelectionRevision = request.SelectionRevision,
+                AnnotationRevision = request.AnnotationRevision,
                 PixelWidth = composition.PixelWidth,
                 PixelHeight = composition.PixelHeight,
                 PixelFormat = ImagePixelFormat.Bgra8,

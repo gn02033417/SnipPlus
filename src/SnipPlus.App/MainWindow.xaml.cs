@@ -44,6 +44,8 @@ public partial class MainWindow : Window, IDisposable
             _captureRequestCoordinator,
             _platformResources.TopologyProvider,
             _platformResources.FrameProvider);
+        var outputCommitment = new OutputCommitmentCoordinator(
+            _platformResources.ClipboardDelivery);
         _capturePresentation = new CapturePresentationWorkflowCoordinator(
             freezingCoordinator,
             _platformResources.OverlayCoordinator,
@@ -51,7 +53,7 @@ public partial class MainWindow : Window, IDisposable
             _platformResources.AdapterFactory,
             _platformResources.OverlayCoordinator,
             _platformResources.FinalRenderer,
-            _platformResources.ClipboardDelivery,
+            outputCommitment,
             message => SetStatus(message),
             _platformResources.CompleteExecutionTrace,
             annotationAwareRenderer: _platformResources.AnnotationAwareRenderer);

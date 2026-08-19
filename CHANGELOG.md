@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Changed — Stage 7L Explicit Output Commitment／Clipboard Publication Gate (2026-08-19)
+
+- Added the Core-owned `OutputCommitmentCoordinator` and platform-neutral `OutputCommitmentAuthorization` boundary. Clipboard publication now requires an explicit `Complete` authorization or typed future `SuccessfulSave` authorization carrying matching `PngWriteSucceededEvidence`; mouse release、Selection／Annotation mutation、Undo／Redo、render completion、Cancel and recovery have no publication path.
+- Routed Stage 7K Complete through the gate and removed direct `IClipboardDeliveryService` ownership from the Complete coordinator. The gate validates `Delivering` state、Session／Result identity、Selection／Annotation revisions、canonical result lifetime and positive output dimensions before forwarding the existing bounded retry policy with Clipboard History and roaming disabled.
+- Extended canonical `ImageResultMetadata` with required `SelectionRevision` and `AnnotationRevision`, and propagated the identity through base rendering、annotation-aware rendering、capture frames、crop／privacy results and deterministic fixtures. Successful Save UI、PNG writing、Downloads、progress and focus restoration remain unimplemented.
+- Locked restore succeeded; Release x64 solution build passed with `0` warnings／`0` errors; filtered non-interactive tests passed `244/244` with `0` failures／`0` skips; `git diff --check` passed. Limited formatting was run only on this slice's C# files and reported the existing LF→CRLF `ENDOFLINE` baseline plus unchanged legacy `WHITESPACE` diagnostics in `CaptureWorkflowCoordinator.cs`; no whole-file line-ending rewrite was kept.
+- No packaged MSIX／GUI runtime verification was run for this slice; packaged Complete／Clipboard behavior and future Save／PNG behavior remain `Pending`. No external GUI fixture、real desktop screenshot or Clipboard payload was used.
+
 ### Added — Stage 7K Final Render Capacity Revalidation and Annotation-aware Complete (2026-08-19)
 
 - Integrated `Editing → ResultReady → Delivering → Completed` for the existing Complete command. Empty Annotation Documents continue through the canonical base renderer; non-empty documents use the annotation-aware renderer for Rectangle、Arrow／Line、Highlighter、Text、Mosaic／Blur Privacy Region and Numbered Marker objects, then transfer the validated canonical image to the existing Clipboard delivery boundary.

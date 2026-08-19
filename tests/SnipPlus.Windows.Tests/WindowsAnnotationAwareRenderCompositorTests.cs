@@ -379,6 +379,8 @@ public sealed class WindowsAnnotationAwareRenderCompositorTests
         {
             ResultId = Guid.NewGuid(),
             SessionId = session.SessionId,
+            SelectionRevision = 0,
+            AnnotationRevision = AnnotationRevision.Initial,
             PixelWidth = width,
             PixelHeight = height,
             PixelFormat = ImagePixelFormat.Bgra8,
