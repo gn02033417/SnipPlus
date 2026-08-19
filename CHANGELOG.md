@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Added — Stage 7N Production Save Workflow／Same-result PNG → Clipboard (2026-08-19)
+
+- Integrated the Function Bar `Save` command into the production Core workflow: `Editing → ResultReady → Saving → Delivering → Completed → ResidentReady`. `Save` and `Complete` share one in-flight output gate, and the Windows overlay now wires the Save button to the existing command boundary.
+- Save snapshots and revalidates Session、coordinate、Selection／Annotation revisions、FrozenDisplayFrameSet and capacity, renders exactly one canonical `IImageResult`, then passes the same result／`ResultId` to `PngSaveCoordinator` and the matching `PngWriteSucceededEvidence`／`SuccessfulSave` Clipboard commitment.
+- Save dialog cancellation returns to `Editing` without output or feedback. Encode／write failures return to `Editing`; Clipboard failure after PNG success leaves the user-selected PNG in place and preserves the active Session／Selection／Annotation state for retry. A dedicated retained-file reference／feedback surface is not added, so `FR-050` remains `Partial`.
+- Added deterministic Core coverage for Save availability, one-render／same-result identity, picker cancellation, active annotation-draft blocking, the shared Save／Complete gate, and PNG-success／Clipboard-failure recovery. Full filtered non-interactive tests passed `260/260` with `0` failures／`0` skips.
+- Locked restore succeeded. Release x64 solution build passed with `0` warnings／`0` errors. `git diff --check` passed.
+- Limited formatting verification was run only on the modified C# files and reports the repository's existing LF→CRLF `ENDOFLINE` baseline; no non-`ENDOFLINE` diagnostics or line-ending rewrite was introduced.
+- No packaged／native Save As runtime verification was run; picker UI、PNG output、same-result Clipboard and retained-file behavior remain runtime `Pending`. No external GUI fixture、real desktop screenshot or Clipboard payload was used.
+
 ### Added — Stage 7M Windows Save As／PNG Persistence Foundation (2026-08-19)
 
 - Added platform-neutral `PngSaveRequest`／typed `PngSaveResult` contracts and the Core-owned `PngSaveRequestFactory`／`PngSaveCoordinator`. Core validates canonical image lifetime／identity and proposes the invariant `SnipPlus_yyyy-MM-dd_HHmmss.png` filename without opening a picker, writing a file, changing workflow state or publishing Clipboard.

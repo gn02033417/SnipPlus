@@ -14,6 +14,7 @@ public enum WorkflowState
     Starting,
     Capturing,
     ResultReady,
+    Saving,
     Delivering,
     Completed
 }

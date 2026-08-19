@@ -731,6 +731,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 [PrivacyRegionMode.Blur] = CreatePrivacyModeButton("Blur")
             };
             _buttons[FunctionBarCommand.Complete].Click += OnCompleteClicked;
+            _buttons[FunctionBarCommand.Save].Click += OnSaveClicked;
             _buttons[FunctionBarCommand.Cancel].Click += OnCancelClicked;
             _buttons[FunctionBarCommand.Undo].Click += OnUndoClicked;
             _buttons[FunctionBarCommand.Redo].Click += OnRedoClicked;
@@ -796,7 +797,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         public void Update(FunctionBarPresentationRequest request)
         {
             _request = request;
-            if (request.Availability.IsEnabled(FunctionBarCommand.Complete))
+            if (request.Availability.IsEnabled(FunctionBarCommand.Complete)
+                || request.Availability.IsEnabled(FunctionBarCommand.Save))
             {
                 _completeCommandGate.Reset();
             }
@@ -930,6 +932,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
             _disposed = true;
             _buttons[FunctionBarCommand.Complete].Click -= OnCompleteClicked;
+            _buttons[FunctionBarCommand.Save].Click -= OnSaveClicked;
             _buttons[FunctionBarCommand.Cancel].Click -= OnCancelClicked;
             _buttons[FunctionBarCommand.Undo].Click -= OnUndoClicked;
             _buttons[FunctionBarCommand.Redo].Click -= OnRedoClicked;
@@ -1259,6 +1262,48 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _completeCommandGate.Reset();
                 _buttons[FunctionBarCommand.Complete].IsEnabled =
                     _request.Availability.IsEnabled(FunctionBarCommand.Complete);
+            }
+        }
+
+        private void OnSaveClicked(object sender, RoutedEventArgs args)
+        {
+            if (!_completeCommandGate.TryBegin())
+            {
+                return;
+            }
+
+            var command = new FunctionBarCommandRequest(
+                _request.SessionId,
+                _request.CoordinateVersion,
+                _request.Selection.SelectionRevision,
+                _request.AnnotationRevision,
+                FunctionBarCommand.Save);
+            _buttons[FunctionBarCommand.Save].IsEnabled = false;
+
+            var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+            if (dispatcherQueue is null
+                || !dispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_disposed)
+                    {
+                        return;
+                    }
+
+                    var result = _request.CommandSink.Execute(command);
+                    if (result.Kind != FunctionBarCommandResultKind.Accepted)
+                    {
+                        _completeCommandGate.Reset();
+                        if (!_disposed)
+                        {
+                            _buttons[FunctionBarCommand.Save].IsEnabled =
+                                _request.Availability.IsEnabled(FunctionBarCommand.Save);
+                        }
+                    }
+                }))
+            {
+                _completeCommandGate.Reset();
+                _buttons[FunctionBarCommand.Save].IsEnabled =
+                    _request.Availability.IsEnabled(FunctionBarCommand.Save);
             }
         }
 

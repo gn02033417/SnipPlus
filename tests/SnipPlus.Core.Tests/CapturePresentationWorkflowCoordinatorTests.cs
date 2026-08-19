@@ -226,6 +226,280 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
 
     [TestMethod]
     [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public async Task SaveRendersOnceAndPublishesTheSameResultToPngAndClipboard()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer();
+        var pngService = new FakePngSavePlatformService();
+        var clipboard = new FakeClipboardDelivery();
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard,
+            pngSaveCoordinator: new PngSaveCoordinator(pngService));
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        var locked = LockSelection(overlay.InputSink!, ready.Session);
+        Assert.IsTrue(functionBar.LastRequest!.Availability.CanSave);
+        var save = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            locked.State.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Save));
+
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, save.Kind);
+        await WaitForStateAsync(authority, WorkflowState.ResidentReady);
+
+        Assert.AreEqual(1, renderer.Calls);
+        Assert.AreEqual(1, pngService.Calls);
+        Assert.AreEqual(1, clipboard.Calls);
+        Assert.AreSame(pngService.LastRequest!.ImageResult, clipboard.LastRequest!.ImageResult);
+        Assert.AreEqual(
+            pngService.LastRequest.ImageResult.Metadata.ResultId,
+            clipboard.LastRequest.ResultId);
+        Assert.IsTrue(pngService.LastRequest.ImageResult.IsDisposed);
+        Assert.IsTrue(ready.Session.IsDisposed);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Cancellation")]
+    public async Task SaveDialogCancellationReturnsToEditingWithoutClipboardOrFeedback()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer();
+        var pngService = new FakePngSavePlatformService
+        {
+            ResultFactory = saved => new PngSaveResult.SaveDialogCancelled(
+                saved.SessionId,
+                saved.ResultId,
+                "UserCancelledSaveDialog")
+        };
+        var clipboard = new FakeClipboardDelivery();
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard,
+            pngSaveCoordinator: new PngSaveCoordinator(pngService));
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        var locked = LockSelection(overlay.InputSink!, ready.Session);
+        var save = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            locked.State.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Save));
+
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, save.Kind);
+        await WaitForStateAsync(authority, WorkflowState.Editing);
+
+        Assert.AreEqual(1, pngService.Calls);
+        Assert.AreEqual(0, clipboard.Calls);
+        Assert.IsFalse(ready.Session.IsDisposed);
+        Assert.IsNotNull(workflow.CurrentSelection);
+        Assert.AreEqual(0, functionBar.FeedbackCalls);
+
+        await workflow.CancelCurrentAsync("test");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task SaveIsDisabledWhileAnAnnotationDraftIsActive()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer();
+        var pngService = new FakePngSavePlatformService();
+        var clipboard = new FakeClipboardDelivery();
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard,
+            pngSaveCoordinator: new PngSaveCoordinator(pngService));
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        LockSelection(overlay.InputSink!, ready.Session);
+        var selection = workflow.CurrentSelection!;
+        Assert.AreEqual(
+            EditingToolSelectionResultKind.Selected,
+            workflow.SelectTool(new EditingToolSelectionRequest(
+                ready.Session.SessionId,
+                ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+                selection.SelectionRevision,
+                workflow.CurrentAnnotationRevision,
+                EditingToolKind.Rectangle)).Kind);
+
+        var draft = new RectanglePointerEvent(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            selection.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            7,
+            new PhysicalPoint(-2, 1));
+        Assert.AreEqual(RectanglePointerResultKind.DraftStarted, workflow.PointerPressed(draft).Kind);
+        Assert.IsFalse(functionBar.LastRequest!.Availability.CanSave);
+
+        var disabled = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            selection.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Save));
+        Assert.AreEqual(FunctionBarCommandResultKind.Disabled, disabled.Kind);
+        Assert.AreEqual(0, pngService.Calls);
+
+        await workflow.CancelCurrentAsync("test");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Cancellation")]
+    public async Task SaveAndCompleteShareOneOutputGate()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer();
+        var pngService = new FakePngSavePlatformService
+        {
+            Pending = new TaskCompletionSource<PngSaveResult>(
+                TaskCreationOptions.RunContinuationsAsynchronously)
+        };
+        var clipboard = new FakeClipboardDelivery();
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard,
+            pngSaveCoordinator: new PngSaveCoordinator(pngService));
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        var locked = LockSelection(overlay.InputSink!, ready.Session);
+        var command = new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            locked.State.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Save);
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, workflow.Execute(command).Kind);
+        await WaitForStateAsync(authority, WorkflowState.Saving);
+        Assert.IsNotNull(pngService.LastRequest);
+
+        var complete = workflow.Execute(command with { Command = FunctionBarCommand.Complete });
+        Assert.AreEqual(FunctionBarCommandResultKind.Busy, complete.Kind);
+
+        var saved = pngService.LastRequest!;
+        pngService.Pending!.TrySetResult(new PngSaveResult.Saved(
+            saved.SessionId,
+            saved.ResultId,
+            "SnipPlus.png",
+            new PngWriteSucceededEvidence
+            {
+                SessionId = saved.SessionId,
+                ResultId = saved.ResultId
+            }));
+        await WaitForStateAsync(authority, WorkflowState.ResidentReady);
+        Assert.AreEqual(1, renderer.Calls);
+        Assert.AreEqual(1, clipboard.Calls);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("FailureClassification")]
+    public async Task ClipboardFailureAfterPngSuccessReturnsToEditingAndKeepsPngDestination()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer();
+        var pngService = new FakePngSavePlatformService();
+        var clipboard = new FakeClipboardDelivery
+        {
+            Failure = Failure.Create(
+                FailureCode.ClipboardBusy,
+                FailureCategory.Contention,
+                FailureRecoverability.RetrySameIntent,
+                "test-clipboard",
+                request.RequestId,
+                "synthetic Clipboard busy")
+        };
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard,
+            pngSaveCoordinator: new PngSaveCoordinator(pngService));
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        var locked = LockSelection(overlay.InputSink!, ready.Session);
+        var save = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            locked.State.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Save));
+
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, save.Kind);
+        await WaitForStateAsync(authority, WorkflowState.Editing);
+
+        Assert.AreEqual(1, pngService.Calls);
+        Assert.AreEqual("SnipPlus.png", pngService.LastResult!.DestinationIdentifier);
+        Assert.AreEqual(1, clipboard.Calls);
+        Assert.IsFalse(ready.Session.IsDisposed);
+        Assert.IsNotNull(workflow.CurrentSelection);
+        Assert.IsTrue(pngService.LastRequest!.ImageResult.IsDisposed);
+
+        await workflow.CancelCurrentAsync("test");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
     [TestCategory("Rendering")]
     public async Task NonEmptyAnnotationDocumentUsesAnnotationAwareRendererAndClipboard()
     {
@@ -947,7 +1221,8 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         IClipboardDeliveryService? clipboardDelivery = null,
         ICompleteExecutionTraceSink? traceSink = null,
         IAnnotationAwareRenderAdapter? annotationAwareRenderer = null,
-        SupportedCapacityPolicy? capacityPolicy = null)
+        SupportedCapacityPolicy? capacityPolicy = null,
+        PngSaveCoordinator? pngSaveCoordinator = null)
     {
         var freezing = new CaptureFreezingCoordinator(
             requests,
@@ -965,7 +1240,8 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
                 : new OutputCommitmentCoordinator(clipboardDelivery),
             traceSink: traceSink,
             annotationAwareRenderer: annotationAwareRenderer,
-            capacityPolicy: capacityPolicy);
+            capacityPolicy: capacityPolicy,
+            pngSaveCoordinator: pngSaveCoordinator);
     }
 
     private static async Task WaitForStateAsync(
@@ -1209,6 +1485,44 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
                     request.SessionId,
                     request.ResultId,
                     1));
+        }
+    }
+
+    private sealed class FakePngSavePlatformService : IPngSavePlatformService
+    {
+        public int Calls { get; private set; }
+
+        public PngSaveRequest? LastRequest { get; private set; }
+
+        public PngSaveResult.Saved? LastResult { get; private set; }
+
+        public Func<PngSaveRequest, PngSaveResult>? ResultFactory { get; init; }
+
+        public TaskCompletionSource<PngSaveResult>? Pending { get; init; }
+
+        public ValueTask<PngSaveResult> SaveAsync(
+            PngSaveRequest request,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            LastRequest = request;
+            if (Pending is not null)
+            {
+                return new ValueTask<PngSaveResult>(Pending.Task);
+            }
+
+            var result = ResultFactory?.Invoke(request)
+                ?? new PngSaveResult.Saved(
+                    request.SessionId,
+                    request.ResultId,
+                    "SnipPlus.png",
+                    new PngWriteSucceededEvidence
+                    {
+                        SessionId = request.SessionId,
+                        ResultId = request.ResultId
+                    });
+            LastResult = result as PngSaveResult.Saved;
+            return ValueTask.FromResult(result);
         }
     }
 

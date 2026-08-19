@@ -59,10 +59,10 @@ Work in order. Do not begin a later item while an earlier prerequisite is unreso
 - [x] Implement function-bar Annotation-only Undo／Redo; Stage 7I Contracts／Core／Workflow／Windows deterministic evidence is complete, while packaged runtime and later annotation-aware final rendering remain incomplete.
 - [x] Anchor committed annotations to Frozen Virtual Desktop coordinates and clip the annotation-aware compositor output to current Selection; Stage 7K now consumes the immutable document snapshot through the explicit Complete／Clipboard boundary, while packaged runtime remains pending.
 - [x] Implement final render with final topology／Selection capacity revalidation, Session／coordinate／FrozenDisplayFrameSet identity checks and canonical result validation; typed stale／capacity／render failures retain Editing without output, while packaged runtime remains pending.
-- [x] Place Clipboard publication only behind explicit Complete or successful Save. Stage 7L adds the Core-owned output commitment gate and typed future Save authorization; Save UI、PNG writing and Save As remain incomplete.
-- [ ] Implement Windows Save As、PNG-only output、Downloads initial folder and timestamp proposal. Stage 7M adds the reusable Core／Windows picker and persistence foundation; production Save command／runtime acceptance remains incomplete.
-- [ ] Allow the user to change destination and filename.
-- [ ] Ensure Save writes the same rendered result to PNG and Clipboard.
+- [x] Place Clipboard publication only behind explicit Complete or successful Save. Stage 7L adds the Core-owned output commitment gate and Stage 7N invokes the typed Successful Save authorization only after matching PNG evidence.
+- [x] Implement Windows Save As、PNG-only output、Downloads initial folder and timestamp proposal. Stage 7M provides the reusable picker／persistence foundation and Stage 7N integrates the production Save command; packaged/native runtime acceptance remains incomplete.
+- [x] Allow the user to change destination and filename through the existing Save As picker boundary; deterministic coverage uses an injectable picker result.
+- [x] Ensure Save writes the same rendered result to PNG and Clipboard. Stage 7N renders once and preserves the same image／`ResultId` through PNG evidence and Clipboard publication.
 - [ ] Retain PNG and return to Editing when Clipboard fails after PNG success.
 - [ ] Preserve Editing state after recoverable failure.
 - [ ] Reject stale Session／Selection／Annotation／output outcomes.

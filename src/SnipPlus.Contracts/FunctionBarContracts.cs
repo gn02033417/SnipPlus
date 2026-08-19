@@ -37,6 +37,20 @@ public readonly record struct FunctionBarCommandAvailability(
         CanUndo: false,
         CanRedo: false);
 
+    public static FunctionBarCommandAvailability Stage7N => new(
+        CanComplete: true,
+        CanSave: true,
+        CanCancel: true,
+        CanUndo: false,
+        CanRedo: false);
+
+    public static FunctionBarCommandAvailability Stage7NExecuting => new(
+        CanComplete: false,
+        CanSave: false,
+        CanCancel: false,
+        CanUndo: false,
+        CanRedo: false);
+
     public bool IsEnabled(FunctionBarCommand command) => command switch
     {
         FunctionBarCommand.Complete => CanComplete,

@@ -71,6 +71,10 @@ public sealed class WorkflowStateAuthority
         WorkflowState.Editing => to is WorkflowState.ResultReady
             or WorkflowState.Cancelled,
         WorkflowState.ResultReady => to is WorkflowState.Delivering
+            or WorkflowState.Saving
+            or WorkflowState.Editing
+            or WorkflowState.Cancelled,
+        WorkflowState.Saving => to is WorkflowState.Delivering
             or WorkflowState.Editing
             or WorkflowState.Cancelled,
         WorkflowState.Delivering => to is WorkflowState.Completed
