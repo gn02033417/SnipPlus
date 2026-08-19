@@ -9,7 +9,8 @@ public sealed class WindowsCapturePlatformResources : IDisposable
 {
     public WindowsCapturePlatformResources(
         IFunctionBarPlacementService functionBarPlacementService,
-        DispatcherQueue? dispatcherQueue = null)
+        DispatcherQueue? dispatcherQueue = null,
+        nint ownerWindowHandle = 0)
     {
         ArgumentNullException.ThrowIfNull(functionBarPlacementService);
         CanvasDevice = CanvasDevice.GetSharedDevice();
@@ -29,6 +30,7 @@ public sealed class WindowsCapturePlatformResources : IDisposable
             traceSink: CompleteExecutionTrace,
             dispatcher: clipboardDispatcher,
             runtimeInitializer: WindowsClipboardRuntimeInitializer.Instance);
+        PngSave = new WindowsPngSaveService(ownerWindowHandle);
     }
 
     public CanvasDevice CanvasDevice { get; }
@@ -46,6 +48,8 @@ public sealed class WindowsCapturePlatformResources : IDisposable
     public WindowsAnnotationAwareRenderCompositor AnnotationAwareRenderer { get; }
 
     public WinRtClipboardDeliveryAdapter ClipboardDelivery { get; }
+
+    public WindowsPngSaveService PngSave { get; }
 
     public WindowsCompleteExecutionTraceSink CompleteExecutionTrace { get; }
 

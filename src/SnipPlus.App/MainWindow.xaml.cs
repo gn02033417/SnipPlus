@@ -15,6 +15,7 @@ public partial class MainWindow : Window, IDisposable
     private readonly CaptureRequestApplicationBoundary _captureRequestApplicationBoundary;
     private readonly ResidentLifecycleCoordinator _residentLifecycle;
     private readonly WindowsCapturePlatformResources _platformResources;
+    private readonly PngSaveCoordinator _pngSaveCoordinator;
     private readonly CapturePresentationWorkflowCoordinator _capturePresentation;
     private readonly ResidentActivationBoundary _residentActivation;
     private readonly ISettingsLauncher _settingsLauncher;
@@ -39,7 +40,9 @@ public partial class MainWindow : Window, IDisposable
             new CaptureRequestApplicationBoundary(_captureRequestCoordinator);
         _platformResources = new WindowsCapturePlatformResources(
             new FunctionBarPlacementService(),
-            DispatcherQueue.GetForCurrentThread());
+            DispatcherQueue.GetForCurrentThread(),
+            WindowNative.GetWindowHandle(this));
+        _pngSaveCoordinator = new PngSaveCoordinator(_platformResources.PngSave);
         var freezingCoordinator = new CaptureFreezingCoordinator(
             _captureRequestCoordinator,
             _platformResources.TopologyProvider,
@@ -151,6 +154,8 @@ public partial class MainWindow : Window, IDisposable
     {
         _ = _residentActivation.HandleActivation();
     }
+
+    internal PngSaveCoordinator PngSaveCoordinator => _pngSaveCoordinator;
 
     private void ShowMainWindow()
     {

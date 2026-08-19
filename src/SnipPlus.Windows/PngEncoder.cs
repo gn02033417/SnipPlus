@@ -6,6 +6,21 @@ namespace SnipPlus.Windows;
 
 public static class PngEncoder
 {
+    public static ValueTask<InMemoryRandomAccessStream> EncodeAsync(
+        IImageResult imageResult,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(imageResult);
+        if (imageResult is not SoftwareBitmapImageResult softwareBitmapImageResult)
+        {
+            throw new ArgumentException(
+                "PNG encoding requires the canonical SoftwareBitmap image result.",
+                nameof(imageResult));
+        }
+
+        return EncodeAsync(softwareBitmapImageResult, cancellationToken);
+    }
+
     public static async ValueTask<InMemoryRandomAccessStream> EncodeAsync(
         SoftwareBitmapImageResult imageResult,
         CancellationToken cancellationToken)

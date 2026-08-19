@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Added — Stage 7M Windows Save As／PNG Persistence Foundation (2026-08-19)
+
+- Added platform-neutral `PngSaveRequest`／typed `PngSaveResult` contracts and the Core-owned `PngSaveRequestFactory`／`PngSaveCoordinator`. Core validates canonical image lifetime／identity and proposes the invariant `SnipPlus_yyyy-MM-dd_HHmmss.png` filename without opening a picker, writing a file, changing workflow state or publishing Clipboard.
+- Added the Windows `FileSavePicker` foundation with `PickerLocationId.Downloads`, PNG-only file type／default extension, `WindowsPngSaveTarget` stream ownership and exact canonical `IImageResult → PngEncoder → full write／flush` flow. Successful persistence emits matching `PngWriteSucceededEvidence`; picker cancellation, encoding failure, write failure and cancellation remain distinct typed outcomes.
+- Wired the Windows Save As platform service into `WindowsCapturePlatformResources` without enabling Function Bar Save or invoking `SuccessfulSave`, `IOutputCommitmentCoordinator`, Clipboard publication, Editing integration, progress or focus restoration. Save remains disabled pending the later production workflow slice.
+- Added deterministic Contracts／Core／Windows tests for timestamp／identity policy, validation, picker cancellation, encoder／write failure, non-PNG rejection, stream cleanup, exact synthetic bytes and matching write evidence. Tests use synthetic data and temporary files only; no real Downloads, desktop screenshot or Clipboard payload was used.
+- Locked restore succeeded; Release x64 solution build passed with `0` warnings／`0` errors; filtered non-interactive tests passed `255/255` with `0` failures／`0` skips. Limited formatting verification reports only the repository's existing LF→CRLF／CHARSET baseline across the modified C# scope; no additional style diagnostic was introduced. `git diff --check` passed.
+- No packaged／native Save As GUI runtime verification was run. Function Bar Save, Save→Clipboard, retained PNG after later Clipboard failure, Editing integration, progress, focus restoration and packaged Save As behavior remain `Pending`.
+
 ### Changed — Stage 7L Explicit Output Commitment／Clipboard Publication Gate (2026-08-19)
 
 - Added the Core-owned `OutputCommitmentCoordinator` and platform-neutral `OutputCommitmentAuthorization` boundary. Clipboard publication now requires an explicit `Complete` authorization or typed future `SuccessfulSave` authorization carrying matching `PngWriteSucceededEvidence`; mouse release、Selection／Annotation mutation、Undo／Redo、render completion、Cancel and recovery have no publication path.
