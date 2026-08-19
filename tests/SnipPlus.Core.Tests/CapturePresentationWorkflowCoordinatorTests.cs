@@ -227,7 +227,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Rendering")]
-    public async Task NonEmptyAnnotationDocumentBlocksBaseCompleteAndRetainsEditing()
+    public async Task NonEmptyAnnotationDocumentUsesAnnotationAwareRendererAndClipboard()
     {
         var authority = new WorkflowStateAuthority();
         using var requests = new CaptureRequestCoordinator(authority);
@@ -237,6 +237,7 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         var overlay = new FakeOverlayCoordinator();
         var functionBar = new FakeFunctionBarPresentationCoordinator();
         var renderer = new FakeFinalRenderer();
+        var annotationRenderer = new FakeAnnotationAwareRenderer();
         var clipboard = new FakeClipboardDelivery();
         var trace = new FakeCompleteExecutionTraceSink();
         using var workflow = CreateWorkflow(
@@ -246,7 +247,8 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             functionBar,
             renderer,
             clipboard,
-            trace);
+            trace,
+            annotationRenderer);
 
         var ready = (CapturePresentationOutcome.SelectingReady)
             await workflow.StartAsync(request, CancellationToken.None);
@@ -268,22 +270,145 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             workflow.CurrentAnnotationRevision,
             FunctionBarCommand.Complete));
 
-        Assert.AreEqual(FunctionBarCommandResultKind.AnnotationOutputNotSupported, accepted.Kind);
-        await Task.Yield();
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, accepted.Kind);
+        await WaitForAsync(() => authority.CurrentState is WorkflowState.ResidentReady or WorkflowState.Editing);
+        Assert.AreEqual(
+            WorkflowState.ResidentReady,
+            authority.CurrentState,
+            string.Join(
+                " | ",
+                trace.Entries.Select(entry =>
+                    $"{entry.CompleteStage}:{entry.FailureCode}:{entry.Component}")));
+        Assert.AreEqual(0, renderer.Calls);
+        Assert.AreEqual(1, annotationRenderer.Calls);
+        Assert.AreEqual(1, clipboard.Calls);
+        Assert.AreSame(annotationRenderer.LastImageResult, clipboard.LastRequest!.ImageResult);
+        Assert.AreSame(retainedDocument, annotationRenderer.LastRequest!.AnnotationDocument);
+        Assert.AreEqual(retainedDocument.Revision, annotationRenderer.LastRequest.AnnotationRevision);
+        Assert.AreEqual(1, overlay.CloseCalls);
+        Assert.IsTrue(ready.Session.IsDisposed);
+        Assert.IsNull(workflow.CurrentAnnotationDocument);
+        Assert.IsTrue(annotationRenderer.LastImageResult!.IsDisposed);
+        Assert.IsTrue(trace.Entries.Any(entry =>
+            entry.CompleteStage == CompleteExecutionStage.Rendering
+            && entry.Component == nameof(IAnnotationAwareRenderAdapter)));
+        Assert.IsTrue(trace.Entries.Any(entry =>
+            entry.CompleteStage == CompleteExecutionStage.ClipboardDelivered));
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Rendering")]
+    public async Task AnnotationAwareRenderFailureRetainsEditingAndDoesNotDeliverClipboard()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer();
+        var annotationRenderer = new FakeAnnotationAwareRenderer();
+        var clipboard = new FakeClipboardDelivery();
+        var trace = new FakeCompleteExecutionTraceSink();
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard,
+            trace,
+            annotationRenderer);
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        LockSelection(overlay.InputSink!, ready.Session);
+        var retainedObject = new AnnotationObject(
+            AnnotationObjectId.New(),
+            ready.Session.SessionId,
+            AnnotationToolKind.Rectangle,
+            new PhysicalRect(-2, 1, 2, 4),
+            0);
+        _ = workflow.AddAnnotationObject(new AddAnnotationObjectRequest(
+            ready.Session.SessionId,
+            workflow.CurrentAnnotationDocument!.Revision,
+            retainedObject));
+        annotationRenderer.Outcome = new AnnotationAwareRenderOutcome.RenderCapacityExceeded(
+            ready.Session.SessionId,
+            "synthetic final capacity failure");
+
+        var accepted = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            workflow.CurrentSelection!.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Complete));
+
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, accepted.Kind);
+        await WaitForAsync(() =>
+            annotationRenderer.Calls == 1
+            && trace.Entries.Any(entry => entry.CompleteStage == CompleteExecutionStage.RenderFailed));
+        Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
+        Assert.AreEqual(1, annotationRenderer.Calls);
+        Assert.AreEqual(0, renderer.Calls);
+        Assert.AreEqual(0, clipboard.Calls);
+        Assert.IsFalse(ready.Session.IsDisposed);
+        Assert.AreEqual(retainedObject.ObjectId, workflow.CurrentAnnotationDocument!.Objects.Single().ObjectId);
+        Assert.IsTrue(trace.Entries.Any(entry =>
+            entry.CompleteStage == CompleteExecutionStage.RenderFailed
+            && entry.FailureCode == FailureCode.UnsupportedCapacity));
+        await workflow.CancelCurrentAsync("test");
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Rendering")]
+    public async Task FinalCapacityRevalidationBlocksOutputBeforeBaseRenderer()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator();
+        var renderer = new FakeFinalRenderer();
+        var clipboard = new FakeClipboardDelivery();
+        var trace = new FakeCompleteExecutionTraceSink();
+        var strictPolicy = new SupportedCapacityPolicy { MaximumSelectionWidth = 2 };
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            renderer,
+            clipboard,
+            trace,
+            capacityPolicy: strictPolicy);
+
+        var ready = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        LockSelection(overlay.InputSink!, ready.Session);
+
+        var accepted = workflow.Execute(new FunctionBarCommandRequest(
+            ready.Session.SessionId,
+            ready.Session.VirtualDesktopSnapshot.CoordinateVersion,
+            workflow.CurrentSelection!.SelectionRevision,
+            workflow.CurrentAnnotationRevision,
+            FunctionBarCommand.Complete));
+
+        Assert.AreEqual(FunctionBarCommandResultKind.Accepted, accepted.Kind);
+        await WaitForAsync(() =>
+            trace.Entries.Any(entry => entry.CompleteStage == CompleteExecutionStage.RenderFailed));
         Assert.AreEqual(WorkflowState.Editing, authority.CurrentState);
         Assert.AreEqual(0, renderer.Calls);
         Assert.AreEqual(0, clipboard.Calls);
-        Assert.AreEqual(0, overlay.CloseCalls);
         Assert.IsFalse(ready.Session.IsDisposed);
-        Assert.IsNotNull(workflow.CurrentAnnotationDocument);
-        Assert.AreEqual(retainedDocument.Revision, workflow.CurrentAnnotationDocument!.Revision);
-        Assert.AreEqual(retainedObject.ObjectId, workflow.CurrentAnnotationDocument.Objects.Single().ObjectId);
-        Assert.AreEqual(1, functionBar.FeedbackCalls);
-        Assert.AreEqual(
-            "Annotations are retained; Complete output is not available in this slice.",
-            functionBar.LastFeedback);
-        Assert.AreEqual(FunctionBarCommandAvailability.Stage6C, functionBar.LastRequest!.Availability);
-        Assert.IsFalse(trace.Entries.Any(entry => entry.CompleteStage == CompleteExecutionStage.Rendering));
+        Assert.IsTrue(trace.Entries.Any(entry =>
+            entry.CompleteStage == CompleteExecutionStage.RenderFailed
+            && entry.FailureCode == FailureCode.UnsupportedCapacity));
         await workflow.CancelCurrentAsync("test");
     }
 
@@ -820,12 +945,15 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         IFunctionBarPresentationCoordinator? functionBar = null,
         IFrozenDisplayFrameSetRenderer? finalRenderer = null,
         IClipboardDeliveryService? clipboardDelivery = null,
-        ICompleteExecutionTraceSink? traceSink = null)
+        ICompleteExecutionTraceSink? traceSink = null,
+        IAnnotationAwareRenderAdapter? annotationAwareRenderer = null,
+        SupportedCapacityPolicy? capacityPolicy = null)
     {
         var freezing = new CaptureFreezingCoordinator(
             requests,
             new FixedTopologyProvider(CreateSnapshot()),
-            provider);
+            provider,
+            capacityPolicy: capacityPolicy);
         return new CapturePresentationWorkflowCoordinator(
             freezing,
             overlay,
@@ -833,7 +961,9 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             functionBarPresentation: functionBar,
             finalRenderer: finalRenderer,
             clipboardDelivery: clipboardDelivery,
-            traceSink: traceSink);
+            traceSink: traceSink,
+            annotationAwareRenderer: annotationAwareRenderer,
+            capacityPolicy: capacityPolicy);
     }
 
     private static async Task WaitForStateAsync(
@@ -995,6 +1125,48 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
                 cropBounds: selectionPhysicalBounds);
             return ValueTask.FromResult<FrozenDisplayFrameSetRenderOutcome>(
                 new FrozenDisplayFrameSetRenderOutcome.Succeeded(LastImageResult));
+        }
+    }
+
+    private sealed class FakeAnnotationAwareRenderer : IAnnotationAwareRenderAdapter
+    {
+        public int Calls { get; private set; }
+
+        public AnnotationAwareRenderRequest? LastRequest { get; private set; }
+
+        public TestImageResult? LastImageResult { get; private set; }
+
+        public AnnotationAwareRenderOutcome? Outcome { get; set; }
+
+        public ValueTask<AnnotationAwareRenderOutcome> RenderAsync(
+            AnnotationAwareRenderRequest request,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            LastRequest = request;
+            if (Outcome is not null)
+            {
+                return ValueTask.FromResult(Outcome);
+            }
+
+            var resultId = Guid.NewGuid();
+            LastImageResult = new TestImageResult(
+                resultId,
+                request.SessionId,
+                request.SelectionPhysicalBounds.Width,
+                request.SelectionPhysicalBounds.Height,
+                request.SelectionPhysicalBounds,
+                request.SelectionPhysicalBounds);
+            var result = new AnnotationAwareRenderResult(
+                resultId,
+                request.SessionId,
+                request.SelectionRevision,
+                request.AnnotationRevision,
+                LastImageResult,
+                request.AnnotationDocument.Objects.Count,
+                0);
+            return ValueTask.FromResult<AnnotationAwareRenderOutcome>(
+                new AnnotationAwareRenderOutcome.Succeeded(result));
         }
     }
 

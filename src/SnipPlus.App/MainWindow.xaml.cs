@@ -53,7 +53,8 @@ public partial class MainWindow : Window, IDisposable
             _platformResources.FinalRenderer,
             _platformResources.ClipboardDelivery,
             message => SetStatus(message),
-            _platformResources.CompleteExecutionTrace);
+            _platformResources.CompleteExecutionTrace,
+            annotationAwareRenderer: _platformResources.AnnotationAwareRenderer);
         _residentActivation = new ResidentActivationBoundary(
             isApplicationExiting: () => Volatile.Read(ref _shutdownStarted) != 0
                 || Program.IsApplicationExitStarted,

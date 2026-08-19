@@ -33,6 +33,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private readonly ICaptureAccessPreflight? _captureAccessPreflight;
     private readonly IFunctionBarPresentationCoordinator? _functionBarPresentation;
     private readonly IFrozenDisplayFrameSetRenderer? _finalRenderer;
+    private readonly IAnnotationAwareRenderAdapter? _annotationAwareRenderer;
     private readonly IClipboardDeliveryService? _clipboardDelivery;
     private readonly Action<string>? _feedback;
     private readonly ICompleteExecutionTraceSink _trace;
@@ -40,6 +41,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
     private readonly AnnotationHistoryCoordinator _annotationHistory;
     private readonly AnnotationEditingCoordinator _annotationEditing;
     private readonly AnnotationObjectEditCoordinator _annotationObjectEditing;
+    private readonly SupportedCapacityPolicy _capacityPolicy;
     private CaptureSessionContext? _activeSession;
     private InitialSelectionCoordinator? _selectionCoordinator;
     private CancellationTokenSource? _sessionCancellation;
@@ -58,7 +60,9 @@ public sealed class CapturePresentationWorkflowCoordinator :
         IClipboardDeliveryService? clipboardDelivery = null,
         Action<string>? feedback = null,
         ICompleteExecutionTraceSink? traceSink = null,
-        AnnotationDocumentCoordinator? annotationDocuments = null)
+        AnnotationDocumentCoordinator? annotationDocuments = null,
+        IAnnotationAwareRenderAdapter? annotationAwareRenderer = null,
+        SupportedCapacityPolicy? capacityPolicy = null)
     {
         _freezingCoordinator = freezingCoordinator
             ?? throw new ArgumentNullException(nameof(freezingCoordinator));
@@ -69,10 +73,12 @@ public sealed class CapturePresentationWorkflowCoordinator :
         _captureAccessPreflight = captureAccessPreflight;
         _functionBarPresentation = functionBarPresentation;
         _finalRenderer = finalRenderer;
+        _annotationAwareRenderer = annotationAwareRenderer;
         _clipboardDelivery = clipboardDelivery;
         _feedback = feedback;
         _trace = traceSink ?? NoOpCompleteExecutionTraceSink.Instance;
         _annotationDocuments = annotationDocuments ?? new AnnotationDocumentCoordinator();
+        _capacityPolicy = capacityPolicy ?? new SupportedCapacityPolicy();
         _annotationHistory = new AnnotationHistoryCoordinator(_annotationDocuments);
         _annotationEditing = new AnnotationEditingCoordinator(
             _annotationDocuments,
@@ -1006,28 +1012,12 @@ public sealed class CapturePresentationWorkflowCoordinator :
             return ToFunctionBarCommandResult(historyResult);
         }
 
-        var annotationDocument = _annotationDocuments.Current;
-        if (annotationDocument is not null && annotationDocument.Objects.Count > 0)
-        {
-            var failure = CreateFailure(
-                request.SessionId,
-                FailureCode.AnnotationOutputNotSupported,
-                "Complete does not render non-empty Annotation Documents in this slice.");
-            _functionBarPresentation?.ShowFeedback(
-                session.SessionId,
-                session.VirtualDesktopSnapshot.CoordinateVersion,
-                currentSelection.SelectionRevision,
-                "Annotations are retained; Complete output is not available in this slice.");
-            return new FunctionBarCommandResult(
-                request.Command,
-                FunctionBarCommandResultKind.AnnotationOutputNotSupported,
-                _stateAuthority.CurrentState,
-                currentSelection.SelectionRevision,
-                failure,
-                "Annotations are retained; Complete output is not available in this slice.");
-        }
+        var annotationDocument = _annotationDocuments.Current
+            ?? AnnotationDocument.CreateEmpty(session.SessionId);
+        var hasAnnotations = annotationDocument.Objects.Count > 0;
 
-        if (_finalRenderer is null
+        if ((!hasAnnotations && _finalRenderer is null)
+            || (hasAnnotations && _annotationAwareRenderer is null)
             || _clipboardDelivery is null
             || currentSelection.Status != SelectionStatus.Locked
             || currentSelection.InteractionMode != SelectionInteractionMode.Locked
@@ -1097,7 +1087,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 "The Function Bar could not enter the Complete state.");
         }
 
-        Observe(CompleteAsync(session, currentSelection));
+        Observe(CompleteAsync(session, currentSelection, annotationDocument));
         return new FunctionBarCommandResult(
             request.Command,
             FunctionBarCommandResultKind.Accepted,
@@ -1747,7 +1737,8 @@ public sealed class CapturePresentationWorkflowCoordinator :
 
     private async ValueTask CompleteAsync(
         CaptureSessionContext session,
-        SelectionVisualState selection)
+        SelectionVisualState selection,
+        AnnotationDocument annotationDocument)
     {
         IImageResult? result = null;
         try
@@ -1759,6 +1750,44 @@ public sealed class CapturePresentationWorkflowCoordinator :
 
             var bounds = selection.NormalizedPhysicalBounds!.Value;
             var frameSet = session.FrozenDisplayFrames;
+            var topologyCapacity = _capacityPolicy.ValidateTopology(
+                session.VirtualDesktopSnapshot);
+            var selectionCapacity = _capacityPolicy.ValidateSelection(bounds);
+            if (!topologyCapacity.IsSupported || !selectionCapacity.IsSupported)
+            {
+                var capacityFailure = CreateFailure(
+                    session.SessionId,
+                    FailureCode.UnsupportedCapacity,
+                    !topologyCapacity.IsSupported
+                        ? topologyCapacity.UserMessage
+                        : selectionCapacity.UserMessage);
+                TraceStage(
+                    CompleteExecutionStage.RenderFailed,
+                    session,
+                    selection,
+                    capacityFailure,
+                    component: nameof(SupportedCapacityPolicy));
+                ReturnToEditing(session, capacityFailure);
+                return;
+            }
+
+            if (annotationDocument.SessionId != session.SessionId
+                || annotationDocument.Revision != CurrentAnnotationRevision)
+            {
+                var annotationFailure = CreateFailure(
+                    session.SessionId,
+                    FailureCode.StaleAnnotationRevision,
+                    "The Annotation Document changed before Complete rendering started.");
+                TraceStage(
+                    CompleteExecutionStage.RenderFailed,
+                    session,
+                    selection,
+                    annotationFailure,
+                    component: nameof(AnnotationDocumentCoordinator));
+                ReturnToEditing(session, annotationFailure);
+                return;
+            }
+
             if (frameSet is null
                 || frameSet.IsDisposed
                 || frameSet.SessionId != session.SessionId
@@ -1812,65 +1841,149 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 return;
             }
 
+            var renderComponent = annotationDocument.Objects.Count > 0
+                ? nameof(IAnnotationAwareRenderAdapter)
+                : nameof(IFrozenDisplayFrameSetRenderer);
             TraceStage(
                 CompleteExecutionStage.Rendering,
                 session,
                 selection,
-                component: nameof(IFrozenDisplayFrameSetRenderer));
-            var rendered = await _finalRenderer!
-                .RenderAsync(frameSet, bounds, session.Cancellation)
-                .ConfigureAwait(true);
-            if (rendered is FrozenDisplayFrameSetRenderOutcome.Cancelled cancelled)
+                component: renderComponent);
+
+            if (annotationDocument.Objects.Count > 0)
             {
-                var failure = CreateFailure(
+                var annotated = await _annotationAwareRenderer!
+                    .RenderAsync(
+                        new AnnotationAwareRenderRequest
+                        {
+                            SessionId = session.SessionId,
+                            CoordinateVersion = session.VirtualDesktopSnapshot.CoordinateVersion,
+                            SelectionRevision = selection.SelectionRevision,
+                            AnnotationRevision = annotationDocument.Revision,
+                            SelectionPhysicalBounds = bounds,
+                            VirtualDesktopSnapshot = session.VirtualDesktopSnapshot,
+                            CapacityValidation = topologyCapacity,
+                            FrozenDisplayFrames = frameSet,
+                            AnnotationDocument = annotationDocument,
+                            Cancellation = session.Cancellation
+                        },
+                        session.Cancellation)
+                    .ConfigureAwait(true);
+
+                switch (annotated)
+                {
+                    case AnnotationAwareRenderOutcome.Cancelled cancelled:
+                        ReturnRenderFailure(
+                            session,
+                            selection,
+                            CreateFailure(
+                                session.SessionId,
+                                FailureCode.Cancelled,
+                                cancelled.CancellationOrigin),
+                            renderComponent);
+                        return;
+                    case AnnotationAwareRenderOutcome.Failed failed:
+                        ReturnRenderFailure(
+                            session,
+                            selection,
+                            failed.Failure,
+                            renderComponent);
+                        return;
+                    case AnnotationAwareRenderOutcome.Succeeded succeeded:
+                        using (succeeded.Result)
+                        {
+                            var annotatedImage = succeeded.Result.ImageResult;
+                            if (succeeded.Result.SessionId != session.SessionId
+                                || succeeded.Result.SelectionRevision != selection.SelectionRevision
+                                || succeeded.Result.AnnotationRevision != annotationDocument.Revision
+                                || !IsCanonicalResult(annotatedImage, session.SessionId, bounds)
+                                || annotatedImage.Metadata.ResultId != succeeded.Result.ResultId)
+                            {
+                                ReturnRenderFailure(
+                                    session,
+                                    selection,
+                                    CreateFailure(
+                                        session.SessionId,
+                                        FailureCode.InvalidResultLifetime,
+                                        "The annotation-aware renderer returned mismatched or non-canonical output."),
+                                    renderComponent);
+                                return;
+                            }
+
+                            result = succeeded.Result.TakeImageResult();
+                        }
+
+                        break;
+                    default:
+                        ReturnRenderFailure(
+                            session,
+                            selection,
+                            MapAnnotationRenderFailure(session.SessionId, annotated),
+                            renderComponent);
+                        return;
+                }
+            }
+            else
+            {
+                var rendered = await _finalRenderer!
+                    .RenderAsync(frameSet, bounds, session.Cancellation)
+                    .ConfigureAwait(true);
+                switch (rendered)
+                {
+                    case FrozenDisplayFrameSetRenderOutcome.Cancelled cancelled:
+                        ReturnRenderFailure(
+                            session,
+                            selection,
+                            CreateFailure(
+                                session.SessionId,
+                                FailureCode.Cancelled,
+                                cancelled.CancellationOrigin),
+                            renderComponent);
+                        return;
+                    case FrozenDisplayFrameSetRenderOutcome.Failed failed:
+                        ReturnRenderFailure(session, selection, failed.Failure, renderComponent);
+                        return;
+                    case FrozenDisplayFrameSetRenderOutcome.Succeeded succeeded:
+                        result = succeeded.ImageResult;
+                        break;
+                    default:
+                        ReturnRenderFailure(
+                            session,
+                            selection,
+                            CreateFailure(
+                                session.SessionId,
+                                FailureCode.RenderingFailed,
+                                "The final renderer returned an unknown outcome."),
+                            renderComponent);
+                        return;
+                }
+            }
+
+            if (!IsCurrentRenderContext(session, selection, annotationDocument))
+            {
+                var staleFailure = CreateFailure(
                     session.SessionId,
-                    FailureCode.Cancelled,
-                    cancelled.CancellationOrigin);
+                    CurrentSelectionRevision != selection.SelectionRevision
+                        ? FailureCode.StaleSelectionRevision
+                        : FailureCode.StaleAnnotationRevision,
+                    "The Selection or Annotation revision changed during Complete rendering.");
                 TraceStage(
                     CompleteExecutionStage.RenderFailed,
                     session,
                     selection,
-                    failure,
-                    component: nameof(IFrozenDisplayFrameSetRenderer));
-                ReturnToEditing(session, failure);
+                    staleFailure,
+                    result,
+                    renderComponent);
+                ReturnToEditing(session, staleFailure);
                 return;
             }
 
-            if (rendered is FrozenDisplayFrameSetRenderOutcome.Failed failed)
-            {
-                TraceStage(
-                    CompleteExecutionStage.RenderFailed,
-                    session,
-                    selection,
-                    failed.Failure,
-                    component: nameof(IFrozenDisplayFrameSetRenderer));
-                ReturnToEditing(session, failed.Failure);
-                return;
-            }
-
-            if (rendered is not FrozenDisplayFrameSetRenderOutcome.Succeeded succeeded)
-            {
-                var failure = CreateFailure(
-                    session.SessionId,
-                    FailureCode.RenderingFailed,
-                    "The final renderer returned an unknown outcome.");
-                TraceStage(
-                    CompleteExecutionStage.RenderFailed,
-                    session,
-                    selection,
-                    failure,
-                    component: nameof(IFrozenDisplayFrameSetRenderer));
-                ReturnToEditing(session, failure);
-                return;
-            }
-
-            result = succeeded.ImageResult;
             TraceStage(
                 CompleteExecutionStage.RenderSucceeded,
                 session,
                 selection,
                 result: result,
-                component: nameof(IFrozenDisplayFrameSetRenderer));
+                component: renderComponent);
 
             TraceStage(
                 CompleteExecutionStage.ResultValidation,
@@ -1878,12 +1991,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
                 selection,
                 result: result,
                 component: nameof(CapturePresentationWorkflowCoordinator));
-            if (result is null
-                || result.IsDisposed
-                || result.Metadata.SessionId != session.SessionId
-                || result.Metadata.CropPhysicalBounds != bounds
-                || result.Metadata.PixelWidth != bounds.Width
-                || result.Metadata.PixelHeight != bounds.Height)
+            if (!IsCanonicalResult(result, session.SessionId, bounds))
             {
                 var failure = CreateFailure(
                     session.SessionId,
@@ -2086,6 +2194,112 @@ public sealed class CapturePresentationWorkflowCoordinator :
             }
         }
     }
+
+    private void ReturnRenderFailure(
+        CaptureSessionContext session,
+        SelectionVisualState selection,
+        Failure failure,
+        string component)
+    {
+        TraceStage(
+            CompleteExecutionStage.RenderFailed,
+            session,
+            selection,
+            failure,
+            component: component);
+        ReturnToEditing(session, failure);
+    }
+
+    private static Failure MapAnnotationRenderFailure(
+        Guid sessionId,
+        AnnotationAwareRenderOutcome outcome) => outcome switch
+        {
+            AnnotationAwareRenderOutcome.StaleSession stale => CreateFailure(
+                sessionId,
+                FailureCode.StaleSession,
+                stale.Message),
+            AnnotationAwareRenderOutcome.StaleCoordinateVersion stale => CreateFailure(
+                sessionId,
+                FailureCode.DisplayContextChanged,
+                stale.Message),
+            AnnotationAwareRenderOutcome.StaleSelectionRevision stale => CreateFailure(
+                sessionId,
+                FailureCode.StaleSelectionRevision,
+                stale.Message),
+            AnnotationAwareRenderOutcome.StaleAnnotationRevision stale => CreateFailure(
+                sessionId,
+                FailureCode.StaleAnnotationRevision,
+                stale.Message),
+            AnnotationAwareRenderOutcome.InvalidSelection invalid => CreateFailure(
+                sessionId,
+                FailureCode.InvalidSelection,
+                invalid.Message),
+            AnnotationAwareRenderOutcome.InvalidFrameSet invalid => CreateFailure(
+                sessionId,
+                FailureCode.InvalidResultLifetime,
+                invalid.Message),
+            AnnotationAwareRenderOutcome.InvalidAnnotationDocument invalid => CreateFailure(
+                sessionId,
+                FailureCode.StaleAnnotationRevision,
+                invalid.Message),
+            AnnotationAwareRenderOutcome.UnsupportedAnnotation unsupported => CreateFailure(
+                sessionId,
+                FailureCode.AnnotationOutputNotSupported,
+                unsupported.Message),
+            AnnotationAwareRenderOutcome.RenderCapacityExceeded capacity => CreateFailure(
+                sessionId,
+                FailureCode.UnsupportedCapacity,
+                capacity.Message),
+            AnnotationAwareRenderOutcome.Failed failed => failed.Failure,
+            AnnotationAwareRenderOutcome.Cancelled cancelled => CreateFailure(
+                sessionId,
+                FailureCode.Cancelled,
+                cancelled.CancellationOrigin),
+            _ => CreateFailure(
+                sessionId,
+                FailureCode.RenderingFailed,
+                "The annotation-aware renderer returned an unknown outcome.")
+        };
+
+    private bool IsCurrentRenderContext(
+        CaptureSessionContext session,
+        SelectionVisualState selection,
+        AnnotationDocument annotationDocument) =>
+        IsCurrentRenderSession(session, selection)
+        && ReferenceEquals(_annotationDocuments.Current, annotationDocument)
+        && CurrentAnnotationRevision == annotationDocument.Revision;
+
+    private bool IsCurrentRenderSession(
+        CaptureSessionContext session,
+        SelectionVisualState selection)
+    {
+        lock (_gate)
+        {
+            return !_disposed
+                && ReferenceEquals(_activeSession, session)
+                && _selectionCoordinator?.State.SelectionRevision == selection.SelectionRevision
+                && (_stateAuthority.CurrentState is WorkflowState.Editing or WorkflowState.ResultReady);
+        }
+    }
+
+    private static bool IsCanonicalResult(
+        IImageResult? result,
+        Guid sessionId,
+        PhysicalRect bounds) =>
+        result is not null
+        && !result.IsDisposed
+        && result.Metadata.ResultId != Guid.Empty
+        && result.Metadata.SessionId == sessionId
+        && result.Metadata.CropPhysicalBounds == bounds
+        && result.Metadata.SourcePhysicalBounds == bounds
+        && result.Metadata.PixelWidth == bounds.Width
+        && result.Metadata.PixelHeight == bounds.Height
+        && result.Metadata.PixelFormat == ImagePixelFormat.Bgra8
+        && result.Metadata.AlphaMode == ImageAlphaMode.Premultiplied
+        && result.Metadata.ColorSpace == ImageColorSpace.SrgbSdr
+        && result.Metadata.DpiX == 96
+        && result.Metadata.DpiY == 96
+        && result.Metadata.RowStride >= checked(bounds.Width * 4);
 
     private bool IsCurrentEditingSession(
         CaptureSessionContext session,

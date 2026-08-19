@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added — Stage 7K Final Render Capacity Revalidation and Annotation-aware Complete (2026-08-19)
+
+- Integrated `Editing → ResultReady → Delivering → Completed` for the existing Complete command. Empty Annotation Documents continue through the canonical base renderer; non-empty documents use the annotation-aware renderer for Rectangle、Arrow／Line、Highlighter、Text、Mosaic／Blur Privacy Region and Numbered Marker objects, then transfer the validated canonical image to the existing Clipboard delivery boundary.
+- Complete snapshots the current Selection and Annotation revisions, revalidates topology／Selection capacity, and validates Session、coordinate、FrozenDisplayFrameSet、canonical BGRA8／premultiplied／sRGB SDR／DPI and result metadata before Clipboard publication. Typed stale、capacity、render and result failures return to Editing, retain the current document／Selection and do not write Clipboard or files.
+- Added explicit canonical image ownership transfer and deterministic Contracts／Core coverage for successful annotation-aware Complete, typed render failure recovery and final capacity rejection. Locked restore succeeded; Release x64 build passed with `0` warnings／`0` errors; filtered non-interactive tests passed `238/238` with `0` failures／`0` skips; `git diff --check` passed.
+- Limited `dotnet format --verify-no-changes --include` was executed only for the six Stage 7K C# files. It reports the repository's existing LF→CRLF `ENDOFLINE` baseline; retaining CRLF would create whole-file diffs and fail `git diff --check`, so no unrelated line-ending rewrite was kept. No packaged MSIX／GUI runtime verification was run; Stage 7K packaged Complete／Clipboard behavior remains `Pending`. No external GUI fixture、real desktop screenshot or Clipboard payload was used.
+
 ### Added — Stage 7J Annotation-aware Render Compositor Foundation (2026-08-05)
 
 - Added a platform-neutral annotation-aware render request／typed outcome boundary and immutable canonical result ownership. The request carries Session、CoordinateVersion、SelectionRevision、AnnotationRevision、Selection physical bounds、Virtual Desktop snapshot、capacity outcome、the same frozen display frame set and committed Annotation Document.

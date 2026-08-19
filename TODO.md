@@ -57,8 +57,8 @@ Work in order. Do not begin a later item while an earlier prerequisite is unreso
 - [x] Implement pointer-driven Numbered Marker creation／draft preview／commit, preserved gaps and configurable next number; object editing、deletion、color／size controls、Undo／Redo、annotation-aware final render and packaged runtime acceptance remain incomplete, so FR-022 is still `Partial`.
 - [x] Implement pointer object selection、move、resize、style changes and delete; Stage 7H static／deterministic evidence is complete, while packaged runtime acceptance and annotation-aware final render remain incomplete.
 - [x] Implement function-bar Annotation-only Undo／Redo; Stage 7I Contracts／Core／Workflow／Windows deterministic evidence is complete, while packaged runtime and later annotation-aware final rendering remain incomplete.
-- [x] Anchor committed annotations to Frozen Virtual Desktop coordinates and clip the annotation-aware compositor output to current Selection; Complete／Clipboard integration remains a later boundary.
-- [ ] Implement final render with capacity revalidation.
+- [x] Anchor committed annotations to Frozen Virtual Desktop coordinates and clip the annotation-aware compositor output to current Selection; Stage 7K now consumes the immutable document snapshot through the explicit Complete／Clipboard boundary, while packaged runtime remains pending.
+- [x] Implement final render with final topology／Selection capacity revalidation, Session／coordinate／FrozenDisplayFrameSet identity checks and canonical result validation; typed stale／capacity／render failures retain Editing without output, while packaged runtime remains pending.
 - [ ] Place Clipboard publication only behind explicit Complete or successful Save.
 - [ ] Implement Windows Save As、PNG-only output、Downloads initial folder and timestamp proposal.
 - [ ] Allow the user to change destination and filename.

@@ -20,6 +20,7 @@ public sealed class WindowsCapturePlatformResources : IDisposable
             TopologyProvider);
         OverlayCoordinator = new WindowsFrozenDisplayOverlayCoordinator(functionBarPlacementService);
         FinalRenderer = new WindowsFrozenDisplayFrameSetRenderer();
+        AnnotationAwareRenderer = new WindowsAnnotationAwareRenderCompositor();
         CompleteExecutionTrace = new WindowsCompleteExecutionTraceSink();
         var clipboardDispatcher = dispatcherQueue is null
             ? null
@@ -41,6 +42,8 @@ public sealed class WindowsCapturePlatformResources : IDisposable
     public WindowsFrozenDisplayOverlayCoordinator OverlayCoordinator { get; }
 
     public WindowsFrozenDisplayFrameSetRenderer FinalRenderer { get; }
+
+    public WindowsAnnotationAwareRenderCompositor AnnotationAwareRenderer { get; }
 
     public WinRtClipboardDeliveryAdapter ClipboardDelivery { get; }
 

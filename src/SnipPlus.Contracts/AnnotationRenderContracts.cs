@@ -104,6 +104,15 @@ public sealed class AnnotationAwareRenderResult : IDisposable
     public IImageResult ImageResult =>
         _imageResult ?? throw new ObjectDisposedException(nameof(AnnotationAwareRenderResult));
 
+    /// <summary>
+    /// Transfers ownership of the canonical image to the caller.
+    /// </summary>
+    public IImageResult TakeImageResult()
+    {
+        return Interlocked.Exchange(ref _imageResult, null)
+            ?? throw new ObjectDisposedException(nameof(AnnotationAwareRenderResult));
+    }
+
     public void Dispose() => Interlocked.Exchange(ref _imageResult, null)?.Dispose();
 }
 

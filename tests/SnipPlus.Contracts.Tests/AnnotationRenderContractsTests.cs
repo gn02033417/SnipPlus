@@ -44,6 +44,41 @@ public sealed class AnnotationRenderContractsTests
 
     [TestMethod]
     [TestCategory("Contract")]
+    public void ResultCanTransferImageOwnershipExactlyOnce()
+    {
+        var sessionId = Guid.NewGuid();
+        var image = new FakeImageResult(sessionId, 3, 2);
+        using var result = new AnnotationAwareRenderResult(
+            Guid.NewGuid(),
+            sessionId,
+            4,
+            new AnnotationRevision(7),
+            image,
+            1,
+            0);
+
+        var transferred = result.TakeImageResult();
+
+        Assert.AreSame(image, transferred);
+        var threw = false;
+        try
+        {
+            _ = result.TakeImageResult();
+        }
+        catch (ObjectDisposedException)
+        {
+            threw = true;
+        }
+
+        Assert.IsTrue(threw);
+        result.Dispose();
+        Assert.IsFalse(image.IsDisposed);
+        transferred.Dispose();
+        Assert.IsTrue(image.IsDisposed);
+    }
+
+    [TestMethod]
+    [TestCategory("Contract")]
     public void BoundaryAssemblyDoesNotReferenceWindowsRenderingTypes()
     {
         var references = typeof(AnnotationAwareRenderRequest).Assembly
