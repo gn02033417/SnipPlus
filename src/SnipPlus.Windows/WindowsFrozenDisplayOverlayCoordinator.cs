@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Globalization;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
@@ -27,12 +28,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
     private readonly Dictionary<Guid, IReadOnlyList<OverlaySurface>> _sessions = new();
     private readonly Dictionary<Guid, FunctionBarSessionPresentation> _functionBars = new();
     private readonly IFunctionBarPlacementService _placementService;
+    private readonly ICompleteExecutionTraceSink? _traceSink;
     private bool _disposed;
 
-    public WindowsFrozenDisplayOverlayCoordinator(IFunctionBarPlacementService placementService)
+    public WindowsFrozenDisplayOverlayCoordinator(
+        IFunctionBarPlacementService placementService,
+        ICompleteExecutionTraceSink? traceSink = null)
     {
         _placementService = placementService
             ?? throw new ArgumentNullException(nameof(placementService));
+        _traceSink = traceSink;
     }
 
     public async ValueTask<FrozenDisplayOverlayPresentationOutcome> PresentAsync(
@@ -61,7 +66,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             foreach (var descriptor in request.Plan.Displays)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var surface = new OverlaySurface(descriptor, inputBoundary);
+                var surface = new OverlaySurface(descriptor, inputBoundary, _traceSink);
                 surfaces.Add(surface);
                 await surface.InitializeAsync(cancellationToken).ConfigureAwait(true);
             }
@@ -391,7 +396,43 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         FunctionBarPresentationRequest request,
         bool allowExisting)
     {
+        var phase = "PrepareOrRepositionCore";
+        try
+        {
+            return PrepareOrRepositionCore(
+                request,
+                allowExisting,
+                currentPhase => phase = currentPhase);
+        }
+        catch (Exception exception)
+        {
+            return FunctionBarResult(
+                FunctionBarPresentationResultKind.Failed,
+                request.SessionId,
+                request.CoordinateVersion,
+                request.Selection.SelectionRevision,
+                null,
+                Failure.Create(
+                    FailureCode.FunctionBarPresentationFailed,
+                    FailureCategory.Resource,
+                    FailureRecoverability.RetryNewIntent,
+                    nameof(WindowsFrozenDisplayOverlayCoordinator),
+                    request.SessionId,
+                    $"Function Bar presentation failed during {phase}: "
+                        + $"{exception.GetType().Name}: {exception.Message}",
+                    nativeCode: exception.HResult),
+                $"The Function Bar could not be presented during {phase}.");
+        }
+    }
+
+    private FunctionBarPresentationResult PrepareOrRepositionCore(
+        FunctionBarPresentationRequest request,
+        bool allowExisting,
+        Action<string> setPhase)
+    {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(setPhase);
+        setPhase("LookupSession");
         IReadOnlyList<OverlaySurface>? surfaces;
         FunctionBarSessionPresentation? existing;
         lock (_gate)
@@ -399,6 +440,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _sessions.TryGetValue(request.SessionId, out surfaces);
             _functionBars.TryGetValue(request.SessionId, out existing);
         }
+        var wasVisible = existing?.Surface.IsVisible == true;
 
         if (surfaces is null)
         {
@@ -442,6 +484,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 "The Function Bar already has a newer Selection revision.");
         }
 
+        setPhase("ReadWorkAreas");
         var workAreas = new List<FunctionBarDisplayWorkArea>(surfaces.Count);
         foreach (var surface in surfaces)
         {
@@ -468,6 +511,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 surface.RasterizationScale));
         }
 
+        setPhase("SelectAnchor");
         var anchor = _placementService.Place(new FunctionBarPlacementRequest(
             request.SessionId,
             request.CoordinateVersion,
@@ -517,6 +561,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         FunctionBarSurface? surfaceForBar = null;
         var reusesExisting = existing is not null
             && ReferenceEquals(existing.Surface.Owner, anchorSurface);
+        setPhase(reusesExisting ? "UpdateExistingSurface" : "CreateFunctionBar");
         if (reusesExisting)
         {
             surfaceForBar = existing!.Surface;
@@ -524,14 +569,17 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         }
         else
         {
-            surfaceForBar = anchorSurface.CreateFunctionBar(request);
+            surfaceForBar = anchorSurface.CreateFunctionBar(
+                request,
+                phase => setPhase($"CreateFunctionBar.{phase}"));
         }
 
+        setPhase("MeasureFunctionBar");
         if (!surfaceForBar.TryMeasurePhysicalSize(out var measuredSize))
         {
             if (!reusesExisting)
             {
-                surfaceForBar.Dispose();
+                surfaceForBar.Deactivate();
             }
 
             return FunctionBarResult(
@@ -547,6 +595,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 "The Function Bar could not be measured.");
         }
 
+        setPhase("PlaceMeasuredFunctionBar");
         var placed = _placementService.Place(new FunctionBarPlacementRequest(
             request.SessionId,
             request.CoordinateVersion,
@@ -560,7 +609,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         {
             if (!reusesExisting)
             {
-                surfaceForBar.Dispose();
+                surfaceForBar.Deactivate();
             }
 
             return FunctionBarResult(
@@ -578,9 +627,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 "The Function Bar could not be placed.");
         }
 
+        setPhase("ApplyPlacement");
         surfaceForBar.ApplyPlacement(placedReady.Placement);
-        surfaceForBar.SetVisible(false);
+        surfaceForBar.SetVisible(
+            FunctionBarSurface.GetRepositionVisibility(existing is not null, wasVisible));
         var next = new FunctionBarSessionPresentation(request, placedReady.Placement, surfaceForBar);
+        setPhase("RegisterSession");
         lock (_gate)
         {
             if (_disposed || !_sessions.ContainsKey(request.SessionId))
@@ -657,51 +709,107 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public FunctionBarSurface Surface { get; }
 
-        public void Dispose() => Surface.Dispose();
+        public void Dispose() => Surface.Deactivate();
     }
 
     private sealed class FunctionBarSurface : IDisposable
     {
         private readonly OverlaySurface _owner;
-        private readonly Border _root = CreateRoot();
-        private readonly StackPanel _panel = new()
-        {
-            Orientation = Orientation.Horizontal
-        };
-        private readonly TextBlock _feedbackText = new()
-        {
-            Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 255, 255)),
-            Margin = new Thickness(4, 0, 8, 0),
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed
-        };
+        private readonly Border _root;
+        private readonly StackPanel _panel;
+        private readonly ScrollViewer _scrollViewer;
+        private readonly TextBlock _feedbackText;
         private readonly IReadOnlyDictionary<FunctionBarCommand, Button> _buttons;
         private readonly IReadOnlyDictionary<EditingToolKind, RadioButton> _toolButtons;
         private readonly IReadOnlyDictionary<ArrowLineEndStyle, RadioButton> _arrowLineModeButtons;
         private readonly IReadOnlyDictionary<PrivacyRegionMode, RadioButton> _privacyModeButtons;
-        private readonly NumberBox _nextNumberBox = CreateNextNumberBox();
-        private readonly ComboBox _colorBox = CreateColorBox();
-        private readonly NumberBox _thicknessBox = CreateStyleNumberBox("Thickness", 1, 64);
-        private readonly NumberBox _fontSizeBox = CreateStyleNumberBox("Font size", 8, 144);
-        private readonly NumberBox _markerSizeBox = CreateStyleNumberBox("Marker size", 8, 256);
-        private readonly ToggleButton _boldToggle = new() { Content = "Bold" };
-        private readonly Button _deleteObjectButton = CreateButton("Delete selected");
-        private readonly Button _editTextButton = CreateButton("Edit text");
+        private static readonly IReadOnlyDictionary<string, ArgbColor> ColorOptions =
+            new Dictionary<string, ArgbColor>(StringComparer.Ordinal)
+            {
+                ["Red"] = ArgbColor.Red,
+                ["Yellow"] = new ArgbColor(255, 255, 235, 59),
+                ["Blue"] = new ArgbColor(255, 60, 140, 255),
+                ["Red 50%"] = new ArgbColor(128, 220, 60, 60),
+                ["Yellow 50%"] = new ArgbColor(128, 255, 235, 59),
+                ["Blue 50%"] = new ArgbColor(128, 60, 140, 255)
+            };
+        private readonly NumberBox _nextNumberBox;
+        private readonly ComboBox _colorBox;
+        private readonly NumberBox _thicknessBox;
+        private readonly NumberBox _fontSizeBox;
+        private readonly NumberBox _markerSizeBox;
+        private readonly TextBox _nextNumberTextBox;
+        private readonly TextBox _thicknessTextBox;
+        private readonly TextBox _fontSizeTextBox;
+        private readonly TextBox _markerSizeTextBox;
+        private readonly ToggleButton _boldToggle;
+        private readonly Button _deleteObjectButton;
+        private readonly Button _editTextButton;
         private readonly CancelCommandGate _cancelCommandGate = new();
         private readonly CancelCommandGate _completeCommandGate = new();
         private readonly CancelCommandGate _undoCommandGate = new();
         private readonly CancelCommandGate _redoCommandGate = new();
-        private FunctionBarPresentationRequest _request;
+        private FunctionBarPresentationRequest _request = null!;
         private bool _updatingNextNumber;
         private bool _updatingStyleControls;
+        private bool _initialized;
+        private bool _isVisible;
         private bool _disposed;
 
         public FunctionBarSurface(
             OverlaySurface owner,
-            FunctionBarPresentationRequest request)
+            Action<string>? setPhase = null)
         {
             _owner = owner;
-            _request = request;
+            setPhase?.Invoke("CreateDetachedRoot");
+            _root = CreateRoot();
+            ApplyPreloadVisibility(_root);
+            setPhase?.Invoke("CreatePanel");
+            _panel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal
+            };
+            _scrollViewer = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                HorizontalScrollMode = ScrollMode.Enabled,
+                VerticalScrollMode = ScrollMode.Disabled
+            };
+            setPhase?.Invoke("CreateFeedbackText");
+            _feedbackText = new TextBlock
+            {
+                Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 255, 255)),
+                Margin = new Thickness(4, 0, 8, 0),
+                TextWrapping = TextWrapping.Wrap,
+                Visibility = Visibility.Collapsed
+            };
+            setPhase?.Invoke("CreateNextNumberBox");
+            _nextNumberBox = CreateNextNumberBox();
+            setPhase?.Invoke("CreateNextNumberTextBox");
+            _nextNumberTextBox = CreateNumericTextBox("Next number");
+            setPhase?.Invoke("CreateColorBox");
+            _colorBox = CreateColorBox();
+            setPhase?.Invoke("CreateThicknessBox");
+            _thicknessBox = CreateStyleNumberBox("Thickness", 1, 64);
+            setPhase?.Invoke("CreateThicknessTextBox");
+            _thicknessTextBox = CreateNumericTextBox("Thickness");
+            setPhase?.Invoke("CreateFontSizeBox");
+            _fontSizeBox = CreateStyleNumberBox("Font size", 8, 144);
+            setPhase?.Invoke("CreateFontSizeTextBox");
+            _fontSizeTextBox = CreateNumericTextBox("Font size");
+            setPhase?.Invoke("CreateMarkerSizeBox");
+            _markerSizeBox = CreateStyleNumberBox("Marker size", 8, 256);
+            setPhase?.Invoke("CreateMarkerSizeTextBox");
+            _markerSizeTextBox = CreateNumericTextBox("Marker size");
+            setPhase?.Invoke("CreateBoldToggle");
+            _boldToggle = new ToggleButton { Content = "Bold" };
+            ApplyControlVisualStyle(_boldToggle, GetButtonVisualStyle());
+            setPhase?.Invoke("CreateDeleteObjectButton");
+            _deleteObjectButton = CreateButton("Delete selected");
+            setPhase?.Invoke("CreateEditTextButton");
+            _editTextButton = CreateButton("Edit text");
+            setPhase?.Invoke("CreateCommandButtons");
             _buttons = new Dictionary<FunctionBarCommand, Button>
             {
                 [FunctionBarCommand.Complete] = CreateButton("Complete"),
@@ -710,6 +818,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 [FunctionBarCommand.Undo] = CreateButton("Undo"),
                 [FunctionBarCommand.Redo] = CreateButton("Redo")
             };
+            setPhase?.Invoke("CreateToolButtons");
             _toolButtons = new Dictionary<EditingToolKind, RadioButton>
             {
                 [EditingToolKind.Selection] = CreateToolButton("Selection"),
@@ -720,11 +829,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 [EditingToolKind.PrivacyRegion] = CreateToolButton("Mosaic / Blur"),
                 [EditingToolKind.NumberedMarker] = CreateToolButton("Numbered Marker")
             };
+            setPhase?.Invoke("CreateArrowLineModeButtons");
             _arrowLineModeButtons = new Dictionary<ArrowLineEndStyle, RadioButton>
             {
                 [ArrowLineEndStyle.Arrow] = CreateModeButton("Arrow"),
                 [ArrowLineEndStyle.None] = CreateModeButton("Line")
             };
+            setPhase?.Invoke("CreatePrivacyModeButtons");
             _privacyModeButtons = new Dictionary<PrivacyRegionMode, RadioButton>
             {
                 [PrivacyRegionMode.Mosaic] = CreatePrivacyModeButton("Mosaic"),
@@ -743,56 +854,101 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons[EditingToolKind.PrivacyRegion].Click += OnPrivacyRegionToolClicked;
             _toolButtons[EditingToolKind.NumberedMarker].Click += OnNumberedMarkerToolClicked;
             _nextNumberBox.ValueChanged += OnNextNumberChanged;
+            _nextNumberTextBox.TextChanged += OnNextNumberTextChanged;
             _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click += OnArrowModeClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click += OnLineModeClicked;
             _privacyModeButtons[PrivacyRegionMode.Mosaic].Click += OnMosaicModeClicked;
             _privacyModeButtons[PrivacyRegionMode.Blur].Click += OnBlurModeClicked;
             _colorBox.SelectionChanged += OnColorChanged;
             _thicknessBox.ValueChanged += OnThicknessChanged;
+            _thicknessTextBox.TextChanged += OnThicknessTextChanged;
             _fontSizeBox.ValueChanged += OnFontSizeChanged;
+            _fontSizeTextBox.TextChanged += OnFontSizeTextChanged;
             _markerSizeBox.ValueChanged += OnMarkerSizeChanged;
+            _markerSizeTextBox.TextChanged += OnMarkerSizeTextChanged;
             _boldToggle.Checked += OnBoldChanged;
             _boldToggle.Unchecked += OnBoldChanged;
             _deleteObjectButton.Click += OnDeleteObjectClicked;
             _editTextButton.Click += OnEditTextClicked;
             _root.PointerPressed += OnPointerPressed;
-            _panel.Children.Add(_feedbackText);
-            foreach (var toolButton in _toolButtons.Values)
-            {
-                _panel.Children.Add(toolButton);
-            }
-
-            _panel.Children.Add(_nextNumberBox);
-            _panel.Children.Add(_colorBox);
-            _panel.Children.Add(_thicknessBox);
-            _panel.Children.Add(_fontSizeBox);
-            _panel.Children.Add(_markerSizeBox);
-            _panel.Children.Add(_boldToggle);
-            _panel.Children.Add(_deleteObjectButton);
-            _panel.Children.Add(_editTextButton);
-
-            foreach (var modeButton in _arrowLineModeButtons.Values)
-            {
-                _panel.Children.Add(modeButton);
-            }
-
-            foreach (var modeButton in _privacyModeButtons.Values)
-            {
-                _panel.Children.Add(modeButton);
-            }
-
-            foreach (var button in _buttons.Values)
-            {
-                _panel.Children.Add(button);
-            }
-
-            _root.Child = _panel;
-            Update(request);
+            AttachContent(setPhase);
         }
 
         public OverlaySurface Owner => _owner;
 
         public FrameworkElement Root => _root;
+
+        public bool IsVisible => _isVisible;
+
+        public void AttachContent(Action<string>? setPhase = null)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, nameof(FunctionBarSurface));
+            setPhase?.Invoke("AttachFeedbackText");
+            _panel.Children.Add(_feedbackText);
+
+            var toolIndex = 0;
+            foreach (var toolButton in _toolButtons.Values)
+            {
+                setPhase?.Invoke($"AttachToolButton{toolIndex++}");
+                _panel.Children.Add(toolButton);
+            }
+
+            setPhase?.Invoke("AttachColorBox");
+            _panel.Children.Add(_colorBox);
+            setPhase?.Invoke("AttachNextNumberTextBox");
+            _panel.Children.Add(_nextNumberTextBox);
+            setPhase?.Invoke("AttachThicknessTextBox");
+            _panel.Children.Add(_thicknessTextBox);
+            setPhase?.Invoke("AttachFontSizeTextBox");
+            _panel.Children.Add(_fontSizeTextBox);
+            setPhase?.Invoke("AttachMarkerSizeTextBox");
+            _panel.Children.Add(_markerSizeTextBox);
+            setPhase?.Invoke("AttachBoldToggle");
+            _panel.Children.Add(_boldToggle);
+            setPhase?.Invoke("AttachDeleteObjectButton");
+            _panel.Children.Add(_deleteObjectButton);
+            setPhase?.Invoke("AttachEditTextButton");
+            _panel.Children.Add(_editTextButton);
+
+            var arrowLineModeIndex = 0;
+            foreach (var modeButton in _arrowLineModeButtons.Values)
+            {
+                setPhase?.Invoke($"AttachArrowLineModeButton{arrowLineModeIndex++}");
+                _panel.Children.Add(modeButton);
+            }
+
+            var privacyModeIndex = 0;
+            foreach (var modeButton in _privacyModeButtons.Values)
+            {
+                setPhase?.Invoke($"AttachPrivacyModeButton{privacyModeIndex++}");
+                _panel.Children.Add(modeButton);
+            }
+
+            var commandButtonIndex = 0;
+            foreach (var button in _buttons.Values)
+            {
+                setPhase?.Invoke($"AttachCommandButton{commandButtonIndex++}");
+                _panel.Children.Add(button);
+            }
+
+            setPhase?.Invoke("AttachRootChild");
+            _scrollViewer.Content = _panel;
+            _root.Child = _scrollViewer;
+        }
+
+        public void Initialize(
+            FunctionBarPresentationRequest request,
+            Action<string>? setPhase = null)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, nameof(FunctionBarSurface));
+            ArgumentNullException.ThrowIfNull(request);
+            _request = request;
+            _initialized = true;
+            _isVisible = false;
+            ApplyVisibility(_root, visible: false);
+            setPhase?.Invoke("UpdateRequest");
+            Update(request);
+        }
 
         public void Update(FunctionBarPresentationRequest request)
         {
@@ -859,11 +1015,14 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 _nextNumberBox.Visibility = request.ActiveTool == EditingToolKind.NumberedMarker
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+                _nextNumberTextBox.Visibility = _nextNumberBox.Visibility;
                 _nextNumberBox.IsEnabled = request.NextNumberSelectionSink is not null
                     && request.ActiveTool == EditingToolKind.NumberedMarker;
+                _nextNumberTextBox.IsEnabled = _nextNumberBox.IsEnabled;
                 if (request.ActiveNumberedMarkerNextNumber is int nextNumber)
                 {
                     _nextNumberBox.Value = nextNumber;
+                    _nextNumberTextBox.Text = nextNumber.ToString(CultureInfo.InvariantCulture);
                 }
             }
             finally
@@ -880,11 +1039,28 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return false;
             }
 
-            _root.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            return TryConvertToPhysicalSize(
-                _root.DesiredSize,
-                _owner.RasterizationScale,
-                out size);
+            var scale = _owner.RasterizationScale;
+            if (!double.IsFinite(scale) || scale <= 0)
+            {
+                return false;
+            }
+
+            var maxWidthDip = 960d;
+            if (_owner.TryGetPhysicalWorkArea(out var workArea))
+            {
+                maxWidthDip = Math.Min(
+                    maxWidthDip,
+                    Math.Max(240d, (workArea.Width - 16) / scale));
+            }
+
+            const double heightDip = 56d;
+            _root.MaxWidth = maxWidthDip;
+            _root.Width = maxWidthDip;
+            _root.Height = heightDip;
+            size = new PhysicalPixelSize(
+                checked((int)Math.Round(maxWidthDip * scale)),
+                checked((int)Math.Round(heightDip * scale)));
+            return size.IsPositive;
         }
 
         public void ApplyPlacement(FunctionBarPlacementResult placement)
@@ -895,14 +1071,33 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             Canvas.SetTop(_root, (placement.FunctionBarPhysicalBounds.Top - bounds.Top) / scale);
             _root.Width = placement.FunctionBarPhysicalBounds.Width / scale;
             _root.Height = placement.FunctionBarPhysicalBounds.Height / scale;
+            _owner.TraceFunctionBarDiagnostic(
+                "FunctionBar.Surface.Placement",
+                $"DisplayId={_owner.DisplayId};PhysicalBounds={placement.FunctionBarPhysicalBounds.Left},{placement.FunctionBarPhysicalBounds.Top},{placement.FunctionBarPhysicalBounds.Right},{placement.FunctionBarPhysicalBounds.Bottom};RasterizationScale={scale:0.###};CanvasLeft={Canvas.GetLeft(_root):0.##};CanvasTop={Canvas.GetTop(_root):0.##};Width={_root.Width:0.##};Height={_root.Height:0.##}");
         }
 
         public void SetVisible(bool visible)
         {
             if (!_disposed)
             {
+                _isVisible = visible;
                 ApplyVisibility(_root, visible);
+                _owner.TraceFunctionBarDiagnostic(
+                    "FunctionBar.Surface.Visibility",
+                    $"DisplayId={_owner.DisplayId};Requested={visible};Visibility={_root.Visibility};Opacity={_root.Opacity:0.##};IsHitTestVisible={_root.IsHitTestVisible};CanvasLeft={Canvas.GetLeft(_root):0.##};CanvasTop={Canvas.GetTop(_root):0.##};Width={_root.Width:0.##};Height={_root.Height:0.##}");
             }
+        }
+
+        public void Deactivate()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _initialized = false;
+            ClearFeedback();
+            SetVisible(false);
         }
 
         public void ClearFeedback()
@@ -930,6 +1125,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
+            Deactivate();
             _disposed = true;
             _buttons[FunctionBarCommand.Complete].Click -= OnCompleteClicked;
             _buttons[FunctionBarCommand.Save].Click -= OnSaveClicked;
@@ -944,43 +1140,25 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _toolButtons[EditingToolKind.PrivacyRegion].Click -= OnPrivacyRegionToolClicked;
             _toolButtons[EditingToolKind.NumberedMarker].Click -= OnNumberedMarkerToolClicked;
             _nextNumberBox.ValueChanged -= OnNextNumberChanged;
+            _nextNumberTextBox.TextChanged -= OnNextNumberTextChanged;
             _arrowLineModeButtons[ArrowLineEndStyle.Arrow].Click -= OnArrowModeClicked;
             _arrowLineModeButtons[ArrowLineEndStyle.None].Click -= OnLineModeClicked;
             _privacyModeButtons[PrivacyRegionMode.Mosaic].Click -= OnMosaicModeClicked;
             _privacyModeButtons[PrivacyRegionMode.Blur].Click -= OnBlurModeClicked;
             _colorBox.SelectionChanged -= OnColorChanged;
             _thicknessBox.ValueChanged -= OnThicknessChanged;
+            _thicknessTextBox.TextChanged -= OnThicknessTextChanged;
             _fontSizeBox.ValueChanged -= OnFontSizeChanged;
+            _fontSizeTextBox.TextChanged -= OnFontSizeTextChanged;
             _markerSizeBox.ValueChanged -= OnMarkerSizeChanged;
+            _markerSizeTextBox.TextChanged -= OnMarkerSizeTextChanged;
             _boldToggle.Checked -= OnBoldChanged;
             _boldToggle.Unchecked -= OnBoldChanged;
             _deleteObjectButton.Click -= OnDeleteObjectClicked;
             _editTextButton.Click -= OnEditTextClicked;
             _root.PointerPressed -= OnPointerPressed;
-            _owner.RemoveFunctionBar(this);
-            _root.Opacity = 0;
-            _root.IsHitTestVisible = false;
-            _root.Visibility = Visibility.Collapsed;
             _panel.Children.Clear();
             _root.Child = null;
-        }
-
-        private static Border CreateRoot()
-        {
-            var state = GetVisibilityState(visible: false);
-            return new Border
-            {
-                Background = new SolidColorBrush(ColorHelper.FromArgb(245, 32, 32, 32)),
-                BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(255, 128, 128, 128)),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(6),
-                Visibility = state.IsLayoutParticipating
-                    ? Visibility.Visible
-                    : Visibility.Collapsed,
-                Opacity = state.Opacity,
-                IsHitTestVisible = state.IsHitTestVisible
-            };
         }
 
         private static void ApplyVisibility(Border root, bool visible)
@@ -993,9 +1171,32 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             root.IsHitTestVisible = state.IsHitTestVisible;
         }
 
+        private static void ApplyPreloadVisibility(Border root)
+        {
+            root.Visibility = Visibility.Collapsed;
+            root.Opacity = 0;
+            root.IsHitTestVisible = false;
+        }
+
+        private static Border CreateRoot()
+        {
+            return new Border
+            {
+                Background = new SolidColorBrush(ColorHelper.FromArgb(255, 11, 18, 32)),
+                BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(255, 169, 189, 210)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(6)
+            };
+        }
+
         private static FunctionBarVisibilityState GetVisibilityState(bool visible) => visible
             ? new FunctionBarVisibilityState(true, 1, true)
             : new FunctionBarVisibilityState(true, 0, false);
+
+        internal static bool GetRepositionVisibility(
+            bool hasExistingPresentation,
+            bool wasVisible) => hasExistingPresentation && wasVisible;
 
         private readonly record struct FunctionBarVisibilityState(
             bool IsLayoutParticipating,
@@ -1037,13 +1238,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 Content = label,
                 Padding = new Thickness(8, 4, 8, 4),
                 Margin = new Thickness(2, 0, 2, 0),
-                Background = new SolidColorBrush(visualStyle.Background),
-                BorderBrush = new SolidColorBrush(visualStyle.Border),
-                BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(4),
-                Foreground = new SolidColorBrush(visualStyle.Foreground),
                 IsTabStop = true
             };
+            ApplyControlVisualStyle(button, visualStyle);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
             return button;
         }
@@ -1058,6 +1256,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 Margin = new Thickness(2, 0, 2, 0),
                 IsTabStop = true
             };
+            ApplyControlVisualStyle(button, GetButtonVisualStyle());
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                 button,
                 $"Editing tool {label}");
@@ -1087,6 +1286,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 Visibility = Visibility.Collapsed,
                 IsTabStop = true
             };
+            ApplyControlVisualStyle(numberBox, GetButtonVisualStyle());
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                 numberBox,
                 "Next numbered marker number");
@@ -1097,17 +1297,19 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         {
             var box = new ComboBox
             {
-                Header = "Color",
+                PlaceholderText = "Color",
                 Width = 120,
                 Margin = new Thickness(4, 0, 4, 0),
                 IsTabStop = true
             };
-            box.Items.Add(new ComboBoxItem { Content = "Red", Tag = ArgbColor.Red });
-            box.Items.Add(new ComboBoxItem { Content = "Yellow", Tag = new ArgbColor(255, 255, 235, 59) });
-            box.Items.Add(new ComboBoxItem { Content = "Blue", Tag = new ArgbColor(255, 60, 140, 255) });
-            box.Items.Add(new ComboBoxItem { Content = "Red 50%", Tag = new ArgbColor(128, 220, 60, 60) });
-            box.Items.Add(new ComboBoxItem { Content = "Yellow 50%", Tag = new ArgbColor(128, 255, 235, 59) });
-            box.Items.Add(new ComboBoxItem { Content = "Blue 50%", Tag = new ArgbColor(128, 60, 140, 255) });
+            ApplyControlVisualStyle(box, GetButtonVisualStyle());
+            foreach (var colorName in ColorOptions.Keys)
+            {
+                var item = new ComboBoxItem { Content = colorName, Tag = colorName };
+                ApplyControlVisualStyle(item, GetButtonVisualStyle());
+                box.Items.Add(item);
+            }
+
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, "Annotation color");
             return box;
         }
@@ -1116,7 +1318,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         {
             var box = new NumberBox
             {
-                Header = header,
+                PlaceholderText = header,
                 Minimum = minimum,
                 Maximum = maximum,
                 SmallChange = 1,
@@ -1125,15 +1327,44 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 Visibility = Visibility.Collapsed,
                 IsTabStop = true
             };
+            ApplyControlVisualStyle(box, GetButtonVisualStyle());
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, $"Annotation {header}");
+            return box;
+        }
+
+        private static TextBox CreateNumericTextBox(string header)
+        {
+            var box = new TextBox
+            {
+                Width = 112,
+                Margin = new Thickness(4, 0, 4, 0),
+                Visibility = Visibility.Collapsed,
+                IsTabStop = true,
+                PlaceholderText = header
+            };
+            ApplyControlVisualStyle(box, GetButtonVisualStyle());
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                box,
+                $"Annotation {header}");
             return box;
         }
 
         private static FunctionBarButtonVisualStyle GetButtonVisualStyle() =>
             new(
                 ColorHelper.FromArgb(255, 255, 255, 255),
-                ColorHelper.FromArgb(255, 64, 64, 64),
-                ColorHelper.FromArgb(255, 176, 176, 176));
+                ColorHelper.FromArgb(255, 39, 54, 74),
+                ColorHelper.FromArgb(255, 169, 189, 210));
+
+        private static void ApplyControlVisualStyle(
+            Control control,
+            FunctionBarButtonVisualStyle visualStyle)
+        {
+            control.Foreground = new SolidColorBrush(visualStyle.Foreground);
+            control.Background = new SolidColorBrush(visualStyle.Background);
+            control.BorderBrush = new SolidColorBrush(visualStyle.Border);
+            control.BorderThickness = new Thickness(1);
+            control.FontWeight = FontWeights.SemiBold;
+        }
 
         private void OnCancelClicked(object sender, RoutedEventArgs args)
         {
@@ -1141,6 +1372,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             {
                 return;
             }
+
+            _owner.TraceFunctionBarDiagnostic("FunctionBar.Command.Clicked", "Command=Cancel");
 
             var command = new FunctionBarCommandRequest(
                 _request.SessionId,
@@ -1160,6 +1393,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     }
 
                     var result = _request.CommandSink.Execute(command);
+                    _owner.TraceFunctionBarDiagnostic(
+                        "FunctionBar.Command.Result",
+                        $"Command=Cancel;Result={result.Kind}");
                     if (result.Kind != FunctionBarCommandResultKind.Accepted)
                     {
                         _cancelCommandGate.Reset();
@@ -1191,6 +1427,10 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
+            _owner.TraceFunctionBarDiagnostic(
+                "FunctionBar.Command.Clicked",
+                $"Command={command}");
+
             var request = new FunctionBarCommandRequest(
                 _request.SessionId,
                 _request.CoordinateVersion,
@@ -1208,6 +1448,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     }
 
                     var result = _request.CommandSink.Execute(request);
+                    _owner.TraceFunctionBarDiagnostic(
+                        "FunctionBar.Command.Result",
+                        $"Command={command};Result={result.Kind}");
                     gate.Reset();
                     if (!_disposed && result.Kind != FunctionBarCommandResultKind.Accepted)
                     {
@@ -1230,6 +1473,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
+            _owner.TraceFunctionBarDiagnostic("FunctionBar.Command.Clicked", "Command=Complete");
+
             var command = new FunctionBarCommandRequest(
                 _request.SessionId,
                 _request.CoordinateVersion,
@@ -1248,6 +1493,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     }
 
                     var result = _request.CommandSink.Execute(command);
+                    _owner.TraceFunctionBarDiagnostic(
+                        "FunctionBar.Command.Result",
+                        $"Command=Complete;Result={result.Kind}");
                     if (result.Kind != FunctionBarCommandResultKind.Accepted)
                     {
                         _completeCommandGate.Reset();
@@ -1272,6 +1520,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
+            _owner.TraceFunctionBarDiagnostic("FunctionBar.Command.Clicked", "Command=Save");
+
             var command = new FunctionBarCommandRequest(
                 _request.SessionId,
                 _request.CoordinateVersion,
@@ -1290,6 +1540,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     }
 
                     var result = _request.CommandSink.Execute(command);
+                    _owner.TraceFunctionBarDiagnostic(
+                        "FunctionBar.Command.Result",
+                        $"Command=Save;Result={result.Kind}");
                     if (result.Kind != FunctionBarCommandResultKind.Accepted)
                     {
                         _completeCommandGate.Reset();
@@ -1358,6 +1611,29 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
         }
 
+        private void OnNextNumberTextChanged(object sender, TextChangedEventArgs args)
+        {
+            if (_disposed || _updatingNextNumber || _request.NextNumberSelectionSink is null
+                || !TryParseTextValue(_nextNumberTextBox.Text, out var value)
+                || !IsWholeNumber(value, 1, int.MaxValue))
+            {
+                return;
+            }
+
+            var result = _request.NextNumberSelectionSink.SetNextNumber(
+                new SetNextNumberRequest(
+                    _request.SessionId,
+                    _request.CoordinateVersion,
+                    _request.Selection.SelectionRevision,
+                    _request.AnnotationRevision,
+                    (int)value));
+            if (result.Kind is not SetNextNumberResultKind.Succeeded
+                and not SetNextNumberResultKind.NoChange)
+            {
+                Update(_request);
+            }
+        }
+
         private void UpdateStyleControls(FunctionBarPresentationRequest request)
         {
             var selected = request.SelectedObject?.OriginalObject;
@@ -1383,11 +1659,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _thicknessBox.Visibility = selectedPaint || creationPaint
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            _thicknessTextBox.Visibility = _thicknessBox.Visibility;
             var textStyleActive = selected?.ToolKind == AnnotationToolKind.Text
                 || (creationDefaults && request.ActiveTool == EditingToolKind.Text);
             _fontSizeBox.Visibility = textStyleActive
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            _fontSizeTextBox.Visibility = _fontSizeBox.Visibility;
             _boldToggle.Visibility = textStyleActive
                 ? Visibility.Visible
                 : Visibility.Collapsed;
@@ -1396,13 +1674,17 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _markerSizeBox.Visibility = markerStyleActive
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            _markerSizeTextBox.Visibility = _markerSizeBox.Visibility;
             _colorBox.IsEnabled = styleControlsActive;
             _deleteObjectButton.IsEnabled = objectSelected;
             _editTextButton.IsEnabled = objectSelected && selected?.ToolKind == AnnotationToolKind.Text;
             _thicknessBox.IsEnabled = styleControlsActive;
+            _thicknessTextBox.IsEnabled = styleControlsActive;
             _fontSizeBox.IsEnabled = styleControlsActive;
+            _fontSizeTextBox.IsEnabled = styleControlsActive;
             _boldToggle.IsEnabled = styleControlsActive;
             _markerSizeBox.IsEnabled = styleControlsActive;
+            _markerSizeTextBox.IsEnabled = styleControlsActive;
 
             _updatingStyleControls = true;
             try
@@ -1411,28 +1693,33 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 {
                     SelectColor(rectangle.Style.StrokeColor);
                     _thicknessBox.Value = rectangle.Style.StrokeThickness;
+                    SetTextValue(_thicknessTextBox, rectangle.Style.StrokeThickness);
                 }
                 else if (selectedContent is ArrowLineAnnotationContent arrow)
                 {
                     SelectColor(arrow.Style.StrokeColor);
                     _thicknessBox.Value = arrow.Style.StrokeThickness;
+                    SetTextValue(_thicknessTextBox, arrow.Style.StrokeThickness);
                     SetModeButtonState(_arrowLineModeButtons, arrow.Style.EndStyle);
                 }
                 else if (selectedContent is HighlighterStrokeContent highlighter)
                 {
                     SelectColor(highlighter.Style.StrokeColor);
                     _thicknessBox.Value = highlighter.Style.StrokeThickness;
+                    SetTextValue(_thicknessTextBox, highlighter.Style.StrokeThickness);
                 }
                 else if (selectedContent is TextAnnotationContent text)
                 {
                     SelectColor(text.Style.Color);
                     _fontSizeBox.Value = text.Style.FontSize;
+                    SetTextValue(_fontSizeTextBox, text.Style.FontSize);
                     _boldToggle.IsChecked = text.Style.Bold;
                 }
                 else if (selectedContent is NumberedMarkerAnnotationContent marker)
                 {
                     SelectColor(marker.Style.Color);
                     _markerSizeBox.Value = marker.Style.Size;
+                    SetTextValue(_markerSizeTextBox, marker.Style.Size);
                 }
                 else if (selectedContent is PrivacyRegionAnnotationContent privacy)
                 {
@@ -1442,27 +1729,32 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 {
                     SelectColor(request.ActiveRectangleStyle.StrokeColor);
                     _thicknessBox.Value = request.ActiveRectangleStyle.StrokeThickness;
+                    SetTextValue(_thicknessTextBox, request.ActiveRectangleStyle.StrokeThickness);
                 }
                 else if (request.ActiveTool == EditingToolKind.ArrowLine)
                 {
                     SelectColor(request.ActiveArrowLineStyle.StrokeColor);
                     _thicknessBox.Value = request.ActiveArrowLineStyle.StrokeThickness;
+                    SetTextValue(_thicknessTextBox, request.ActiveArrowLineStyle.StrokeThickness);
                 }
                 else if (request.ActiveTool == EditingToolKind.Highlighter)
                 {
                     SelectColor(request.ActiveHighlighterStyle.StrokeColor);
                     _thicknessBox.Value = request.ActiveHighlighterStyle.StrokeThickness;
+                    SetTextValue(_thicknessTextBox, request.ActiveHighlighterStyle.StrokeThickness);
                 }
                 else if (request.ActiveTool == EditingToolKind.Text)
                 {
                     SelectColor(request.ActiveTextStyle.Color);
                     _fontSizeBox.Value = request.ActiveTextStyle.FontSize;
+                    SetTextValue(_fontSizeTextBox, request.ActiveTextStyle.FontSize);
                     _boldToggle.IsChecked = request.ActiveTextStyle.Bold;
                 }
                 else if (request.ActiveTool == EditingToolKind.NumberedMarker)
                 {
                     SelectColor(request.ActiveNumberedMarkerStyle.Color);
                     _markerSizeBox.Value = request.ActiveNumberedMarkerStyle.Size;
+                    SetTextValue(_markerSizeTextBox, request.ActiveNumberedMarkerStyle.Size);
                 }
             }
             finally
@@ -1476,7 +1768,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             for (var index = 0; index < _colorBox.Items.Count; index++)
             {
                 if (_colorBox.Items[index] is ComboBoxItem item
-                    && item.Tag is ArgbColor candidate
+                    && item.Tag is string colorName
+                    && ColorOptions.TryGetValue(colorName, out var candidate)
                     && candidate == color)
                 {
                     _colorBox.SelectedIndex = index;
@@ -1523,7 +1816,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         private void OnColorChanged(object sender, SelectionChangedEventArgs args)
         {
-            if (_colorBox.SelectedItem is ComboBoxItem { Tag: ArgbColor color })
+            if (_colorBox.SelectedItem is ComboBoxItem { Tag: string colorName }
+                && ColorOptions.TryGetValue(colorName, out var color))
             {
                 ApplySelectedStyle(new AnnotationObjectStyleChange(Color: color));
             }
@@ -1553,6 +1847,50 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 NumberedMarkerAnnotationStyle.MaxSize))
             {
                 ApplySelectedStyle(new AnnotationObjectStyleChange(MarkerSize: (int)args.NewValue));
+            }
+        }
+
+        private void OnThicknessTextChanged(object sender, TextChangedEventArgs args)
+        {
+            if (_disposed || _updatingStyleControls
+                || !TryParseTextValue(_thicknessTextBox.Text, out var value))
+            {
+                return;
+            }
+
+            if (IsWholeNumber(value, 1, 64))
+            {
+                ApplySelectedStyle(new AnnotationObjectStyleChange(Thickness: (int)value));
+            }
+        }
+
+        private void OnFontSizeTextChanged(object sender, TextChangedEventArgs args)
+        {
+            if (_disposed || _updatingStyleControls
+                || !TryParseTextValue(_fontSizeTextBox.Text, out var value))
+            {
+                return;
+            }
+
+            if (value >= TextAnnotationStyle.MinFontSize
+                && value <= TextAnnotationStyle.MaxFontSize)
+            {
+                ApplySelectedStyle(new AnnotationObjectStyleChange(FontSize: value));
+            }
+        }
+
+        private void OnMarkerSizeTextChanged(object sender, TextChangedEventArgs args)
+        {
+            if (_disposed || _updatingStyleControls
+                || !TryParseTextValue(_markerSizeTextBox.Text, out var value))
+            {
+                return;
+            }
+
+            if (IsWholeNumber(value, NumberedMarkerAnnotationStyle.MinSize,
+                NumberedMarkerAnnotationStyle.MaxSize))
+            {
+                ApplySelectedStyle(new AnnotationObjectStyleChange(MarkerSize: (int)value));
             }
         }
 
@@ -1598,6 +1936,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             && value >= minimum
             && value <= maximum
             && value == Math.Truncate(value);
+
+        private static bool TryParseTextValue(string text, out double value) =>
+            double.TryParse(
+                text,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out value);
+
+        private static void SetTextValue(TextBox box, double value) =>
+            box.Text = value.ToString("0.##", CultureInfo.InvariantCulture);
 
         private void OnArrowModeClicked(object sender, RoutedEventArgs args) =>
             SelectArrowLineMode(ArrowLineEndStyle.Arrow);
@@ -1648,6 +1996,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
+            _owner.TraceFunctionBarDiagnostic(
+                "FunctionBar.Tool.Clicked",
+                $"Tool={tool}");
             var result = sink.SelectTool(new EditingToolSelectionRequest(
                 _request.SessionId,
                 _request.CoordinateVersion,
@@ -1658,6 +2009,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 RequestedArrowLineEndStyle = arrowLineEndStyle,
                 RequestedPrivacyRegionMode = privacyMode
             });
+            _owner.TraceFunctionBarDiagnostic(
+                "FunctionBar.Tool.Result",
+                $"Tool={tool};Result={result.Kind}");
             if (result.Kind != EditingToolSelectionResultKind.Selected)
             {
                 Update(_request);
@@ -1694,8 +2048,15 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return button;
         }
 
-        private void OnPointerPressed(object sender, PointerRoutedEventArgs args) =>
+        private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
+        {
+            if (!_initialized || _disposed)
+            {
+                return;
+            }
+
             args.Handled = true;
+        }
 
         private sealed class CancelCommandGate
         {
@@ -2904,6 +3265,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         private readonly FrozenDisplayOverlayDescriptor _descriptor;
         private readonly SessionInputBoundary _inputBoundary;
+        private readonly ICompleteExecutionTraceSink? _traceSink;
         private readonly Window _window = new();
         private readonly Grid _root = new();
         private readonly Image _image = new();
@@ -2948,6 +3310,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly List<TextBlock> _textPreviews = new();
         private readonly List<FrameworkElement> _numberedMarkerPreviews = new();
         private readonly List<PrivacyPreview> _privacyPreviews = new();
+        private readonly PointerReleaseDispatchGate _pointerReleaseDispatchGate = new();
         private readonly Grid _textEditorHost = new()
         {
             Visibility = Visibility.Collapsed,
@@ -2983,6 +3346,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 [SelectionHitTestKind.BottomLeftCorner] = CreateHandle(),
                 [SelectionHitTestKind.BottomRightCorner] = CreateHandle()
             };
+        private readonly FunctionBarSurface _functionBarHost;
         private FunctionBarSurface? _functionBar;
         private AppWindow? _appWindow;
         private nint _handle;
@@ -3004,11 +3368,13 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         public OverlaySurface(
             FrozenDisplayOverlayDescriptor descriptor,
-            SessionInputBoundary inputBoundary)
+            SessionInputBoundary inputBoundary,
+            ICompleteExecutionTraceSink? traceSink)
         {
             _descriptor = descriptor;
             _inputBoundary = inputBoundary
                 ?? throw new ArgumentNullException(nameof(inputBoundary));
+            _traceSink = traceSink;
             _image.Stretch = Stretch.Fill;
             _canvas.IsTabStop = true;
             _canvas.Background = new SolidColorBrush(ColorHelper.FromArgb(0, 0, 0, 0));
@@ -3058,6 +3424,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             _canvas.Children.Add(_textEditorHost);
+            _functionBarHost = new FunctionBarSurface(this);
+            _canvas.Children.Add(_functionBarHost.Root);
         }
 
         public async ValueTask InitializeAsync(CancellationToken cancellationToken)
@@ -3072,6 +3440,18 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
 
             _handle = handle;
+            _traceSink?.Record(new CompleteExecutionTraceEntry
+            {
+                TimestampUtc = DateTimeOffset.UtcNow,
+                SessionId = _descriptor.SessionId,
+                SelectionRevision = -1,
+                WorkflowState = WorkflowState.Selecting,
+                CompleteStage = CompleteExecutionStage.Diagnostic,
+                Component = nameof(WindowsFrozenDisplayOverlayCoordinator),
+                ManagedThreadId = Environment.CurrentManagedThreadId,
+                DiagnosticEvent = "Overlay.Initialized",
+                DiagnosticMessage = $"DisplayId={_descriptor.DisplayId};Handle=0x{handle.ToInt64():X}"
+            });
             InstallNativeInputBoundary();
             _ = ShowWindow(handle, SwHide);
 
@@ -3121,12 +3501,15 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
         }
 
-        public FunctionBarSurface CreateFunctionBar(FunctionBarPresentationRequest request)
+        public FunctionBarSurface CreateFunctionBar(
+            FunctionBarPresentationRequest request,
+            Action<string>? setPhase = null)
         {
             ObjectDisposedException.ThrowIf(_disposed, nameof(OverlaySurface));
-            _functionBar?.Dispose();
-            _functionBar = new FunctionBarSurface(this, request);
-            _canvas.Children.Add(_functionBar.Root);
+            setPhase?.Invoke("UsePrebuiltSurface");
+            _functionBar?.Deactivate();
+            _functionBar = _functionBarHost;
+            _functionBarHost.Initialize(request, setPhase);
             return _functionBar;
         }
 
@@ -3134,7 +3517,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         {
             if (ReferenceEquals(_functionBar, functionBar))
             {
-                _canvas.Children.Remove(functionBar.Root);
+                functionBar.Deactivate();
                 _functionBar = null;
             }
         }
@@ -4200,8 +4583,8 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
+            _functionBar?.Deactivate();
             _disposed = true;
-            _functionBar?.Dispose();
             _functionBar = null;
             _canvas.PointerPressed -= OnPointerPressed;
             _canvas.PointerMoved -= OnPointerMoved;
@@ -4243,6 +4626,15 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             catch
             {
             }
+
+            try
+            {
+                _canvas.Children.Remove(_functionBarHost.Root);
+                _functionBarHost.Dispose();
+            }
+            catch
+            {
+            }
         }
 
         private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
@@ -4252,6 +4644,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
+            _pointerReleaseDispatchGate.Reset();
             _canvas.Focus(FocusState.Pointer);
             var handle = WindowNative.GetWindowHandle(_window);
             var pointer = new SelectionPointerEvent(
@@ -4343,7 +4736,11 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
 
         private void OnPointerReleased(object sender, PointerRoutedEventArgs args)
         {
-            if (_disposed || !TryGetGlobalPointer(out var point))
+            var pointAvailable = TryGetGlobalPointer(out var point);
+            TracePointerDiagnostic(
+                "Overlay.PointerReleased.XamlReceived",
+                $"PointAvailable={pointAvailable};PointerId={args.Pointer.PointerId}");
+            if (_disposed || !pointAvailable)
             {
                 return;
             }
@@ -4359,40 +4756,75 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return;
             }
 
-            if (_inputBoundary.UsesHighlighterTool)
+            if (!_pointerReleaseDispatchGate.TryClaim())
             {
-                _inputBoundary.PointerReleasedHighlighter(pointer);
+                TracePointerDiagnostic(
+                    "Overlay.PointerReleased.DuplicateSuppressed",
+                    "Origin=Xaml");
+                _ = ReleaseCapture();
+                args.Handled = true;
+                return;
             }
-            else if (_inputBoundary.UsesPrivacyRegionTool)
-            {
-                _inputBoundary.PointerReleasedPrivacyRegion(pointer);
-            }
-            else if (_inputBoundary.UsesNumberedMarkerTool)
-            {
-                _inputBoundary.PointerReleasedNumberedMarker(pointer);
-            }
-            else if (_inputBoundary.UsesArrowLineTool)
-            {
-                _inputBoundary.PointerReleasedArrowLine(pointer);
-            }
-            else if (_inputBoundary.UsesRectangleTool)
-            {
-                _inputBoundary.PointerReleasedRectangle(pointer);
-            }
-            else if (_inputBoundary.UsesObjectEditing)
-            {
-                _inputBoundary.PointerReleasedObject(pointer);
-            }
-            else
-            {
-                _inputBoundary.PointerReleased(pointer);
-            }
+
+            DispatchPointerReleased(pointer, "Xaml");
             _ = ReleaseCapture();
             args.Handled = true;
         }
 
+        private void DispatchPointerReleased(SelectionPointerEvent pointer, string origin)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            string resultKind;
+            if (_inputBoundary.UsesHighlighterTool)
+            {
+                resultKind = _inputBoundary.PointerReleasedHighlighter(pointer).Kind.ToString();
+            }
+            else if (_inputBoundary.UsesPrivacyRegionTool)
+            {
+                resultKind = _inputBoundary.PointerReleasedPrivacyRegion(pointer).Kind.ToString();
+            }
+            else if (_inputBoundary.UsesNumberedMarkerTool)
+            {
+                resultKind = _inputBoundary.PointerReleasedNumberedMarker(pointer).Kind.ToString();
+            }
+            else if (_inputBoundary.UsesArrowLineTool)
+            {
+                resultKind = _inputBoundary.PointerReleasedArrowLine(pointer).Kind.ToString();
+            }
+            else if (_inputBoundary.UsesRectangleTool)
+            {
+                resultKind = _inputBoundary.PointerReleasedRectangle(pointer).Kind.ToString();
+            }
+            else if (_inputBoundary.UsesObjectEditing)
+            {
+                resultKind = _inputBoundary.PointerReleasedObject(pointer).Kind.ToString();
+            }
+            else
+            {
+                resultKind = _inputBoundary.PointerReleased(pointer).Kind.ToString();
+            }
+
+            _traceSink?.Record(new CompleteExecutionTraceEntry
+            {
+                TimestampUtc = DateTimeOffset.UtcNow,
+                SessionId = _descriptor.SessionId,
+                SelectionRevision = -1,
+                WorkflowState = WorkflowState.Selecting,
+                CompleteStage = CompleteExecutionStage.Diagnostic,
+                Component = nameof(WindowsFrozenDisplayOverlayCoordinator),
+                ManagedThreadId = Environment.CurrentManagedThreadId,
+                DiagnosticEvent = "Overlay.PointerReleased.Dispatched",
+                DiagnosticMessage = $"Origin={origin};Result={resultKind}"
+            });
+        }
+
         private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs args)
         {
+            TracePointerDiagnostic("Overlay.PointerCaptureLost", "Origin=Xaml");
             SessionInputBoundary.NotifyCaptureChanged();
             args.Handled = true;
         }
@@ -4558,6 +4990,15 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             or SelectionHitTestKind.BottomLeftCorner
             or SelectionHitTestKind.BottomRightCorner;
 
+        private sealed class PointerReleaseDispatchGate
+        {
+            private int _claimed;
+
+            public void Reset() => Volatile.Write(ref _claimed, 0);
+
+            public bool TryClaim() => Interlocked.CompareExchange(ref _claimed, 1, 0) == 0;
+        }
+
         private sealed class CrosshairCanvas : Canvas
         {
             public InputCursor? Cursor
@@ -4645,45 +5086,119 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         {
             if (!_disposed)
             {
-                if (message == WmLButtonUp
-                    && TryGetGlobalPointer(out var point))
+                if (message == WmLButtonUp)
                 {
-                    if (_inputBoundary.UsesHighlighterTool)
+                    var pointAvailable = TryGetGlobalPointer(out var point);
+                    TracePointerDiagnostic(
+                        "Overlay.PointerReleased.NativeMessage",
+                        $"PointAvailable={pointAvailable}");
+                    if (pointAvailable)
                     {
-                        _inputBoundary.PointerReleasedHighlighterFromNative(point);
-                    }
-                    else if (_inputBoundary.UsesPrivacyRegionTool)
-                    {
-                        _inputBoundary.PointerReleasedPrivacyRegionFromNative(point);
-                    }
-                    else if (_inputBoundary.UsesNumberedMarkerTool)
-                    {
-                        _inputBoundary.PointerReleasedNumberedMarkerFromNative(point);
-                    }
-                    else if (_inputBoundary.UsesArrowLineTool)
-                    {
-                        _inputBoundary.PointerReleasedArrowLineFromNative(point);
-                    }
-                    else if (_inputBoundary.UsesRectangleTool)
-                    {
-                        _inputBoundary.PointerReleasedRectangleFromNative(point);
-                    }
-                    else if (_inputBoundary.UsesObjectEditing)
-                    {
-                        _inputBoundary.PointerReleasedObjectFromNative(point);
-                    }
-                    else
-                    {
-                        _inputBoundary.PointerReleasedFromNative(point);
+                        if (_pointerReleaseDispatchGate.TryClaim())
+                        {
+                            DispatchNativePointerReleased(point);
+                        }
+                        else
+                        {
+                            TracePointerDiagnostic(
+                                "Overlay.PointerReleased.DuplicateSuppressed",
+                                "Origin=Native");
+                        }
+
+                        _ = ReleaseCapture();
                     }
                 }
                 else if (message == WmCaptureChanged)
                 {
+                    TracePointerDiagnostic("Overlay.PointerCaptureChanged", "Origin=Native");
                     SessionInputBoundary.NotifyCaptureChanged();
                 }
             }
 
             return CallWindowProc(_previousWindowProc, windowHandle, message, wParam, lParam);
+        }
+
+        private void DispatchNativePointerReleased(PhysicalPoint point)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            string resultKind;
+            if (_inputBoundary.UsesHighlighterTool)
+            {
+                resultKind = _inputBoundary.PointerReleasedHighlighterFromNative(point).Kind.ToString();
+            }
+            else if (_inputBoundary.UsesPrivacyRegionTool)
+            {
+                resultKind = _inputBoundary.PointerReleasedPrivacyRegionFromNative(point).Kind.ToString();
+            }
+            else if (_inputBoundary.UsesNumberedMarkerTool)
+            {
+                resultKind = _inputBoundary.PointerReleasedNumberedMarkerFromNative(point).Kind.ToString();
+            }
+            else if (_inputBoundary.UsesArrowLineTool)
+            {
+                resultKind = _inputBoundary.PointerReleasedArrowLineFromNative(point).Kind.ToString();
+            }
+            else if (_inputBoundary.UsesRectangleTool)
+            {
+                resultKind = _inputBoundary.PointerReleasedRectangleFromNative(point).Kind.ToString();
+            }
+            else if (_inputBoundary.UsesObjectEditing)
+            {
+                resultKind = _inputBoundary.PointerReleasedObjectFromNative(point).Kind.ToString();
+            }
+            else
+            {
+                resultKind = _inputBoundary.PointerReleasedFromNative(point).Kind.ToString();
+            }
+
+            _traceSink?.Record(new CompleteExecutionTraceEntry
+            {
+                TimestampUtc = DateTimeOffset.UtcNow,
+                SessionId = _descriptor.SessionId,
+                SelectionRevision = -1,
+                WorkflowState = WorkflowState.Selecting,
+                CompleteStage = CompleteExecutionStage.Diagnostic,
+                Component = nameof(WindowsFrozenDisplayOverlayCoordinator),
+                ManagedThreadId = Environment.CurrentManagedThreadId,
+                DiagnosticEvent = "Overlay.PointerReleased.Dispatched",
+                DiagnosticMessage = $"Origin=Native;Result={resultKind}"
+            });
+        }
+
+        private void TracePointerDiagnostic(string diagnosticEvent, string? diagnosticMessage = null)
+        {
+            _traceSink?.Record(new CompleteExecutionTraceEntry
+            {
+                TimestampUtc = DateTimeOffset.UtcNow,
+                SessionId = _descriptor.SessionId,
+                SelectionRevision = -1,
+                WorkflowState = WorkflowState.Selecting,
+                CompleteStage = CompleteExecutionStage.Diagnostic,
+                Component = nameof(WindowsFrozenDisplayOverlayCoordinator),
+                ManagedThreadId = Environment.CurrentManagedThreadId,
+                DiagnosticEvent = diagnosticEvent,
+                DiagnosticMessage = diagnosticMessage
+            });
+        }
+
+        internal void TraceFunctionBarDiagnostic(string diagnosticEvent, string? diagnosticMessage = null)
+        {
+            _traceSink?.Record(new CompleteExecutionTraceEntry
+            {
+                TimestampUtc = DateTimeOffset.UtcNow,
+                SessionId = _descriptor.SessionId,
+                SelectionRevision = -1,
+                WorkflowState = WorkflowState.Editing,
+                CompleteStage = CompleteExecutionStage.Diagnostic,
+                Component = nameof(WindowsFrozenDisplayOverlayCoordinator),
+                ManagedThreadId = Environment.CurrentManagedThreadId,
+                DiagnosticEvent = diagnosticEvent,
+                DiagnosticMessage = diagnosticMessage
+            });
         }
 
         [DllImport("user32.dll")]

@@ -4,6 +4,33 @@
 
 ## [Unreleased]
 
+### Fixed — Function Bar tool selection visibility and contrast (2026-08-20)
+
+- Fixed the Function Bar disappearing after a drawing-tool click: Core tool selection repositions the existing hosted bar, and the reposition path now preserves the bar's previous visible／hidden state instead of unconditionally hiding it.
+- Applied an opaque dark Function Bar surface with light text, visible borders and the same explicit control visual policy to Button、RadioButton、ComboBox、ComboBoxItem、TextBox、NumberBox and ToggleButton controls. Added non-sensitive `FunctionBar.Tool.Clicked`／`FunctionBar.Tool.Result` trace entries.
+- Added deterministic coverage for visible-state preservation and the Function Bar contrast policy. Release x64 solution build succeeded with `0` warnings／`0` errors; filtered non-interactive tests passed `268/268` with `0` failures／`0` skips; `git diff --check` passed.
+- Limited formatting verification was restricted to the two modified C# files. It still reports the repository's existing LF→CRLF／import-order baseline; no whole-file formatting rewrite was applied.
+- Reused the existing signed Development MSIX from `src/SnipPlus.App/AppPackages/SnipPlus.App_1.0.0.0_x64_Test/SnipPlus.App_1.0.0.0_x64.msix` for packaged verification; no Build、Publish or Reinstall was performed in this runtime pass. MSIX SHA-256: `D6C6EB45BCC41AE1CDF6799CD73F38A94C2B6FFCF01E7B405E01888EB0AA7D5B`; installed `SnipPlus.App.dll` SHA-256: `52A9A36B717B435ACC450B52371ACC9FC51CAAC94EC151ADDDD1001306553CAF`; installed `SnipPlus.Windows.dll` SHA-256: `339B0911664A2D9096189CEA710C25B5A8948315BE26C63C480F6DB68D2E24F6`; package status: `Ok`.
+- Packaged runtime verification through Cua Driver in interactive Session 1 confirmed three simultaneous overlays、`SelectionLocked`、`FunctionBar.Show.Succeeded` and a visible／opaque／hit-testable Function Bar. Fresh post-action UIA snapshots kept the Function Bar present and the selected tool active for Rectangle、Arrow／Line、Highlighter、Text、Mosaic／Blur and Numbered Marker; a Rectangle annotation commit exposed Undo. Esc removed all overlays while the SnipPlus process remained resident. No Complete、Save、PNG or Clipboard operation was executed.
+- The Function Bar contrast implementation is present and the packaged surface was confirmed visible with `Opacity=1`; pixel-level visual contrast acceptance for Normal、Selected、Disabled and Hover states remains pending because no real desktop screenshot was saved. Computer Use custom-surface drag limitations were treated as automation-delivery limitations, not product failures. No external GUI fixture、desktop screenshot or Clipboard payload was used.
+
+### Added — Stage 7N diagnostic logging and clear action (2026-08-19)
+
+- Added a non-sensitive JSONL diagnostic log for the Selection `PointerReleased` boundary, Overlay presentation, Function Bar prepare／reposition／show, typed exception recovery and session cleanup. Entries include timestamps, workflow state, selection revision, failure code, native code, exception type, diagnostic event and diagnostic message; no desktop image, Clipboard payload or user-private content is recorded.
+- Added a `Clear LOG` action at the top-right of MainWindow. It clears the persisted diagnostic log idempotently without changing PrintScreen registration, capture state or system settings.
+- Added deterministic coverage for diagnostic event emission during Function Bar reposition failure and idempotent log clearing. Release x64 solution build passed with `0` warnings／`0` errors; filtered non-interactive tests passed `265/265` with `0` failures／`0` skips; `git diff --check` passed.
+- Limited formatting verification was restricted to the modified C# files. It reports only the repository's existing LF→CRLF `ENDOFLINE` baseline; UTF-8 BOM／LF representation was preserved and no whole-file formatting rewrite was retained.
+- Rebuilt and installed the signed Development MSIX after verifying that the package DLL matches the current Build DLL. MSIX SHA-256: `BD65C21C58A9D7742A822B0790D270CEB4A707158DCFB108E2FB5B5CF4D90971`; packaged／installed `SnipPlus.App.dll` SHA-256: `5B0E8C14D0881B8A68C414114081635E22A6D8D14748C826257FE2FF675E8664`; package status: `Ok`. The package command emitted only the existing `mspdbcmf.exe` symbols-package warning; no symbol package is required for this verification.
+- Packaged runtime was not launched in this coding pass; the Function Bar failure scenario remains pending packaged re-verification.
+
+### Fixed — Stage 7N Function Bar preparation failure recovery (2026-08-19)
+
+- Added Core and Windows Function Bar presentation exception boundaries. Function Bar creation／measurement／placement exceptions now become typed `FunctionBarPresentationFailed` results and trigger normal capture-session cleanup instead of escaping the PointerReleased UI event and terminating the SnipPlus process.
+- Added deterministic regression coverage proving a Function Bar preparation exception does not escape PointerReleased, does not enter `Editing`, closes the overlay session and disposes the capture session.
+- Release x64 solution build passed with `0` warnings／`0` errors; filtered non-interactive tests passed `261/261` with `0` failures／`0` skips; `git diff --check` passed.
+- Limited formatting verification was restricted to the three modified C# files. The formatter reports only the repository's existing LF→CRLF `ENDOFLINE` baseline; the original BOM／LF representation was preserved and no whole-file formatting rewrite was retained.
+- A new signed Development MSIX was generated and installed successfully. MSIX SHA-256: `13C8056170E1F1048493E5ECDFA868EB216C0190F8764D1ADB2EE084BB2AA0F`; signer: `CN=SnipPlus`, Thumbprint `2DB78D415E3CB3D60F054ECA48488561817F9434`. The App was not launched and the Function Bar packaged runtime scenario remains pending re-verification.
+
 ### Added — Stage 7N Production Save Workflow／Same-result PNG → Clipboard (2026-08-19)
 
 - Integrated the Function Bar `Save` command into the production Core workflow: `Editing → ResultReady → Saving → Delivering → Completed → ResidentReady`. `Save` and `Complete` share one in-flight output gate, and the Windows overlay now wires the Save button to the existing command boundary.

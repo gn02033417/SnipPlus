@@ -19,10 +19,12 @@ public sealed class WindowsCapturePlatformResources : IDisposable
         FrameProvider = new WindowsFrozenDisplayFrameSetProvider(
             AdapterFactory,
             TopologyProvider);
-        OverlayCoordinator = new WindowsFrozenDisplayOverlayCoordinator(functionBarPlacementService);
+        CompleteExecutionTrace = new WindowsCompleteExecutionTraceSink();
+        OverlayCoordinator = new WindowsFrozenDisplayOverlayCoordinator(
+            functionBarPlacementService,
+            CompleteExecutionTrace);
         FinalRenderer = new WindowsFrozenDisplayFrameSetRenderer();
         AnnotationAwareRenderer = new WindowsAnnotationAwareRenderCompositor();
-        CompleteExecutionTrace = new WindowsCompleteExecutionTraceSink();
         var clipboardDispatcher = dispatcherQueue is null
             ? null
             : new DispatcherQueueClipboardDeliveryDispatcher(dispatcherQueue);

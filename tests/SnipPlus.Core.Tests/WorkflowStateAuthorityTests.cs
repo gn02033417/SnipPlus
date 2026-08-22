@@ -111,6 +111,47 @@ public sealed class WorkflowStateAuthorityTests
 
     [TestMethod]
     [TestCategory("Unit")]
+    public void EditingCanEnterFailedForPresentationFailure()
+    {
+        var authority = new WorkflowStateAuthority();
+
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.ResidentReady,
+            WorkflowState.CaptureRequested,
+            "test")).IsSuccess);
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.CaptureRequested,
+            WorkflowState.Freezing,
+            "test")).IsSuccess);
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.Freezing,
+            WorkflowState.Selecting,
+            "test")).IsSuccess);
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.Selecting,
+            WorkflowState.SelectionLocked,
+            "test")).IsSuccess);
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.SelectionLocked,
+            WorkflowState.Editing,
+            "function-bar-ready")).IsSuccess);
+
+        var failed = authority.RequestTransition(new(
+            WorkflowState.Editing,
+            WorkflowState.Failed,
+            "function-bar-presentation-failed"));
+
+        Assert.IsTrue(failed.IsSuccess);
+        Assert.AreEqual(WorkflowState.Failed, authority.CurrentState);
+        Assert.IsTrue(authority.RequestTransition(new(
+            WorkflowState.Failed,
+            WorkflowState.ResidentReady,
+            "cleanup")).IsSuccess);
+        Assert.AreEqual(WorkflowState.ResidentReady, authority.CurrentState);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
     public void IllegalTransitionIsRejectedWithoutMutatingState()
     {
         var authority = new WorkflowStateAuthority();

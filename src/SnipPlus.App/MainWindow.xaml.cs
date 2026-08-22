@@ -42,6 +42,8 @@ public partial class MainWindow : Window, IDisposable
             new FunctionBarPlacementService(),
             DispatcherQueue.GetForCurrentThread(),
             WindowNative.GetWindowHandle(this));
+        _platformResources.CompleteExecutionTrace.RecordApplicationDiagnostic(
+            "Application.Started");
         _pngSaveCoordinator = new PngSaveCoordinator(_platformResources.PngSave);
         var freezingCoordinator = new CaptureFreezingCoordinator(
             _captureRequestCoordinator,
@@ -98,6 +100,14 @@ public partial class MainWindow : Window, IDisposable
         SetStatus(result.UserMessage);
     }
 
+    private void ClearLogButton_Click(object sender, RoutedEventArgs args)
+    {
+        var cleared = _platformResources.CompleteExecutionTrace.Clear();
+        SetStatus(cleared
+            ? "Diagnostic LOG cleared."
+            : "Diagnostic LOG could not be cleared.");
+    }
+
     private void OnPrintScreenReceived(object? sender, PrintScreenReceivedEventArgs args)
     {
         if (Volatile.Read(ref _shutdownStarted) != 0)
@@ -110,6 +120,10 @@ public partial class MainWindow : Window, IDisposable
 
     private void StartCaptureFromBoundary(CaptureRequestResult result)
     {
+        _platformResources.CompleteExecutionTrace.RecordApplicationDiagnostic(
+            result.IsAccepted
+                ? "Capture.Start.Accepted"
+                : "Capture.Start.Rejected");
         SetStatus(result.UserMessage);
         if (!result.IsAccepted)
         {
@@ -126,7 +140,7 @@ public partial class MainWindow : Window, IDisposable
             .ConfigureAwait(true);
         switch (outcome)
         {
-            case CapturePresentationOutcome.SelectingReady:
+            case CapturePresentationOutcome.SelectingReady selectingReady:
                 SetStatus("Select a region across the displays.");
                 break;
             case CapturePresentationOutcome.Busy:

@@ -957,6 +957,112 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
 
     [TestMethod]
     [TestCategory("Unit")]
+    public async Task FunctionBarPreparationExceptionDoesNotEscapePointerRelease()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator
+        {
+            PreparationException = new InvalidOperationException("synthetic function-bar failure")
+        };
+        using var workflow = CreateWorkflow(requests, provider, overlay, functionBar);
+
+        var result = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        var input = overlay.InputSink!;
+        input.PointerPressed(Input(result.Session, -3, 0));
+        input.PointerMoved(Input(result.Session, 3, 2));
+
+        var locked = input.PointerReleased(Input(result.Session, 3, 2));
+
+        Assert.AreEqual(SelectionInputResultKind.Locked, locked.Kind);
+        await WaitForStateAsync(authority, WorkflowState.ResidentReady);
+        Assert.AreEqual(1, functionBar.PrepareCalls);
+        Assert.AreEqual(1, overlay.CloseCalls);
+        Assert.IsTrue(provider.LastSession?.IsDisposed ?? false);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task FunctionBarRepositionExceptionDoesNotEscapePointerRelease()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var trace = new FakeCompleteExecutionTraceSink();
+        var functionBar = new FakeFunctionBarPresentationCoordinator
+        {
+            RepositionException = new InvalidOperationException(
+                "synthetic function-bar reposition failure")
+        };
+        using var workflow = CreateWorkflow(
+            requests,
+            provider,
+            overlay,
+            functionBar,
+            traceSink: trace);
+
+        var result = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        var input = overlay.InputSink!;
+        input.PointerPressed(Input(result.Session, -3, 0));
+        input.PointerMoved(Input(result.Session, 3, 2));
+
+        var locked = input.PointerReleased(Input(result.Session, 3, 2));
+
+        Assert.AreEqual(SelectionInputResultKind.Locked, locked.Kind);
+        await WaitForStateAsync(authority, WorkflowState.ResidentReady);
+        Assert.AreEqual(1, functionBar.PrepareCalls);
+        Assert.AreEqual(1, functionBar.RepositionCalls);
+        Assert.AreEqual(1, overlay.CloseCalls);
+        Assert.IsTrue(provider.LastSession?.IsDisposed ?? false);
+        Assert.IsTrue(trace.Entries.Any(entry =>
+            entry.DiagnosticEvent == "FunctionBar.Reposition.Exception"));
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    public async Task FunctionBarShowExceptionDoesNotEscapePointerRelease()
+    {
+        var authority = new WorkflowStateAuthority();
+        using var requests = new CaptureRequestCoordinator(authority);
+        var request = CaptureRequest.CreateSecondary(Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+        Assert.IsTrue(requests.Submit(request).IsAccepted);
+        var provider = new FakeAllDisplayProvider();
+        var overlay = new FakeOverlayCoordinator();
+        var functionBar = new FakeFunctionBarPresentationCoordinator
+        {
+            ShowException = new InvalidOperationException(
+                "synthetic function-bar show failure")
+        };
+        using var workflow = CreateWorkflow(requests, provider, overlay, functionBar);
+
+        var result = (CapturePresentationOutcome.SelectingReady)
+            await workflow.StartAsync(request, CancellationToken.None);
+        var input = overlay.InputSink!;
+        input.PointerPressed(Input(result.Session, -3, 0));
+        input.PointerMoved(Input(result.Session, 3, 2));
+
+        var locked = input.PointerReleased(Input(result.Session, 3, 2));
+
+        Assert.AreEqual(SelectionInputResultKind.Locked, locked.Kind);
+        await WaitForStateAsync(authority, WorkflowState.ResidentReady);
+        Assert.AreEqual(1, functionBar.PrepareCalls);
+        Assert.AreEqual(1, functionBar.RepositionCalls);
+        Assert.AreEqual(1, functionBar.ShowCalls);
+        Assert.AreEqual(1, overlay.CloseCalls);
+        Assert.IsTrue(provider.LastSession?.IsDisposed ?? false);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
     public async Task EditingAdjustmentHidesAndRepositionsFunctionBar()
     {
         var authority = new WorkflowStateAuthority();
@@ -1606,6 +1712,12 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
     {
         public Failure? PreparationFailure { get; init; }
 
+        public Exception? PreparationException { get; init; }
+
+        public Exception? RepositionException { get; init; }
+
+        public Exception? ShowException { get; init; }
+
         public int PrepareCalls { get; private set; }
 
         public int RepositionCalls { get; private set; }
@@ -1626,6 +1738,11 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         {
             PrepareCalls++;
             LastRequest = request;
+            if (PreparationException is not null)
+            {
+                throw PreparationException;
+            }
+
             return PreparationFailure is null
                 ? Ready(request, FunctionBarPresentationResultKind.Ready)
                 : Failed(request, PreparationFailure);
@@ -1635,6 +1752,11 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
         {
             RepositionCalls++;
             LastRequest = request;
+            if (RepositionException is not null)
+            {
+                throw RepositionException;
+            }
+
             return Ready(request, FunctionBarPresentationResultKind.Ready);
         }
 
@@ -1644,6 +1766,11 @@ public sealed class CapturePresentationWorkflowCoordinatorTests
             int selectionRevision)
         {
             ShowCalls++;
+            if (ShowException is not null)
+            {
+                throw ShowException;
+            }
+
             return new FunctionBarPresentationResult(
                 FunctionBarPresentationResultKind.Shown,
                 sessionId,

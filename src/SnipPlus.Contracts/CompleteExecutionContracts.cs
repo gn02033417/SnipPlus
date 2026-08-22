@@ -19,7 +19,8 @@ public enum CompleteExecutionStage
     ClipboardFailed,
     ReturningToEditing,
     CleaningUp,
-    Completed
+    Completed,
+    Diagnostic
 }
 
 public sealed record CompleteExecutionTraceEntry
@@ -44,6 +45,7 @@ public sealed record CompleteExecutionTraceEntry
     public bool? DispatcherHasThreadAccess { get; init; }
     public bool? DispatcherEnqueueSucceeded { get; init; }
     public string? DiagnosticEvent { get; init; }
+    public string? DiagnosticMessage { get; init; }
     public string? ExceptionType { get; init; }
 }
 

@@ -9,8 +9,23 @@
         </Grid.RowDefinitions>
 
         <StackPanel x:Name="CommandBar" Padding="24" Spacing="10">
-            <TextBlock FontSize="28" Text="SnipPlus" />
-            <TextBlock Text="First vertical slice" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="4">
+                    <TextBlock FontSize="28" Text="SnipPlus" />
+                    <TextBlock Text="First vertical slice" />
+                </StackPanel>
+                <Button
+                    x:Name="ClearLogButton"
+                    Grid.Column="1"
+                    AutomationProperties.Name="Clear diagnostic log"
+                    Click="ClearLogButton_Click"
+                    Content="Clear LOG"
+                    HorizontalAlignment="Right" />
+            </Grid>
             <StackPanel Orientation="Horizontal" Spacing="12">
                 <Button x:Name="StartCaptureButton" Click="StartCaptureButton_Click" Content="Start Capture" />
                 <CheckBox

@@ -111,6 +111,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
         Assert.IsNotNull(functionBarSurface.GetField(
             "_arrowLineModeButtons",
             BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNotNull(functionBarSurface.GetField(
+            "_isVisible",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNotNull(functionBarSurface.GetProperty(
+            "IsVisible",
+            BindingFlags.Instance | BindingFlags.Public));
     }
 
     [TestMethod]
@@ -195,6 +201,31 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Contract")]
+    public void FunctionBarRepositionPreservesExistingVisibleState()
+    {
+        var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("FunctionBarSurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(functionBarSurface);
+        var getRepositionVisibility = functionBarSurface.GetMethod(
+            "GetRepositionVisibility",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(getRepositionVisibility);
+
+        Assert.IsTrue((bool)getRepositionVisibility.Invoke(
+            null,
+            new object[] { true, true })!);
+        Assert.IsFalse((bool)getRepositionVisibility.Invoke(
+            null,
+            new object[] { true, false })!);
+        Assert.IsFalse((bool)getRepositionVisibility.Invoke(
+            null,
+            new object[] { false, true })!);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
     public void FunctionBarMeasurementConvertsDipToPhysicalPixelsDeterministically()
     {
         var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
@@ -247,6 +278,12 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
         Assert.IsTrue(background.R < foreground.R);
         Assert.IsTrue(background.G < foreground.G);
         Assert.IsTrue(background.B < foreground.B);
+        Assert.AreEqual(39, background.R);
+        Assert.AreEqual(54, background.G);
+        Assert.AreEqual(74, background.B);
+        Assert.IsNotNull(functionBarSurface.GetMethod(
+            "ApplyControlVisualStyle",
+            BindingFlags.Static | BindingFlags.NonPublic));
     }
 
     [TestMethod]
@@ -440,6 +477,33 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
         Assert.AreEqual(1, sink.ReleaseCalls.Count);
         Assert.AreEqual(10, sink.MovedCalls.Single().PointerId);
         Assert.AreEqual(10, sink.ReleaseCalls.Single().PointerId);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void PointerReleaseDispatchGateAllowsOnlyOneReleaseSourcePerPointerPress()
+    {
+        var overlaySurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("OverlaySurface", BindingFlags.NonPublic);
+        Assert.IsNotNull(overlaySurface);
+
+        var gateType = overlaySurface.GetNestedType(
+            "PointerReleaseDispatchGate",
+            BindingFlags.NonPublic);
+        Assert.IsNotNull(gateType);
+
+        var gate = Activator.CreateInstance(gateType)!;
+        var tryClaim = gateType.GetMethod("TryClaim")!;
+        var reset = gateType.GetMethod("Reset")!;
+
+        Assert.IsTrue((bool)tryClaim.Invoke(gate, null)!);
+        Assert.IsFalse((bool)tryClaim.Invoke(gate, null)!);
+
+        reset.Invoke(gate, null);
+
+        Assert.IsTrue((bool)tryClaim.Invoke(gate, null)!);
+        Assert.IsFalse((bool)tryClaim.Invoke(gate, null)!);
     }
 
     private static SelectionPointerEvent Input(

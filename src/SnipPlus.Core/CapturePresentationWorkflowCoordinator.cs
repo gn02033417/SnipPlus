@@ -275,6 +275,7 @@ public sealed class CapturePresentationWorkflowCoordinator :
         {
             if (_disposed || _activeSession is not null || _startInProgress)
             {
+                TraceDiagnostic(request.RequestId, "Capture.Start.Busy");
                 return new CapturePresentationOutcome.Busy();
             }
 
@@ -282,6 +283,8 @@ public sealed class CapturePresentationWorkflowCoordinator :
             _sessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             sessionCancellation = _sessionCancellation;
         }
+
+        TraceDiagnostic(request.RequestId, "Capture.Start.Accepted");
 
         try
         {
@@ -472,35 +475,78 @@ public sealed class CapturePresentationWorkflowCoordinator :
 
     public SelectionInputResult PointerReleased(SelectionPointerEvent input)
     {
-        if (IsObjectEditingInput(input))
-        {
-            return ForwardObjectPointer(input, _annotationObjectEditing.PointerReleased);
-        }
+        ArgumentNullException.ThrowIfNull(input);
+        TraceDiagnostic(input.SessionId, "Selection.PointerReleased.Begin");
 
-        var result = ForwardSelectionInput(
-            input,
-            static (selection, value) => selection.PointerReleased(value));
-        if (result.Kind == SelectionInputResultKind.Locked
-            && ActiveTool == EditingToolKind.Selection)
+        try
         {
-            var transition = _stateAuthority.RequestTransition(new(
-                WorkflowState.Selecting,
-                WorkflowState.SelectionLocked,
-                "InitialSelectionPointerReleased"));
-            if (!transition.IsSuccess)
+            if (IsObjectEditingInput(input))
             {
-                Observe(FailCurrentAsync(transition.Failure ?? CreateFailure(
+                var objectResult = ForwardObjectPointer(
+                    input,
+                    _annotationObjectEditing.PointerReleased);
+                TraceDiagnostic(
                     input.SessionId,
-                    FailureCode.InvalidStateTransition,
-                    "The valid Selection could not be locked.")));
+                    $"Selection.PointerReleased.{objectResult.Kind}");
+                return objectResult;
             }
-            else if (_functionBarPresentation is not null)
-            {
-                PrepareEditing(result.State);
-            }
-        }
 
-        return result;
+            var result = ForwardSelectionInput(
+                input,
+                static (selection, value) => selection.PointerReleased(value));
+            TraceDiagnostic(
+                input.SessionId,
+                $"Selection.PointerReleased.{result.Kind}",
+                result.State);
+            if (result.Kind == SelectionInputResultKind.Locked
+                && ActiveTool == EditingToolKind.Selection)
+            {
+                var transition = _stateAuthority.RequestTransition(new(
+                    WorkflowState.Selecting,
+                    WorkflowState.SelectionLocked,
+                    "InitialSelectionPointerReleased"));
+                if (!transition.IsSuccess)
+                {
+                    var failure = transition.Failure ?? CreateFailure(
+                        input.SessionId,
+                        FailureCode.InvalidStateTransition,
+                        "The valid Selection could not be locked.");
+                    TraceDiagnostic(
+                        input.SessionId,
+                        "Selection.PointerReleased.TransitionFailed",
+                        result.State,
+                        failure);
+                    Observe(FailCurrentAsync(failure));
+                }
+                else if (_functionBarPresentation is not null)
+                {
+                    PrepareEditing(result.State);
+                }
+            }
+
+            return result;
+        }
+        catch (Exception exception)
+        {
+            var failure = CreateFailure(
+                input.SessionId,
+                FailureCode.UnexpectedFailure,
+                $"Pointer release threw {exception.GetType().Name}: {exception.Message}",
+                exception.HResult);
+            TraceDiagnostic(
+                input.SessionId,
+                "Selection.PointerReleased.Exception",
+                CurrentSelection,
+                failure,
+                exception);
+            Observe(FailCurrentAsync(failure));
+            return new SelectionInputResult(
+                SelectionInputResultKind.InvalidSelection,
+                CurrentSelection ?? SelectionVisualState.Initial(
+                    input.SessionId,
+                    input.CoordinateVersion),
+                "Selection release failed and cleanup was requested.");
+        }
     }
 
     public RectanglePointerResult PointerPressed(RectanglePointerEvent input)
@@ -1516,10 +1562,29 @@ public sealed class CapturePresentationWorkflowCoordinator :
 
     private void OnSelectionStateChanged(SelectionVisualState state)
     {
-        _annotationEditing.UpdateSelection(state);
-        _annotationObjectEditing.UpdateSelection(state);
-        _overlayCoordinator.ApplySelection(state);
-        _overlayCoordinator.ApplyAnnotation(CreateAnnotationPresentation(state));
+        try
+        {
+            _annotationEditing.UpdateSelection(state);
+            _annotationObjectEditing.UpdateSelection(state);
+            _overlayCoordinator.ApplySelection(state);
+            _overlayCoordinator.ApplyAnnotation(CreateAnnotationPresentation(state));
+        }
+        catch (Exception exception)
+        {
+            var failure = CreateFailure(
+                state.SessionId,
+                FailureCode.OverlayPresentationFailed,
+                $"Selection overlay presentation threw {exception.GetType().Name}: {exception.Message}",
+                exception.HResult);
+            TraceDiagnostic(
+                state.SessionId,
+                "Selection.StateChanged.OverlayException",
+                state,
+                failure,
+                exception);
+            Observe(FailCurrentAsync(failure));
+            return;
+        }
 
         if (_functionBarPresentation is null
             || _stateAuthority.CurrentState != WorkflowState.Editing)
@@ -1527,59 +1592,120 @@ public sealed class CapturePresentationWorkflowCoordinator :
             return;
         }
 
-        if (state.InteractionMode is
-            SelectionInteractionMode.Moving
-            or SelectionInteractionMode.ResizingLeft
-            or SelectionInteractionMode.ResizingTop
-            or SelectionInteractionMode.ResizingRight
-            or SelectionInteractionMode.ResizingBottom
-            or SelectionInteractionMode.ResizingTopLeft
-            or SelectionInteractionMode.ResizingTopRight
-            or SelectionInteractionMode.ResizingBottomLeft
-            or SelectionInteractionMode.ResizingBottomRight
-            or SelectionInteractionMode.Reselecting)
+        try
         {
-            var hidden = _functionBarPresentation.Hide(state.SessionId);
-            if (hidden.Kind == FunctionBarPresentationResultKind.Failed)
+            if (state.InteractionMode is
+                SelectionInteractionMode.Moving
+                or SelectionInteractionMode.ResizingLeft
+                or SelectionInteractionMode.ResizingTop
+                or SelectionInteractionMode.ResizingRight
+                or SelectionInteractionMode.ResizingBottom
+                or SelectionInteractionMode.ResizingTopLeft
+                or SelectionInteractionMode.ResizingTopRight
+                or SelectionInteractionMode.ResizingBottomLeft
+                or SelectionInteractionMode.ResizingBottomRight
+                or SelectionInteractionMode.Reselecting)
             {
-                Observe(CancelCurrentAsync("FunctionBarHideFailed"));
+                var hidden = _functionBarPresentation.Hide(state.SessionId);
+                if (hidden.Kind == FunctionBarPresentationResultKind.Failed)
+                {
+                    TraceDiagnostic(
+                        state.SessionId,
+                        "FunctionBar.Hide.Failed",
+                        state,
+                        hidden.Failure);
+                    Observe(CancelCurrentAsync("FunctionBarHideFailed"));
+                }
+
+                return;
             }
 
-            return;
-        }
+            if (state.Status != SelectionStatus.Locked
+                || !state.IsGeometryValid
+                || state.NormalizedPhysicalBounds is null)
+            {
+                return;
+            }
 
-        if (state.Status != SelectionStatus.Locked
-            || !state.IsGeometryValid
-            || state.NormalizedPhysicalBounds is null)
-        {
-            return;
-        }
+            var repositioned = _functionBarPresentation.Reposition(
+                CreateFunctionBarRequest(state));
+            if (repositioned.Kind != FunctionBarPresentationResultKind.Ready)
+            {
+                TraceDiagnostic(
+                    state.SessionId,
+                    "FunctionBar.Reposition.Failed",
+                    state,
+                    repositioned.Failure);
+                Observe(CancelCurrentAsync("FunctionBarRepositionFailed"));
+                return;
+            }
 
-        var repositioned = _functionBarPresentation.Reposition(
-            CreateFunctionBarRequest(state));
-        if (repositioned.Kind != FunctionBarPresentationResultKind.Ready)
-        {
-            Observe(CancelCurrentAsync("FunctionBarRepositionFailed"));
-            return;
+            var shown = _functionBarPresentation.Show(
+                state.SessionId,
+                state.CoordinateVersion,
+                state.SelectionRevision);
+            if (shown.Kind != FunctionBarPresentationResultKind.Shown)
+            {
+                TraceDiagnostic(
+                    state.SessionId,
+                    "FunctionBar.Show.Failed",
+                    state,
+                    shown.Failure);
+                Observe(CancelCurrentAsync("FunctionBarShowFailed"));
+            }
         }
-
-        var shown = _functionBarPresentation.Show(
-            state.SessionId,
-            state.CoordinateVersion,
-            state.SelectionRevision);
-        if (shown.Kind != FunctionBarPresentationResultKind.Shown)
+        catch (Exception exception)
         {
-            Observe(CancelCurrentAsync("FunctionBarShowFailed"));
+            var failure = CreateFailure(
+                state.SessionId,
+                FailureCode.FunctionBarPresentationFailed,
+                $"Function Bar presentation threw {exception.GetType().Name}: {exception.Message}",
+                exception.HResult);
+            TraceDiagnostic(
+                state.SessionId,
+                "FunctionBar.StateChanged.Exception",
+                state,
+                failure,
+                exception);
+            Observe(FailCurrentAsync(failure));
         }
     }
 
     private void PrepareEditing(SelectionVisualState selection)
+    {
+        TraceDiagnostic(selection.SessionId, "FunctionBar.Prepare.Begin", selection);
+        try
+        {
+            PrepareEditingCore(selection);
+        }
+        catch (Exception exception)
+        {
+            var failure = CreateFailure(
+                selection.SessionId,
+                FailureCode.FunctionBarPresentationFailed,
+                $"Function Bar preparation flow threw {exception.GetType().Name}: {exception.Message}",
+                exception.HResult);
+            TraceDiagnostic(
+                selection.SessionId,
+                "FunctionBar.Prepare.Exception",
+                selection,
+                failure,
+                exception);
+            Observe(FailCurrentAsync(failure));
+        }
+    }
+
+    private void PrepareEditingCore(SelectionVisualState selection)
     {
         if (_functionBarPresentation is null
             || selection.Status != SelectionStatus.Locked
             || !selection.IsGeometryValid
             || selection.NormalizedPhysicalBounds is null)
         {
+            TraceDiagnostic(
+                selection.SessionId,
+                "FunctionBar.Prepare.InvalidSelection",
+                selection);
             Observe(FailCurrentAsync(CreateFailure(
                 selection.SessionId,
                 FailureCode.InvalidSelection,
@@ -1587,16 +1713,38 @@ public sealed class CapturePresentationWorkflowCoordinator :
             return;
         }
 
-        var prepared = _functionBarPresentation.Prepare(
-            CreateFunctionBarRequest(selection));
+        FunctionBarPresentationResult prepared;
+        try
+        {
+            prepared = _functionBarPresentation.Prepare(
+                CreateFunctionBarRequest(selection));
+        }
+        catch (Exception exception)
+        {
+            TraceDiagnostic(
+                selection.SessionId,
+                "FunctionBar.Prepare.Exception",
+                selection,
+                exception: exception);
+            throw;
+        }
+
         if (prepared.Kind != FunctionBarPresentationResultKind.Ready)
         {
-            Observe(FailCurrentAsync(prepared.Failure ?? CreateFailure(
+            var failure = prepared.Failure ?? CreateFailure(
                 selection.SessionId,
                 FailureCode.FunctionBarPresentationFailed,
-                "The Function Bar could not be prepared.")));
+                "The Function Bar could not be prepared.");
+            TraceDiagnostic(
+                selection.SessionId,
+                "FunctionBar.Prepare.Failed",
+                selection,
+                failure);
+            Observe(FailCurrentAsync(failure));
             return;
         }
+
+        TraceDiagnostic(selection.SessionId, "FunctionBar.Prepare.Ready", selection);
 
         var transition = _stateAuthority.RequestTransition(new(
             WorkflowState.SelectionLocked,
@@ -1605,10 +1753,16 @@ public sealed class CapturePresentationWorkflowCoordinator :
         if (!transition.IsSuccess)
         {
             _functionBarPresentation.Close(selection.SessionId);
-            Observe(FailCurrentAsync(transition.Failure ?? CreateFailure(
+            var failure = transition.Failure ?? CreateFailure(
                 selection.SessionId,
                 FailureCode.InvalidStateTransition,
-                "The workflow could not enter Editing.")));
+                "The workflow could not enter Editing.");
+            TraceDiagnostic(
+                selection.SessionId,
+                "FunctionBar.EditingTransition.Failed",
+                selection,
+                failure);
+            Observe(FailCurrentAsync(failure));
             return;
         }
 
@@ -1617,22 +1771,61 @@ public sealed class CapturePresentationWorkflowCoordinator :
         _annotationObjectEditing.BeginSession(selection);
         _overlayCoordinator.ApplyAnnotation(CreateAnnotationPresentation(selection));
 
-        var refreshed = _functionBarPresentation.Reposition(
-            CreateFunctionBarRequest(selection));
+        FunctionBarPresentationResult refreshed;
+        try
+        {
+            refreshed = _functionBarPresentation.Reposition(
+                CreateFunctionBarRequest(selection));
+        }
+        catch (Exception exception)
+        {
+            TraceDiagnostic(
+                selection.SessionId,
+                "FunctionBar.Reposition.Exception",
+                selection,
+                exception: exception);
+            throw;
+        }
         if (refreshed.Kind != FunctionBarPresentationResultKind.Ready)
         {
+            TraceDiagnostic(
+                selection.SessionId,
+                "FunctionBar.Reposition.Failed",
+                selection,
+                refreshed.Failure);
             Observe(CancelCurrentAsync("FunctionBarAvailabilityRefreshFailed"));
             return;
         }
 
-        var shown = _functionBarPresentation.Show(
-            selection.SessionId,
-            selection.CoordinateVersion,
-            selection.SelectionRevision);
+        FunctionBarPresentationResult shown;
+        try
+        {
+            shown = _functionBarPresentation.Show(
+                selection.SessionId,
+                selection.CoordinateVersion,
+                selection.SelectionRevision);
+        }
+        catch (Exception exception)
+        {
+            TraceDiagnostic(
+                selection.SessionId,
+                "FunctionBar.Show.Exception",
+                selection,
+                exception: exception);
+            throw;
+        }
         if (shown.Kind != FunctionBarPresentationResultKind.Shown)
         {
+            TraceDiagnostic(
+                selection.SessionId,
+                "FunctionBar.Show.Failed",
+                selection,
+                shown.Failure);
             Observe(CancelCurrentAsync("FunctionBarShowFailed"));
+            return;
         }
+
+        TraceDiagnostic(selection.SessionId, "FunctionBar.Show.Succeeded", selection);
     }
 
     private FunctionBarPresentationRequest CreateFunctionBarRequest(
@@ -3062,6 +3255,10 @@ public sealed class CapturePresentationWorkflowCoordinator :
         Failure failure,
         CaptureSessionContext? expectedSession = null)
     {
+        TraceDiagnostic(
+            expectedSession?.SessionId ?? failure.CorrelationId,
+            "Capture.Cleanup.Begin",
+            failure: failure);
         CaptureSessionContext? session;
         InitialSelectionCoordinator? selection;
         CancellationTokenSource? cancellation;
@@ -3108,6 +3305,10 @@ public sealed class CapturePresentationWorkflowCoordinator :
         selection?.Dispose();
         MoveToResidentReady(WorkflowState.Failed, failure.UserMessageKey);
         DisposeSessionCancellation(cancellation);
+        TraceDiagnostic(
+            expectedSession?.SessionId ?? failure.CorrelationId,
+            "Capture.Cleanup.Completed",
+            failure: failure);
         return new CapturePresentationOutcome.Failed(failure);
     }
 
@@ -3180,6 +3381,49 @@ public sealed class CapturePresentationWorkflowCoordinator :
         correlationId,
         message,
         nativeCode: nativeCode);
+
+    private void TraceDiagnostic(
+        Guid sessionId,
+        string diagnosticEvent,
+        SelectionVisualState? selection = null,
+        Failure? failure = null,
+        Exception? exception = null,
+        string component = nameof(CapturePresentationWorkflowCoordinator))
+    {
+        try
+        {
+            var bounds = selection?.NormalizedPhysicalBounds;
+            var displayCount = 0;
+            lock (_gate)
+            {
+                displayCount = _activeSession?.FrozenDisplayFrames?.Frames.Count ?? 0;
+            }
+
+            _trace.Record(new CompleteExecutionTraceEntry
+            {
+                TimestampUtc = DateTimeOffset.UtcNow,
+                SessionId = sessionId,
+                SelectionRevision = selection?.SelectionRevision ?? -1,
+                WorkflowState = _stateAuthority.CurrentState,
+                CompleteStage = CompleteExecutionStage.Diagnostic,
+                FailureCode = failure?.Code,
+                FailureCategory = failure?.Category,
+                NativeCode = failure?.NativeCode ?? exception?.HResult,
+                Component = component,
+                SelectionWidth = bounds?.Width ?? 0,
+                SelectionHeight = bounds?.Height ?? 0,
+                DisplayCount = displayCount,
+                ManagedThreadId = Environment.CurrentManagedThreadId,
+                DiagnosticEvent = diagnosticEvent,
+                DiagnosticMessage = failure?.DiagnosticMessage,
+                ExceptionType = exception?.GetType().FullName
+            });
+        }
+        catch
+        {
+            // Diagnostics must never change the capture outcome.
+        }
+    }
 
     private void TraceStage(
         CompleteExecutionStage stage,
