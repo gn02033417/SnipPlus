@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
@@ -717,12 +717,38 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
         private readonly OverlaySurface _owner;
         private readonly Border _root;
         private readonly StackPanel _panel;
-        private readonly ScrollViewer _scrollViewer;
+        private readonly StackPanel _toolsGroup;
+        private readonly StackPanel _historyGroup;
+        private readonly StackPanel _outputGroup;
+        private readonly StackPanel _settingsHost;
+        private readonly Border _toolsHistorySeparator;
+        private readonly Border _historyOutputSeparator;
         private readonly TextBlock _feedbackText;
         private readonly IReadOnlyDictionary<FunctionBarCommand, Button> _buttons;
         private readonly IReadOnlyDictionary<EditingToolKind, RadioButton> _toolButtons;
         private readonly IReadOnlyDictionary<ArrowLineEndStyle, RadioButton> _arrowLineModeButtons;
         private readonly IReadOnlyDictionary<PrivacyRegionMode, RadioButton> _privacyModeButtons;
+        private static readonly EditingToolKind[] ToolOrder =
+        {
+            EditingToolKind.Selection,
+            EditingToolKind.Rectangle,
+            EditingToolKind.ArrowLine,
+            EditingToolKind.Highlighter,
+            EditingToolKind.Text,
+            EditingToolKind.PrivacyRegion,
+            EditingToolKind.NumberedMarker
+        };
+        private static readonly FunctionBarCommand[] HistoryCommandOrder =
+        {
+            FunctionBarCommand.Undo,
+            FunctionBarCommand.Redo
+        };
+        private static readonly FunctionBarCommand[] OutputCommandOrder =
+        {
+            FunctionBarCommand.Save,
+            FunctionBarCommand.Complete,
+            FunctionBarCommand.Cancel
+        };
         private static readonly IReadOnlyDictionary<string, ArgbColor> ColorOptions =
             new Dictionary<string, ArgbColor>(StringComparer.Ordinal)
             {
@@ -769,13 +795,24 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             {
                 Orientation = Orientation.Horizontal
             };
-            _scrollViewer = new ScrollViewer
+            _toolsGroup = new StackPanel
             {
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                HorizontalScrollMode = ScrollMode.Enabled,
-                VerticalScrollMode = ScrollMode.Disabled
+                Orientation = Orientation.Horizontal
             };
+            _historyGroup = new StackPanel
+            {
+                Orientation = Orientation.Horizontal
+            };
+            _outputGroup = new StackPanel
+            {
+                Orientation = Orientation.Horizontal
+            };
+            _settingsHost = new StackPanel
+            {
+                Orientation = Orientation.Horizontal
+            };
+            _toolsHistorySeparator = CreateGroupSeparator();
+            _historyOutputSeparator = CreateGroupSeparator();
             setPhase?.Invoke("CreateFeedbackText");
             _feedbackText = new TextBlock
             {
@@ -821,25 +858,39 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             setPhase?.Invoke("CreateToolButtons");
             _toolButtons = new Dictionary<EditingToolKind, RadioButton>
             {
-                [EditingToolKind.Selection] = CreateToolButton("Selection"),
-                [EditingToolKind.Rectangle] = CreateToolButton("Rectangle"),
-                [EditingToolKind.ArrowLine] = CreateToolButton("Arrow / Line"),
-                [EditingToolKind.Highlighter] = CreateToolButton("Highlighter"),
-                [EditingToolKind.Text] = CreateToolButton("Text"),
-                [EditingToolKind.PrivacyRegion] = CreateToolButton("Mosaic / Blur"),
-                [EditingToolKind.NumberedMarker] = CreateToolButton("Numbered Marker")
+                [EditingToolKind.Selection] = CreateToolButton(
+                    "Selection",
+                    ToolGlyphFor(EditingToolKind.Selection)),
+                [EditingToolKind.Rectangle] = CreateToolButton(
+                    "Rectangle",
+                    ToolGlyphFor(EditingToolKind.Rectangle)),
+                [EditingToolKind.ArrowLine] = CreateToolButton(
+                    "Arrow / Line",
+                    ToolGlyphFor(EditingToolKind.ArrowLine)),
+                [EditingToolKind.Highlighter] = CreateToolButton(
+                    "Highlighter",
+                    ToolGlyphFor(EditingToolKind.Highlighter)),
+                [EditingToolKind.Text] = CreateToolButton(
+                    "Text",
+                    ToolGlyphFor(EditingToolKind.Text)),
+                [EditingToolKind.PrivacyRegion] = CreateToolButton(
+                    "Mosaic / Blur",
+                    ToolGlyphFor(EditingToolKind.PrivacyRegion)),
+                [EditingToolKind.NumberedMarker] = CreateToolButton(
+                    "Numbered Marker",
+                    ToolGlyphFor(EditingToolKind.NumberedMarker))
             };
             setPhase?.Invoke("CreateArrowLineModeButtons");
             _arrowLineModeButtons = new Dictionary<ArrowLineEndStyle, RadioButton>
             {
-                [ArrowLineEndStyle.Arrow] = CreateModeButton("Arrow"),
-                [ArrowLineEndStyle.None] = CreateModeButton("Line")
+                [ArrowLineEndStyle.Arrow] = CreateModeButton("Arrow", "➜"),
+                [ArrowLineEndStyle.None] = CreateModeButton("Line", "／")
             };
             setPhase?.Invoke("CreatePrivacyModeButtons");
             _privacyModeButtons = new Dictionary<PrivacyRegionMode, RadioButton>
             {
-                [PrivacyRegionMode.Mosaic] = CreatePrivacyModeButton("Mosaic"),
-                [PrivacyRegionMode.Blur] = CreatePrivacyModeButton("Blur")
+                [PrivacyRegionMode.Mosaic] = CreatePrivacyModeButton("Mosaic", "▦"),
+                [PrivacyRegionMode.Blur] = CreatePrivacyModeButton("Blur", "◌")
             };
             _buttons[FunctionBarCommand.Complete].Click += OnCompleteClicked;
             _buttons[FunctionBarCommand.Save].Click += OnSaveClicked;
@@ -887,53 +938,83 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             _panel.Children.Add(_feedbackText);
 
             var toolIndex = 0;
-            foreach (var toolButton in _toolButtons.Values)
+            foreach (var tool in ToolOrder)
             {
                 setPhase?.Invoke($"AttachToolButton{toolIndex++}");
-                _panel.Children.Add(toolButton);
+                _toolsGroup.Children.Add(GetRequiredValue(_toolButtons, tool));
             }
 
             setPhase?.Invoke("AttachColorBox");
-            _panel.Children.Add(_colorBox);
+            _settingsHost.Children.Add(_colorBox);
             setPhase?.Invoke("AttachNextNumberTextBox");
-            _panel.Children.Add(_nextNumberTextBox);
+            _settingsHost.Children.Add(_nextNumberTextBox);
             setPhase?.Invoke("AttachThicknessTextBox");
-            _panel.Children.Add(_thicknessTextBox);
+            _settingsHost.Children.Add(_thicknessTextBox);
             setPhase?.Invoke("AttachFontSizeTextBox");
-            _panel.Children.Add(_fontSizeTextBox);
+            _settingsHost.Children.Add(_fontSizeTextBox);
             setPhase?.Invoke("AttachMarkerSizeTextBox");
-            _panel.Children.Add(_markerSizeTextBox);
+            _settingsHost.Children.Add(_markerSizeTextBox);
             setPhase?.Invoke("AttachBoldToggle");
-            _panel.Children.Add(_boldToggle);
+            _settingsHost.Children.Add(_boldToggle);
             setPhase?.Invoke("AttachDeleteObjectButton");
-            _panel.Children.Add(_deleteObjectButton);
+            _settingsHost.Children.Add(_deleteObjectButton);
             setPhase?.Invoke("AttachEditTextButton");
-            _panel.Children.Add(_editTextButton);
+            _settingsHost.Children.Add(_editTextButton);
 
             var arrowLineModeIndex = 0;
             foreach (var modeButton in _arrowLineModeButtons.Values)
             {
                 setPhase?.Invoke($"AttachArrowLineModeButton{arrowLineModeIndex++}");
-                _panel.Children.Add(modeButton);
+                _settingsHost.Children.Add(modeButton);
             }
 
             var privacyModeIndex = 0;
             foreach (var modeButton in _privacyModeButtons.Values)
             {
                 setPhase?.Invoke($"AttachPrivacyModeButton{privacyModeIndex++}");
-                _panel.Children.Add(modeButton);
+                _settingsHost.Children.Add(modeButton);
             }
 
-            var commandButtonIndex = 0;
-            foreach (var button in _buttons.Values)
+            setPhase?.Invoke("AttachSettingsHost");
+            _toolsGroup.Children.Add(_settingsHost);
+
+            var historyButtonIndex = 0;
+            foreach (var command in HistoryCommandOrder)
             {
-                setPhase?.Invoke($"AttachCommandButton{commandButtonIndex++}");
-                _panel.Children.Add(button);
+                setPhase?.Invoke($"AttachHistoryCommandButton{historyButtonIndex++}");
+                _historyGroup.Children.Add(GetRequiredValue(_buttons, command));
+            }
+
+            var outputButtonIndex = 0;
+            foreach (var command in OutputCommandOrder)
+            {
+                setPhase?.Invoke($"AttachOutputCommandButton{outputButtonIndex++}");
+                _outputGroup.Children.Add(GetRequiredValue(_buttons, command));
             }
 
             setPhase?.Invoke("AttachRootChild");
-            _scrollViewer.Content = _panel;
-            _root.Child = _scrollViewer;
+            _panel.Children.Add(_toolsGroup);
+            _panel.Children.Add(_toolsHistorySeparator);
+            _panel.Children.Add(_historyGroup);
+            _panel.Children.Add(_historyOutputSeparator);
+            _panel.Children.Add(_outputGroup);
+            _root.Child = _panel;
+        }
+
+        private static TValue GetRequiredValue<TKey, TValue>(
+            IReadOnlyDictionary<TKey, TValue> dictionary,
+            TKey key)
+        {
+            foreach (var pair in dictionary)
+            {
+                if (EqualityComparer<TKey>.Default.Equals(pair.Key, key))
+                {
+                    return pair.Value;
+                }
+            }
+
+            throw new InvalidOperationException(
+                $"The Function Bar control '{key}' was not created.");
         }
 
         public void Initialize(
@@ -1045,7 +1126,7 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                 return false;
             }
 
-            var maxWidthDip = 960d;
+            var maxWidthDip = 720d;
             if (_owner.TryGetPhysicalWorkArea(out var workArea))
             {
                 maxWidthDip = Math.Min(
@@ -1053,14 +1134,40 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
                     Math.Max(240d, (workArea.Width - 16) / scale));
             }
 
-            const double heightDip = 56d;
+            _root.Width = double.NaN;
+            _root.Height = double.NaN;
             _root.MaxWidth = maxWidthDip;
-            _root.Width = maxWidthDip;
-            _root.Height = heightDip;
-            size = new PhysicalPixelSize(
-                checked((int)Math.Round(maxWidthDip * scale)),
-                checked((int)Math.Round(heightDip * scale)));
-            return size.IsPositive;
+            var previousVisibility = _root.Visibility;
+            var previousOpacity = _root.Opacity;
+            var previousHitTestVisibility = _root.IsHitTestVisible;
+            try
+            {
+                _root.Visibility = Visibility.Visible;
+                _root.Opacity = 0;
+                _root.IsHitTestVisible = false;
+                _root.Measure(new Size(maxWidthDip, double.PositiveInfinity));
+                if (!TryCalculateMeasuredDipSize(
+                        _root.DesiredSize,
+                        maxWidthDip,
+                        out var measuredDipSize)
+                    || !TryConvertToPhysicalSize(measuredDipSize, scale, out size))
+                {
+                    return false;
+                }
+
+                _root.Width = measuredDipSize.Width;
+                _root.Height = measuredDipSize.Height;
+                _owner.TraceFunctionBarDiagnostic(
+                    "FunctionBar.Surface.Measure",
+                    $"DesiredDip={_root.DesiredSize.Width:0.##}x{_root.DesiredSize.Height:0.##};MeasuredDip={measuredDipSize.Width:0.##}x{measuredDipSize.Height:0.##};Physical={size.Width}x{size.Height};MaxWidthDip={maxWidthDip:0.##};RasterizationScale={scale:0.###}");
+                return size.IsPositive;
+            }
+            finally
+            {
+                _root.Visibility = previousVisibility;
+                _root.Opacity = previousOpacity;
+                _root.IsHitTestVisible = previousHitTestVisibility;
+            }
         }
 
         public void ApplyPlacement(FunctionBarPlacementResult placement)
@@ -1190,6 +1297,16 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             };
         }
 
+        private static Border CreateGroupSeparator() => new()
+        {
+            Width = 1,
+            Height = 24,
+            Margin = new Thickness(6, 0, 6, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = new SolidColorBrush(ColorHelper.FromArgb(255, 87, 108, 132)),
+            IsHitTestVisible = false
+        };
+
         private static FunctionBarVisibilityState GetVisibilityState(bool visible) => visible
             ? new FunctionBarVisibilityState(true, 1, true)
             : new FunctionBarVisibilityState(true, 0, false);
@@ -1202,6 +1319,38 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             bool IsLayoutParticipating,
             double Opacity,
             bool IsHitTestVisible);
+
+        private static bool TryCalculateMeasuredDipSize(
+            Size desired,
+            double maxWidthDip,
+            out Size measured)
+        {
+            measured = default;
+            if (!double.IsFinite(maxWidthDip)
+                || maxWidthDip <= 0
+                || !double.IsFinite(desired.Width)
+                || !double.IsFinite(desired.Height)
+                || desired.Width <= 0
+                || desired.Height <= 0)
+            {
+                return false;
+            }
+
+            const double minimumWidthDip = 240d;
+            const double minimumHeightDip = 48d;
+            var width = Math.Min(maxWidthDip, Math.Max(minimumWidthDip, desired.Width));
+            var height = Math.Max(minimumHeightDip, desired.Height);
+            if (!double.IsFinite(width)
+                || !double.IsFinite(height)
+                || width <= 0
+                || height <= 0)
+            {
+                return false;
+            }
+
+            measured = new Size(width, height);
+            return true;
+        }
 
         private static bool TryConvertToPhysicalSize(
             Size desired,
@@ -1246,32 +1395,56 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             return button;
         }
 
-        private static RadioButton CreateToolButton(string label)
+        private static RadioButton CreateToolButton(string label, string glyph)
         {
             var button = new RadioButton
             {
-                Content = label,
+                Content = new FontIcon
+                {
+                    Glyph = glyph,
+                    FontFamily = new FontFamily("Segoe UI Symbol"),
+                    FontSize = 18
+                },
                 GroupName = "SnipPlusEditingTool",
-                Padding = new Thickness(8, 4, 8, 4),
+                Width = 44,
+                MinWidth = 0,
+                MaxWidth = 44,
+                Height = 36,
+                Padding = new Thickness(4),
                 Margin = new Thickness(2, 0, 2, 0),
-                IsTabStop = true
+                IsTabStop = true,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center
             };
             ApplyControlVisualStyle(button, GetButtonVisualStyle());
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                 button,
                 $"Editing tool {label}");
+            ToolTipService.SetToolTip(button, label);
             return button;
         }
 
-        private static RadioButton CreateModeButton(string label)
+        private static RadioButton CreateModeButton(string label, string glyph)
         {
-            var button = CreateToolButton(label);
+            var button = CreateToolButton(label, glyph);
             button.GroupName = "SnipPlusArrowLineMode";
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                 button,
                 $"Arrow or line mode {label}");
             return button;
         }
+
+        private static string ToolGlyphFor(EditingToolKind tool) => tool switch
+        {
+            EditingToolKind.Selection => "⌖",
+            EditingToolKind.Rectangle => "▭",
+            EditingToolKind.ArrowLine => "↗",
+            EditingToolKind.Highlighter => "✎",
+            EditingToolKind.Text => "T",
+            EditingToolKind.PrivacyRegion => "▦",
+            EditingToolKind.NumberedMarker => "①",
+            _ => "•"
+        };
 
         private static NumberBox CreateNextNumberBox()
         {
@@ -2038,9 +2211,9 @@ public sealed class WindowsFrozenDisplayOverlayCoordinator :
             }
         }
 
-        private static RadioButton CreatePrivacyModeButton(string label)
+        private static RadioButton CreatePrivacyModeButton(string label, string glyph)
         {
-            var button = CreateModeButton(label);
+            var button = CreateModeButton(label, glyph);
             button.GroupName = "SnipPlusPrivacyRegionMode";
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                 button,

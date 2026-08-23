@@ -122,6 +122,151 @@ public sealed class WindowsFrozenDisplayOverlayCoordinatorTests
     [TestMethod]
     [TestCategory("Unit")]
     [TestCategory("Contract")]
+    public void FunctionBarUsesSingleRowWithFixedGroupsWithoutScrollViewer()
+    {
+        var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("FunctionBarSurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(functionBarSurface);
+        Assert.IsNull(functionBarSurface.GetField(
+            "_scrollViewer",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNull(functionBarSurface.GetField(
+            "_toolPanel",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNull(functionBarSurface.GetField(
+            "_stylePanel",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.IsNull(functionBarSurface.GetField(
+            "_commandPanel",
+            BindingFlags.Instance | BindingFlags.NonPublic));
+
+        foreach (var groupName in new[]
+        {
+            "_toolsGroup",
+            "_historyGroup",
+            "_outputGroup",
+            "_settingsHost"
+        })
+        {
+            var groupField = functionBarSurface.GetField(
+                groupName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(groupField, groupName);
+            Assert.AreEqual(
+                typeof(Microsoft.UI.Xaml.Controls.StackPanel),
+                groupField!.FieldType,
+                groupName);
+        }
+
+        foreach (var separatorName in new[]
+        {
+            "_toolsHistorySeparator",
+            "_historyOutputSeparator"
+        })
+        {
+            var separatorField = functionBarSurface.GetField(
+                separatorName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(separatorField, separatorName);
+            Assert.AreEqual(
+                typeof(Microsoft.UI.Xaml.Controls.Border),
+                separatorField!.FieldType,
+                separatorName);
+        }
+
+        var toolOrderField = functionBarSurface.GetField(
+            "ToolOrder",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(toolOrderField);
+        var toolOrder = (EditingToolKind[])toolOrderField!.GetValue(null)!;
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                EditingToolKind.Selection,
+                EditingToolKind.Rectangle,
+                EditingToolKind.ArrowLine,
+                EditingToolKind.Highlighter,
+                EditingToolKind.Text,
+                EditingToolKind.PrivacyRegion,
+                EditingToolKind.NumberedMarker
+            },
+            toolOrder);
+
+        var historyOrderField = functionBarSurface.GetField(
+            "HistoryCommandOrder",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(historyOrderField);
+        var historyOrder = (FunctionBarCommand[])historyOrderField!.GetValue(null)!;
+        CollectionAssert.AreEqual(
+            new[] { FunctionBarCommand.Undo, FunctionBarCommand.Redo },
+            historyOrder);
+
+        var outputOrderField = functionBarSurface.GetField(
+            "OutputCommandOrder",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(outputOrderField);
+        var outputOrder = (FunctionBarCommand[])outputOrderField!.GetValue(null)!;
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                FunctionBarCommand.Save,
+                FunctionBarCommand.Complete,
+                FunctionBarCommand.Cancel
+            },
+            outputOrder);
+
+        var glyphMapper = functionBarSurface.GetMethod(
+            "ToolGlyphFor",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(glyphMapper);
+        foreach (var tool in Enum.GetValues<EditingToolKind>())
+        {
+            var glyph = (string)glyphMapper.Invoke(null, new object[] { tool })!;
+            Assert.IsFalse(string.IsNullOrWhiteSpace(glyph));
+        }
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
+    public void FunctionBarMeasurementUsesContentDrivenSingleRowPolicy()
+    {
+        var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)
+            .GetNestedType("FunctionBarSurface", BindingFlags.NonPublic);
+
+        Assert.IsNotNull(functionBarSurface);
+        var calculate = functionBarSurface.GetMethod(
+            "TryCalculateMeasuredDipSize",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(calculate);
+
+        var naturalSizeArguments = new object?[]
+        {
+            new global::Windows.Foundation.Size(420, 40),
+            720d,
+            null
+        };
+        Assert.IsTrue((bool)calculate!.Invoke(null, naturalSizeArguments)!);
+        Assert.AreEqual(
+            new global::Windows.Foundation.Size(420, 48),
+            naturalSizeArguments[2]);
+
+        var cappedSizeArguments = new object?[]
+        {
+            new global::Windows.Foundation.Size(900, 60),
+            720d,
+            null
+        };
+        Assert.IsTrue((bool)calculate.Invoke(null, cappedSizeArguments)!);
+        Assert.AreEqual(
+            new global::Windows.Foundation.Size(720, 60),
+            cappedSizeArguments[2]);
+    }
+
+    [TestMethod]
+    [TestCategory("Unit")]
+    [TestCategory("Contract")]
     public void FunctionBarAndOverlayDeclareNativeTextEditingSurface()
     {
         var functionBarSurface = typeof(WindowsFrozenDisplayOverlayCoordinator)

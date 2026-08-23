@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Closed — UX-1 single-row grouped Function Bar (2026-08-24)
+
+- Completed the UX-1 Function Bar source slice with one horizontal `TOOLS │ HISTORY │ OUTPUT` grouping. The `ScrollViewer`／`ScrollBar` layout was removed; content-driven measurement and the `720 DIP` maximum-width policy remain in force.
+- Deterministic UX-1 tests passed. Locked restore passed; Release x64 build completed with `0 errors` and `2 existing CA1859 baseline warnings`; filtered non-interactive tests passed `270/270` with `0` failures and `0` skips; focused UX-1 tests passed; `git diff --check` passed. Limited formatting verification retained the existing LF／CRLF baseline and did not rewrite files.
+- Fixed packaged Artifact: `D:\MEGA\SnipPlusArtifacts\UX-1\91c0a42948a9923e3a03cc827d8bc1cf8de8fbe3-20260824-0130\SnipPlus.UX-1.Development.x64.msix`; MSIX SHA-256: `ED087220CCE029A28F6DB372789D728447930988F8F6E923D7082A5A1FDF25C8`; signature: `Valid`; installed package status: `Ok`.
+- Package／installed `SnipPlus.App.dll` SHA-256: `45111E45E4DE55DDF6B6BA7CECD6E438E4F99126CC5F1DCC646DEA0EEC7A1D83`; package／installed `SnipPlus.Windows.dll` SHA-256: `D619B80C538454DD16E6F868628B39463C88281C64A0A45AF283915A3749E78A`.
+- Packaged runtime confirmed three Overlay surfaces: Primary `2560×1440`, Left `2560×1440`, and Lower `1920×1080` at `150%`. The Function Bar remained one row with no duplicate bar or `ScrollBar`; all seven tools were selectable, Rectangle commit and Undo availability passed, Lower `150%` had no clipping／material offset, and Primary＋Lower cross-display kept one shared Function Bar.
+- Esc removed all Overlays while the SnipPlus process remained resident; MainWindow did not auto-show and no `WerFault` process appeared. Complete、Save、PNG and Clipboard were not executed in this verification. Final semantic icon UX、contextual flyout、visual-state polish and pixel-level contrast remain pending; UX-2～UX-5 and Stage 8 were not started.
+
 ### Fixed — Function Bar tool selection visibility and contrast (2026-08-20)
 
 - Fixed the Function Bar disappearing after a drawing-tool click: Core tool selection repositions the existing hosted bar, and the reposition path now preserves the bar's previous visible／hidden state instead of unconditionally hiding it.
